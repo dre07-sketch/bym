@@ -61,30 +61,76 @@ const Activerepair = () => {
   const [loadingInspectors, setLoadingInspectors] = useState(false);
   const [inspectorError, setInspectorError] = useState(null);
 
+  // Map ticket data to repair format
+  const mapTicketToRepair = (ticket) => {
+    const customerName = ticket.customer_name || 'Unknown Customer';
+    const email = ticket.email || 'N/A';
+    const phone = ticket.phone || 'N/A';
+    const vehicle = ticket.vehicle_info || 'Unknown Vehicle';
+    const licensePlate = ticket.license_plate || 'N/A';
+    const issueSeverity = ticket.urgency_level
+      ? ticket.urgency_level === 'Critical' ? 'Critical'
+      : ticket.urgency_level === 'High' ? 'Critical'
+      : ticket.urgency_level === 'Medium' ? 'Moderate'
+      : 'Minor'
+      : 'Moderate';
+    
+    return {
+      id: ticket.id,
+      ticketNumber: ticket.ticket_number || `TKT-${ticket.id}`,
+      customerName,
+      licensePlate,
+      vehicle,
+      status: ticket.status || 'In Progress',
+      carStatus: issueSeverity,
+      startDate: ticket.created_at
+        ? new Date(ticket.created_at).toISOString().split('T')[0]
+        : null,
+      estimatedCompletion: ticket.estimated_completion_date
+        ? new Date(ticket.estimated_completion_date).toISOString().split('T')[0]
+        : null,
+      assignedMechanic: ticket.mechanic_assign || 'Unassigned',
+      assignedInspector: ticket.inspector_assign || null,
+      serviceType: ticket.title || ticket.type || 'General Repair',
+      contact: phone,
+      email,
+      location: 'Main Bay',
+      progress: 0, // Default progress if not provided
+      notes: ticket.description || 'No additional notes provided for this repair.',
+      parts: ticket.ordered_parts || [], // Use ordered_parts from API
+      tools: []
+    };
+  };
+
+  // Fetch single repair data
+  const fetchRepairData = async (repairId) => {
+    try {
+      const response = await fetch(`http://localhost:5001/api/active-progress/${repairId}`);
+      if (!response.ok) throw new Error('Failed to fetch repair');
+      const data = await response.json();
+      return mapTicketToRepair(data);
+    } catch (err) {
+      console.error("Error fetching repair data:", err);
+      throw err;
+    }
+  };
+
   // Refresh selected repair data when opened
   useEffect(() => {
     if (selectedRepair) {
-      const fetchRepair = async () => {
+      const refreshRepair = async () => {
         try {
-          const response = await fetch(`http://localhost:5001/api/active-progress/${selectedRepair.id}`);
-          if (!response.ok) throw new Error('Failed to fetch repair');
-          const data = await response.json();
+          const updatedRepair = await fetchRepairData(selectedRepair.id);
           setSelectedRepair(prev => ({
             ...prev,
-            assignedInspector: data.inspector_assign || null,
-            status: data.status,
-            estimatedCompletion: data.estimated_completion_date
-              ? new Date(data.estimated_completion_date).toISOString().split('T')[0]
-              : null,
-            actualCompletion: data.completion_date
-              ? new Date(data.completion_date).toISOString().split('T')[0]
-              : null
+            ...updatedRepair,
+            tools: prev.tools // Preserve tools state
           }));
         } catch (err) {
           console.error("Error refreshing repair:", err);
         }
       };
-      fetchRepair();
+      refreshRepair();
     }
   }, [selectedRepair]);
 
@@ -121,46 +167,7 @@ const Activerepair = () => {
         const response = await fetch('http://localhost:5001/api/active-progress/in-progress');
         if (!response.ok) throw new Error('Failed to fetch repairs');
         const data = await response.json();
-        const formattedRepairs = data.map(ticket => {
-          const customerName = ticket.customer_name || 'Unknown Customer';
-          const email = ticket.email || 'N/A';
-          const phone = ticket.phone || 'N/A';
-          const vehicle = ticket.vehicle_info || 'Unknown Vehicle';
-          const licensePlate = ticket.license_plate || 'N/A';
-          const issueSeverity = ticket.urgency_level
-            ? ticket.urgency_level === 'Critical' ? 'Critical'
-            : ticket.urgency_level === 'High' ? 'Critical'
-            : ticket.urgency_level === 'Medium' ? 'Moderate'
-            : 'Minor'
-            : 'Moderate';
-          return {
-            id: ticket.id,
-            ticketNumber: ticket.ticket_number || `TKT-${ticket.id}`,
-            customerName,
-            licensePlate,
-            vehicle,
-            status: ticket.status || 'In Progress',
-            carStatus: issueSeverity,
-            startDate: ticket.created_at
-              ? new Date(ticket.created_at).toISOString().split('T')[0]
-              : null,
-            estimatedCompletion: ticket.estimated_completion_date
-              ? new Date(ticket.estimated_completion_date).toISOString().split('T')[0]
-              : null,
-            assignedMechanic: ticket.mechanic_assign || 'Unassigned',
-            assignedInspector: ticket.inspector_assign || null,
-            serviceType: ticket.title || ticket.type || 'General Repair',
-            contact: phone,
-            email,
-            location: 'Main Bay',
-            progress: ticket.progress !== null && !isNaN(ticket.progress)
-              ? Math.min(100, Math.max(0, parseInt(ticket.progress)))
-              : 0,
-            notes: ticket.description || 'No additional notes provided for this repair.',
-            parts: Array.isArray(ticket.parts) ? ticket.parts : [],
-            tools: []
-          };
-        });
+        const formattedRepairs = data.map(mapTicketToRepair);
         setRepairs(formattedRepairs);
       } catch (err) {
         console.error('Error loading repairs:', err);
@@ -179,13 +186,18 @@ const Activerepair = () => {
         const response = await fetch('http://localhost:5001/api/active-progress/parts');
         if (response.ok) {
           const data = await response.json();
-          setStockroomParts(data);
+          // Convert price to number for each part
+          const normalizedData = data.map(part => ({
+            ...part,
+            price: parseFloat(part.price) || 0
+          }));
+          setStockroomParts(normalizedData);
         } else {
           throw new Error('Failed to fetch parts');
         }
       } catch (err) {
-        console.warn('no parts available');
-       
+        console.warn('Using mock parts data');
+        
       }
     };
     fetchParts();
@@ -390,13 +402,13 @@ const Activerepair = () => {
         name: part.name,
         category: part.category,
         sku: part.sku,
-        price: part.price,
+        price: parseFloat(part.price) || 0, // Ensure price is a number
         quantity: quantities[partId] || 1
       };
     });
 
     try {
-      const response = await fetch('http://localhost:5001/api/ordered-parts', {
+      const response = await fetch('http://localhost:5001/api/active-progress/ordered-parts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -413,33 +425,30 @@ const Activerepair = () => {
         throw new Error(data.error || 'Failed to order parts');
       }
 
-      // Update the selected repair with the ordered parts
-      const orderedParts = itemsToOrder.map(item => ({
-        ...item,
-        id: Math.random().toString(36).substr(2, 9), // Generate a temporary ID
-        status: 'pending'
-      }));
-
-      setSelectedRepair(prev => ({
-        ...prev,
-        parts: [...prev.parts, ...orderedParts]
-      }));
-
-      // Update the repairs list
-      setRepairs(prev =>
-        prev.map(repair =>
-          repair.id === selectedRepair.id
-            ? { ...repair, parts: [...repair.parts, ...orderedParts] }
-            : repair
-        )
-      );
-
-      alert(`Successfully ordered ${itemsToOrder.length} part(s)!`);
-      setShowPartsModal(false);
-      
-      // Reset selection
-      setSelectedParts([]);
-      setQuantities({});
+      // Refresh repair data to get the updated parts list
+      try {
+        const updatedRepair = await fetchRepairData(selectedRepair.id);
+        setSelectedRepair(prev => ({
+          ...prev,
+          ...updatedRepair,
+          tools: prev.tools // Preserve tools state
+        }));
+        setRepairs(prev =>
+          prev.map(repair =>
+            repair.id === selectedRepair.id ? updatedRepair : repair
+          )
+        );
+        
+        alert(`Successfully ordered ${itemsToOrder.length} part(s)!`);
+        setShowPartsModal(false);
+        
+        // Reset selection
+        setSelectedParts([]);
+        setQuantities({});
+      } catch (refreshErr) {
+        console.error('Error refreshing repair after ordering parts:', refreshErr);
+        alert(`Parts were ordered successfully, but there was an error refreshing the data: ${refreshErr.message}`);
+      }
     } catch (err) {
       console.error('Error ordering parts:', err);
       alert(`Error: ${err.message}`);
@@ -717,11 +726,20 @@ const Activerepair = () => {
                         <li key={idx} className="flex items-center justify-between p-2 bg-white rounded-lg shadow-sm border">
                           <div className="flex items-center gap-2">
                             <Package size={16} className="text-gray-500" />
-                            <span className="text-sm font-medium text-gray-800">{part.name || part}</span>
+                            <span className="text-sm font-medium text-gray-800">{part.name}</span>
                           </div>
-                          <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800">
-                            Qty: {part.quantity}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+                              Qty: {part.quantity}
+                            </span>
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              part.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                              part.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {part.status || 'ordered'}
+                            </span>
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -983,7 +1001,9 @@ const Activerepair = () => {
                       <td className="py-2 text-gray-800">{part.name}</td>
                       <td className="py-2 text-gray-600">{part.sku}</td>
                       <td className="py-2 text-gray-600">{part.category}</td>
-                      <td className="py-2 text-gray-800">${part.price.toFixed(2)}</td>
+                      <td className="py-2 text-gray-800">
+                        ${(parseFloat(part.price) || 0).toFixed(2)}
+                      </td>
                       <td className="py-2 text-gray-600">{part.inStock}</td>
                       <td className="py-2">
                         {selectedParts.includes(part.id) && (

@@ -34,13 +34,26 @@ router.get('/in-progress', (req, res) => {
       st.created_at,
       st.updated_at,
       COALESCE(ic.email, cc.email) AS email,
-      COALESCE(ic.phone, cc.phone) AS phone
+      COALESCE(ic.phone, cc.phone) AS phone,
+      op.id AS ordered_part_id,
+      op.item_id AS ordered_item_id,
+      op.name AS ordered_name,
+      op.category AS ordered_category,
+      op.sku AS ordered_sku,
+      op.price AS ordered_price,
+      op.quantity AS ordered_quantity,
+      op.status AS ordered_status,
+      op.ordered_at AS ordered_at
     FROM service_tickets st
-    LEFT JOIN vehicles v ON st.vehicle_id = v.id
-    LEFT JOIN individual_customers ic ON st.customer_type = 'individual' AND st.customer_id = ic.customer_id
-    LEFT JOIN company_customers cc ON st.customer_type = 'company' AND st.customer_id = cc.customer_id
+    LEFT JOIN vehicles v 
+      ON st.vehicle_id = v.id
+    LEFT JOIN individual_customers ic 
+      ON st.customer_type = 'individual' AND st.customer_id = ic.customer_id
+    LEFT JOIN company_customers cc 
+      ON st.customer_type = 'company' AND st.customer_id = cc.customer_id
+    LEFT JOIN ordered_parts op
+      ON st.ticket_number = op.ticket_number
     WHERE st.status IN (
-      
       'in progress',
       'ready for inspection',
       'inspection',
@@ -57,7 +70,58 @@ router.get('/in-progress', (req, res) => {
       console.error('Error fetching inspection-related tickets:', err);
       return res.status(500).json({ error: 'Database error' });
     }
-    res.json(results);
+
+    // ✅ Group ordered parts under each ticket
+    const ticketsMap = {};
+    results.forEach(row => {
+      if (!ticketsMap[row.ticket_number]) {
+        ticketsMap[row.ticket_number] = {
+          id: row.id,
+          ticket_number: row.ticket_number,
+          customer_type: row.customer_type,
+          customer_id: row.customer_id,
+          customer_name: row.customer_name,
+          vehicle_id: row.vehicle_id,
+          vehicle_make: row.vehicle_make,
+          vehicle_model: row.vehicle_model,
+          vehicle_year: row.vehicle_year,
+          license_plate: row.license_plate,
+          vehicle_info: row.vehicle_info,
+          title: row.title,
+          mechanic_assign: row.mechanic_assign,
+          inspector_assign: row.inspector_assign,
+          description: row.description,
+          priority: row.priority,
+          type: row.type,
+          urgency_level: row.urgency_level,
+          status: row.status,
+          appointment_id: row.appointment_id,
+          completion_date: row.completion_date,
+          estimated_completion_date: row.estimated_completion_date,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          email: row.email,
+          phone: row.phone,
+          ordered_parts: []
+        };
+      }
+
+      if (row.ordered_part_id) {
+        ticketsMap[row.ticket_number].ordered_parts.push({
+          id: row.ordered_part_id,
+          item_id: row.ordered_item_id,
+          name: row.ordered_name,
+          category: row.ordered_category,
+          sku: row.ordered_sku,
+          price: row.ordered_price,
+          quantity: row.ordered_quantity,
+          status: row.ordered_status,
+          ordered_at: row.ordered_at
+        });
+      }
+    });
+
+    res.json(Object.values(ticketsMap));
   });
 });
 
@@ -274,13 +338,7 @@ router.get('/parts', (req, res) => {
 // ✅ Place order for parts
 router.post('/ordered-parts', (req, res) => {
   const { ticketNumber, items } = req.body;
-  /**
-   * items should be:
-   * [
-   *   { item_id: "ITM-001", name: "Brake Pads", category: "Brake System", sku: "BP-001", price: 45.99, quantity: 2 },
-   *   { item_id: "ITM-002", name: "Oil Filter", category: "Engine Parts", sku: "OF-001", price: 8.99, quantity: 1 }
-   * ]
-   */
+ 
   if (!ticketNumber || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Ticket number and items are required' });
   }

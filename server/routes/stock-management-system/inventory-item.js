@@ -1175,4 +1175,270 @@ router.post('/suppliers', async (req, res) => {
 });
 
 
+router.get('/ordered-parts/:ticketNumber', (req, res) => {
+  const { ticketNumber } = req.params;
+
+  const query = `
+    SELECT 
+      st.id AS ticket_id,
+      st.ticket_number,
+      st.customer_type,
+      st.customer_id,
+      st.customer_name,
+      st.vehicle_id,
+      st.vehicle_info,
+      st.license_plate,
+      st.title,
+      st.mechanic_assign,
+      st.inspector_assign,
+      st.description,
+      st.priority,
+      st.type,
+      st.urgency_level,
+      st.status,
+      st.appointment_id,
+      st.created_at,
+      st.updated_at,
+      st.completion_date,
+      st.estimated_completion_date,
+      op.id AS ordered_part_id,
+      op.item_id,
+      op.name,
+      op.category,
+      op.sku,
+      op.price,
+      op.quantity,
+      op.status AS part_status,
+      op.ordered_at
+    FROM service_tickets st
+    LEFT JOIN ordered_parts op
+      ON st.ticket_number = op.ticket_number
+    WHERE st.ticket_number = ?
+    ORDER BY op.ordered_at DESC
+  `;
+
+  db.query(query, [ticketNumber], (err, results) => {
+    if (err) {
+      console.error('Error fetching ordered parts with ticket:', err);
+      return res.status(500).json({ error: 'Failed to fetch ordered parts' });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'No ticket found' });
+    }
+
+    // ✅ Format response: ticket info + ordered_parts[]
+    const ticket = {
+      ticket_id: results[0].ticket_id,
+      ticket_number: results[0].ticket_number,
+      customer_type: results[0].customer_type,
+      customer_id: results[0].customer_id,
+      customer_name: results[0].customer_name,
+      vehicle_id: results[0].vehicle_id,
+      vehicle_info: results[0].vehicle_info,
+      license_plate: results[0].license_plate,
+      title: results[0].title,
+      mechanic_assign: results[0].mechanic_assign,
+      inspector_assign: results[0].inspector_assign,
+      description: results[0].description,
+      priority: results[0].priority,
+      type: results[0].type,
+      urgency_level: results[0].urgency_level,
+      status: results[0].status,
+      appointment_id: results[0].appointment_id,
+      created_at: results[0].created_at,
+      updated_at: results[0].updated_at,
+      completion_date: results[0].completion_date,
+      estimated_completion_date: results[0].estimated_completion_date,
+      ordered_parts: []
+    };
+
+    results.forEach(row => {
+      if (row.ordered_part_id) {
+        ticket.ordered_parts.push({
+          id: row.ordered_part_id,
+          item_id: row.item_id,
+          name: row.name,
+          category: row.category,
+          sku: row.sku,
+          price: row.price,
+          quantity: row.quantity,
+          status: row.part_status,
+          ordered_at: row.ordered_at
+        });
+      }
+    });
+
+    res.json(ticket);
+  });
+});
+
+// GET /ordered-parts - Get all tickets with their ordered parts
+router.get('/ordered-parts', async (req, res) => {
+  const query = `
+    SELECT 
+      st.id AS ticket_id,
+      st.ticket_number,
+      st.customer_type,
+      st.customer_id,
+      st.customer_name,
+      st.vehicle_id,
+      st.vehicle_info,
+      st.license_plate,
+      st.title,
+      st.mechanic_assign,
+      st.inspector_assign,
+      st.description,
+      st.priority,
+      st.type,
+      st.urgency_level,
+      st.status,
+      st.appointment_id,
+      st.created_at,
+      st.updated_at,
+      st.completion_date,
+      st.estimated_completion_date,
+      op.id AS ordered_part_id,
+      op.item_id,
+      op.name,
+      op.category,
+      op.sku,
+      op.price,
+      op.quantity,
+      op.status AS part_status,
+      op.ordered_at
+    FROM service_tickets st
+    LEFT JOIN ordered_parts op ON st.ticket_number = op.ticket_number
+    ORDER BY st.created_at DESC
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error fetching all tickets with parts:', err);
+      return res.status(500).json({ error: 'Failed to fetch data' });
+    }
+
+    // Group rows by ticket_number
+    const ticketsMap = new Map();
+
+    results.forEach(row => {
+      const key = row.ticket_number;
+
+      if (!ticketsMap.has(key)) {
+        ticketsMap.set(key, {
+          ticket_id: row.ticket_id,
+          ticket_number: row.ticket_number,
+          customer_type: row.customer_type,
+          customer_id: row.customer_id,
+          customer_name: row.customer_name,
+          vehicle_id: row.vehicle_id,
+          vehicle_info: row.vehicle_info,
+          license_plate: row.license_plate,
+          title: row.title,
+          mechanic_assign: row.mechanic_assign,
+          inspector_assign: row.inspector_assign,
+          description: row.description,
+          priority: row.priority,
+          type: row.type,
+          urgency_level: row.urgency_level,
+          status: row.status,
+          appointment_id: row.appointment_id,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          completion_date: row.completion_date,
+          estimated_completion_date: row.estimated_completion_date,
+          ordered_parts: []
+        });
+      }
+
+      // Only push part if it exists
+      if (row.ordered_part_id) {
+        ticketsMap.get(key).ordered_parts.push({
+          id: row.ordered_part_id,
+          item_id: row.item_id,
+          name: row.name,
+          category: row.category,
+          sku: row.sku,
+          price: parseFloat(row.price),
+          quantity: row.quantity,
+          status: row.part_status,
+          ordered_at: row.ordered_at
+        });
+      }
+    });
+
+    res.json(Array.from(ticketsMap.values()));
+  });
+});
+
+router.put('/ordered-parts/:id/status', (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  if (!['pending', 'given'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+
+  const query = `UPDATE ordered_parts SET status = ? WHERE id = ?`;
+
+  db.query(query, [status, id], (err, result) => {
+    if (err) {
+      console.error('Error updating status:', err);
+      return res.status(500).json({ error: 'Failed to update status' });
+    }
+    res.json({ success: true, message: 'Status updated successfully' });
+  });
+});
+
+router.get('/order-history', (req, res) => {
+  const query = `
+    SELECT 
+      st.id AS ticket_id,
+      st.ticket_number,
+      st.customer_type,
+      st.customer_id,
+      st.customer_name,
+      st.vehicle_id,
+      st.vehicle_info,
+      st.license_plate,
+      st.title,
+      st.mechanic_assign,
+      st.inspector_assign,
+      st.description,
+      st.priority,
+      st.type,
+      st.urgency_level,
+      st.status,
+      st.appointment_id,
+      st.created_at,
+      st.updated_at,
+      st.completion_date,
+      st.estimated_completion_date,
+      op.id AS ordered_part_id,
+      op.item_id,
+      op.name,
+      op.category,
+      op.sku,
+      op.price,
+      op.quantity,
+      op.status AS part_status,
+      op.ordered_at
+    FROM service_tickets st
+    LEFT JOIN ordered_parts op ON st.ticket_number = op.ticket_number
+    WHERE st.ticket_number IN (
+      SELECT ticket_number
+      FROM ordered_parts
+      GROUP BY ticket_number
+      HAVING SUM(status = 'pending') = 0
+    )
+    ORDER BY st.created_at DESC
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(results);
+  });
+});
+
+
 module.exports = router;
