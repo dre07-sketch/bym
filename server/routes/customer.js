@@ -1,0 +1,327 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../db/connection');
+const multer = require('multer');
+
+const BASE_URL = 'http://localhost:5001';
+const IMAGE_BASE_URL = `${BASE_URL}`;
+const encode = (path) => encodeURIComponent(path).replace(/%2F/g, '/');
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, 'uploads/'),
+  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname),
+});
+const upload = multer({ storage });
+
+function generateReadableCustomerId() {
+  return `CUST${Date.now()}`;
+}
+
+// =============================
+// REGISTER CUSTOMER AND VEHICLES
+// =============================
+router.post('/', upload.array('images'), (req, res) => {
+  const {
+    customerType,
+    name,
+    email,
+    phone,
+    emergencyContact,
+    address,
+    notes,
+    companyName,
+    registrationDate,
+    totalServices = 0,
+    vehicles
+  } = req.body;
+
+  if (!customerType || !name || !email || !phone || !vehicles) {
+    return res.status(400).json({ message: 'Missing required customer or vehicle fields.' });
+  }
+
+  let vehiclesArr;
+  if (typeof vehicles === 'string') {
+    try {
+      vehiclesArr = JSON.parse(vehicles);
+    } catch {
+      return res.status(400).json({ message: 'Invalid vehicles format.' });
+    }
+  } else if (Array.isArray(vehicles)) {
+    vehiclesArr = vehicles;
+  } else {
+    return res.status(400).json({ message: 'Vehicles must be an array.' });
+  }
+
+  const customer_id = generateReadableCustomerId();
+  const files = req.files || [];
+  const customerImageFile = files[0];
+  const vehicleImageFiles = files.slice(1);
+
+  const customerImagePath = customerImageFile ? `uploads/${customerImageFile.filename}` : null;
+
+  db.getConnection((err, connection) => {
+    if (err) {
+      console.error('Connection error:', err);
+      return res.status(500).json({ message: 'Database connection failed.' });
+    }
+
+    connection.beginTransaction(err => {
+      if (err) {
+        connection.release();
+        return res.status(500).json({ message: 'Transaction failed to start.' });
+      }
+
+      const insertCustomerQuery = customerType === 'individual'
+        ? `INSERT INTO individual_customers
+            (customer_id, name, email, phone, emergency_contact, address, notes, registration_date, total_services, image)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        : `INSERT INTO company_customers
+            (customer_id, company_name, contact_person_name, email, phone, emergency_contact, address, notes, registration_date, total_services, image)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+      const customerParams = customerType === 'individual'
+        ? [customer_id, name, email, phone, emergencyContact, address, notes, registrationDate, totalServices, customerImagePath]
+        : [customer_id, companyName, name, email, phone, emergencyContact, address, notes, registrationDate, totalServices, customerImagePath];
+
+      connection.query(insertCustomerQuery, customerParams, (err) => {
+        if (err) {
+          return connection.rollback(() => {
+            connection.release();
+            console.error('Insert customer error:', err);
+            res.status(500).json({ message: 'Failed to insert customer.' });
+          });
+        }
+
+        const insertVehicleQuery = `
+          INSERT INTO vehicles
+          (customer_id, make, model, year, license_plate, vin, color, mileage, image)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        const vehicleInsertTasks = vehiclesArr.map((vehicle, i) => {
+          const {
+            make, model, year = null, licensePlate = null,
+            vin = null, color = null, mileage = null
+          } = vehicle;
+
+          const fileForVehicle = vehicleImageFiles[i];
+          const imagePath = fileForVehicle ? `uploads/${fileForVehicle.filename}` : null;
+
+          return new Promise((resolve, reject) => {
+            connection.query(
+              insertVehicleQuery,
+              [customer_id, make, model, year, licensePlate, vin, color, mileage, imagePath],
+              (err) => err ? reject(err) : resolve()
+            );
+          });
+        });
+
+        Promise.all(vehicleInsertTasks)
+          .then(() => {
+            connection.commit(err => {
+              if (err) {
+                return connection.rollback(() => {
+                  connection.release();
+                  res.status(500).json({ message: 'Failed to commit transaction.' });
+                });
+              }
+
+              connection.release();
+              res.status(201).json({
+                message: 'Customer and vehicles registered successfully.',
+                customer_id,
+                customerImage: customerImagePath ? `${IMAGE_BASE_URL}/${encode(customerImagePath)}` : null
+              });
+            });
+          })
+          .catch(vehicleErr => {
+            connection.rollback(() => {
+              connection.release();
+              console.error('Insert vehicle error:', vehicleErr);
+              res.status(500).json({ message: 'Failed to insert vehicles.' });
+            });
+          });
+      });
+    });
+  });
+});
+
+// =============================
+// GET ALL CUSTOMERS
+// =============================
+router.get('/fetch', (req, res) => {
+  const individualQuery = `
+    SELECT 
+      'individual' AS customerType,
+      ic.customer_id,
+      ic.name,
+      NULL AS companyName,
+      ic.email,
+      ic.phone,
+      ic.emergency_contact,
+      ic.address,
+      ic.notes,
+      ic.registration_date,
+      ic.total_services,
+      ic.image AS customer_image,
+      v.id AS vehicle_id,
+      v.make,
+      v.model,
+      v.year,
+      v.license_plate,
+      v.vin,
+      v.color,
+      v.mileage,
+      v.image AS vehicle_image
+    FROM individual_customers ic
+    LEFT JOIN vehicles v ON ic.customer_id = v.customer_id
+  `;
+
+  const companyQuery = `
+    SELECT 
+      'company' AS customerType,
+      cc.customer_id,
+      cc.contact_person_name AS name,
+      cc.company_name AS companyName,
+      cc.email,
+      cc.phone,
+      cc.emergency_contact,
+      cc.address,
+      cc.notes,
+      cc.registration_date,
+      cc.total_services,
+      cc.image AS customer_image,
+      v.id AS vehicle_id,
+      v.make,
+      v.model,
+      v.year,
+      v.license_plate,
+      v.vin,
+      v.color,
+      v.mileage,
+      v.image AS vehicle_image
+    FROM company_customers cc
+    LEFT JOIN vehicles v ON cc.customer_id = v.customer_id
+  `;
+
+  const finalQuery = `${individualQuery} UNION ALL ${companyQuery} ORDER BY registration_date DESC`;
+
+  db.query(finalQuery, (err, results) => {
+    if (err) {
+      console.error('Error fetching customers:', err);
+      return res.status(500).json({ message: 'Failed to fetch customer data.' });
+    }
+
+    const grouped = {};
+
+    for (const row of results) {
+      const {
+        customer_id, customerType, name, companyName, email, phone,
+        emergency_contact, address, notes, registration_date, total_services,
+        customer_image, vehicle_id, make, model, year, license_plate,
+        vin, color, mileage, vehicle_image
+      } = row;
+
+      if (!grouped[customer_id]) {
+        grouped[customer_id] = {
+          customerId: customer_id,
+          customerType,
+          name,
+          companyName,
+          email,
+          phone,
+          emergencyContact: emergency_contact,
+          address,
+          notes,
+          registrationDate: registration_date,
+          totalServices: total_services,
+          customerImage: customer_image ? `${IMAGE_BASE_URL}/${encode(customer_image)}` : null,
+          vehicles: []
+        };
+      }
+
+      if (vehicle_id) {
+        grouped[customer_id].vehicles.push({
+          id: vehicle_id,
+          make,
+          model,
+          year,
+          licensePlate: license_plate,
+          vin,
+          color,
+          mileage,
+          imageUrl: vehicle_image ? `${IMAGE_BASE_URL}/${encode(vehicle_image)}` : null
+        });
+      }
+    }
+
+    res.json(Object.values(grouped));
+  });
+});
+
+// =============================
+// ADD VEHICLES TO EXISTING CUSTOMER
+// =============================
+router.post('/add-vehicles', upload.array('images'), (req, res) => {
+  const customerId = req.body.customerId;
+  let vehicles;
+
+  try {
+    vehicles = JSON.parse(req.body.vehicles);
+  } catch (err) {
+    console.error('Error parsing vehicles JSON:', err);
+    return res.status(400).json({ error: 'Invalid vehicles data format. Expected JSON string.' });
+  }
+
+  if (!customerId || !Array.isArray(vehicles)) {
+    return res.status(400).json({ error: 'Invalid input: customerId and vehicles array are required.' });
+  }
+
+  for (const [index, vehicle] of vehicles.entries()) {
+    if (!vehicle.make || !vehicle.model) {
+      return res.status(400).json({ error: `Vehicle ${index + 1}: Make and Model are required.` });
+    }
+  }
+
+  const insertValues = vehicles.map((vehicle, index) => {
+    const imageFile = req.files?.[index];
+    const year = vehicle.year ? parseInt(vehicle.year, 10) : null;
+    const mileage = vehicle.mileage ? parseInt(vehicle.mileage, 10) : null;
+
+    return [
+      customerId,
+      vehicle.make,
+      vehicle.model,
+      year,
+      vehicle.licensePlate || null,
+      vehicle.vin || null,
+      vehicle.color || null,
+      mileage,
+      imageFile ? `uploads/${imageFile.filename}` : null
+    ];
+  });
+
+  const query = `
+    INSERT INTO vehicles 
+    (customer_id, make, model, year, license_plate, vin, color, mileage, image) 
+    VALUES ?
+  `;
+
+  db.query(query, [insertValues], (err, result) => {
+    if (err) {
+      console.error('Error inserting vehicles:', err);
+      return res.status(500).json({ error: 'Failed to insert vehicles into the database.' });
+    }
+
+    const imageUrls = req.files.map(file => `${IMAGE_BASE_URL}/${encode(`uploads/${file.filename}`)}`);
+
+    res.status(201).json({
+      message: 'Vehicles added successfully',
+      affectedRows: result.affectedRows,
+      firstInsertedId: result.insertId,
+      imageUrls
+    });
+  });
+});
+
+module.exports = router;

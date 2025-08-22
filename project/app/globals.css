@@ -1,0 +1,283 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
+  }
+}
+
+
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 213 27% 84%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71% 4%;
+    --primary: 220 14% 96%;
+    --primary-foreground: 220 9% 46%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 9% 46%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 220 14% 96%;
+    --accent-foreground: 220 9% 46%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 224 71% 4%;
+    --radius: 0.75rem;
+  }
+.sidebar-container {
+  /* Define CSS variables that React will update */
+  --mouse-x: 50%;
+  --mouse-y: 50%;
+}
+
+.aurora-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  background: radial-gradient(
+    400px circle at var(--mouse-x) var(--mouse-y),
+    rgba(96, 165, 250, 0.15), /* A soft blue glow */
+    transparent 80%
+  );
+  transition: background 0.2s ease-out;
+}
+
+/* ✨ NEW: Animation for delayed content fade-in */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in-delay {
+  animation: fadeIn 0.5s ease-out 0.3s forwards;
+}
+
+/* Optional: Custom scrollbar for a sleeker look */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #4a5568; /* gray-700 */
+  border-radius: 10px;
+}
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 213 31% 91%;
+    --primary: 213 31% 91%;
+    --primary-foreground: 220 9% 46%;
+    --secondary: 215 28% 17%;
+    --secondary-foreground: 213 31% 91%;
+    --muted: 215 28% 17%;
+    --muted-foreground: 217 19% 35%;
+    --accent: 215 28% 17%;
+    --accent-foreground: 213 31% 91%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 213 31% 91%;
+    --border: 215 28% 17%;
+    --input: 215 28% 17%;
+    --ring: 216 12% 84%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 text-foreground min-h-screen;
+  }
+}
+
+@layer components {
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  .animate-pulse-slow {
+    animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  .animate-bounce-slow {
+    animation: bounce 3s infinite;
+  }
+  
+  .animate-spin-slow {
+    animation: spin 8s linear infinite;
+  }
+  
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out;
+  }
+  
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+  
+  .gradient-border {
+    background: linear-gradient(45deg, #1e40af, #3b82f6, #60a5fa, #93c5fd) padding-box;
+    border: 2px solid transparent;
+    background-clip: padding-box, border-box;
+  }
+  
+  .glass-card {
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+  
+  .sidebar-item {
+    @apply flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-blue-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105 hover:shadow-lg;
+  }
+  
+  .sidebar-item.active {
+    @apply text-white bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg scale-105;
+  }
+  
+  .card-hover {
+    @apply hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer hover:-translate-y-1;
+  }
+  
+  .btn-primary {
+    @apply bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200;
+  }
+  
+  .btn-secondary {
+    @apply bg-white text-blue-600 border-2 border-blue-200 hover:border-blue-300 hover:bg-blue-50 font-semibold py-3 px-6 rounded-xl shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/80 backdrop-blur-sm hover:bg-white;
+  }
+  
+  .stat-card {
+    @apply bg-gradient-to-br text-white rounded-2xl p-6 shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300;
+  }
+  
+  .nav-item {
+    @apply flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-all duration-200 transform hover:scale-105;
+  }
+  
+  .nav-item.active {
+    @apply text-blue-600 bg-blue-50 border-r-4 border-blue-600 scale-105;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(45deg, #3b82f6, #8b5cf6);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(45deg, #2563eb, #7c3aed);
+}
+
+/* Loading spinner */
+.loading-spinner {
+  @apply inline-block w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin;
+}
+
+/* Notification styles */
+.notification-enter {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.notification-enter-active {
+  transform: translateX(0);
+  opacity: 1;
+  transition: all 0.3s ease-out;
+}
+
+.notification-exit {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.notification-exit-active {
+  transform: translateX(100%);
+  opacity: 0;
+  transition: all 0.3s ease-in;
+}
