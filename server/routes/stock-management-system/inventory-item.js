@@ -1429,16 +1429,46 @@ router.get('/order-history', (req, res) => {
       SELECT ticket_number
       FROM ordered_parts
       GROUP BY ticket_number
-      HAVING SUM(status = 'pending') = 0
+      HAVING COUNT(*) = COUNT(CASE WHEN status = 'given' THEN 1 END)
+         AND COUNT(*) > 0  -- at least one part
     )
     ORDER BY st.created_at DESC
   `;
 
   db.query(query, (err, results) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json(results);
+    
+    // Transform flat results into grouped orders
+    const grouped = results.reduce((acc, row) => {
+      const { ordered_part_id, ...orderData } = row;
+
+      let order = acc.find(o => o.ticket_id === row.ticket_id);
+      if (!order) {
+        order = { ...orderData, ordered_parts: [] };
+        acc.push(order);
+      }
+
+      if (ordered_part_id) {
+        order.ordered_parts.push({
+          id: ordered_part_id,
+          item_id: row.item_id,
+          name: row.name,
+          category: row.category,
+          sku: row.sku,
+          price: row.price,
+          quantity: row.quantity,
+          status: row.part_status,
+          ordered_at: row.ordered_at,
+        });
+      }
+
+      return acc;
+    }, []);
+
+    res.json(grouped);
   });
 });
+
 
 
 module.exports = router;
