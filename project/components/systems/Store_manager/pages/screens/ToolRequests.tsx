@@ -28,16 +28,22 @@ interface Tool {
   condition?: string;
 }
 
+interface Vehicle {
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  image: string | null;
+}
+
 interface ServiceTicket {
   id: number;
   ticket_number: string;
   customer_name: string;
   license_plate: string;
-  make: string | null;
-  model: string | null;
-  year: number | null;
   assigned_mechanic: string | null;
   status: string;
+  vehicle: Vehicle | null;
+  vehicle_info: string | null;
 }
 
 interface AssignedTool {
@@ -131,10 +137,13 @@ const ToolRequests = () => {
   const fetchTools = async () => {
     setLoadingTools(true);
     try {
-      const res = await fetch('http://localhost:5001/api/tools');
+      const res = await fetch('http://localhost:5001/api/tools/tools-get');
       if (!res.ok) throw new Error('Failed to fetch tools');
       const data = await res.json();
-      setTools(data.data || []);
+      setTools((data.data || []).map((tool: any) => ({
+        ...tool,
+        tool_name: tool.tool_name || tool.name || 'Unnamed Tool',
+      })));
     } catch (err) {
       console.error('Error fetching tools:', err);
     } finally {
@@ -437,12 +446,24 @@ const ToolRequests = () => {
                             <strong>Customer:</strong> {ticket.customer_name}
                           </span>
                         </div>
-                        <div className="flex items-center space-x-2 text-gray-600 mb-1">
-                          <Wrench className="w-4 h-4" />
-                          <span>
-                            <strong>Vehicle:</strong> {ticket.year} {ticket.make} {ticket.model}
-                          </span>
-                        </div>
+                       <div className="flex items-center space-x-2 text-gray-600 mb-1">
+  <Wrench className="w-4 h-4" />
+  <span>
+    <strong>Vehicle:</strong>{' '}
+    {ticket.vehicle?.make && ticket.vehicle?.model && ticket.vehicle?.year ? (
+      <>
+        {ticket.vehicle.year} {ticket.vehicle.make} {ticket.vehicle.model}
+      </>
+    ) : (
+      <em>No structured vehicle data</em>
+    )}
+    {ticket.vehicle_info && (
+      <span className="ml-2 text-sm text-gray-500">
+        ({ticket.vehicle_info})
+      </span>
+    )}
+  </span>
+</div>
                       </div>
 
                       <div>
@@ -553,8 +574,8 @@ const ToolRequests = () => {
                         className="w-full h-32 object-cover rounded mb-2"
                       />
                     )}
-                    <p className="font-medium text-gray-800">{tool.tool_name}</p>
-                    <p className="text-sm text-gray-600">{tool.brand}</p>
+                    <p className="font-medium text-black">{tool.tool_name}</p>
+                   
                     <p className={`text-sm font-medium ${tool.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {tool.quantity} Available
                     </p>

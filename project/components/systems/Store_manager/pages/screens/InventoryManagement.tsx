@@ -21,22 +21,29 @@ import AddToolModal from '../popup/AddToolModal';
 
 interface Tool {
   id: string;
+  toolId: string;
   name: string;
+  brand: string;
   category: string;
   quantity: number;
+  minStock: number;
+  status: string;
+  toolCondition: 'Excellent' | 'Good' | 'Fair' | 'Poor' | 'Damaged';
+  cost: number;
+  purchaseDate: string | null;
+  supplier: string;
+  warranty: string;
+  notes: string | null;
+  imageUrl: string | null;
+  documentPaths: string[];
+  createdAt: string;
+  updatedAt: string;
+
+  // Computed for UI
   available: number;
   inUse: number;
   damaged: number;
   condition: 'excellent' | 'good' | 'fair' | 'poor' | 'damaged';
-  status: string;
-  location: string;
-  lastMaintenance: string;
-  nextMaintenance: string;
-  serialNumber: string;
-  purchaseDate: string;
-  warranty: string;
-  supplier: string;
-  cost: number;
 }
 
 const InventoryManagement: React.FC = () => {
@@ -45,9 +52,18 @@ const InventoryManagement: React.FC = () => {
   const [conditionFilter, setConditionFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
-  const [tools, setTools] = useState<Tool[]>([]); // ← Real tools from backend
+  const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // ✅ Stats from backend API
+  const [stats, setStats] = useState({
+    totalTools: 0,
+    totalQuantity: 0,
+    toolsInUse: 0,
+    availableTools: 0,
+    damagedTools: 0
+  });
 
   const categories = [
     'Power Tools',
@@ -60,65 +76,86 @@ const InventoryManagement: React.FC = () => {
     'General'
   ];
 
-  // Fetch tools from backend
- useEffect(() => {
-  const fetchTools = async () => {
-    try {
-      // ✅ Use full URL if no proxy
-      const res = await fetch('http://localhost:5001/api/tools');
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [toolsRes, statsRes] = await Promise.all([
+          fetch('http://localhost:5001/api/tools/tools-get'),
+          fetch('http://localhost:5001/api/tools/stats')
+        ]);
 
-      if (!res.ok) {
-        const text = await res.text();
-        console.error('API Error:', res.status, text);
-        throw new Error('Failed to fetch tools');
+        // Handle tools
+        if (!toolsRes.ok) throw new Error('Failed to fetch tools');
+        const toolsData = await toolsRes.json();
+        if (!toolsData.success) throw new Error(toolsData.message);
+
+        const mappedTools = toolsData.data.map((tool: any): Tool => {
+          const condition = tool.toolCondition?.toLowerCase();
+          const validConditions = ['excellent', 'good', 'fair', 'poor', 'damaged'];
+          const normalizedCondition = validConditions.includes(condition)
+            ? condition
+            : 'good';
+
+          return {
+            id: tool.id.toString(),
+            toolId: tool.toolId || `TOL-${tool.id}`,
+            name: tool.name || tool.tool_name || tool.toolName || 'Unnamed Tool',
+            brand: tool.brand || 'Unknown',
+            category: tool.category,
+            quantity: tool.quantity,
+            minStock: tool.minStock || 0,
+            status: tool.status,
+            toolCondition: tool.toolCondition,
+            cost: typeof tool.cost === 'number'
+              ? tool.cost
+              : Number(tool.cost || tool.tool_cost) || 0,
+            purchaseDate: tool.purchaseDate,
+            supplier: tool.supplier || 'Unknown',
+            warranty: tool.warranty || 'N/A',
+            notes: tool.notes,
+            imageUrl: tool.imageUrl,
+            documentPaths: Array.isArray(tool.documentPaths)
+              ? tool.documentPaths
+              : (tool.documentPaths ? JSON.parse(tool.documentPaths) : []),
+            createdAt: tool.createdAt,
+            updatedAt: tool.updatedAt,
+
+            // Computed fields
+            available: tool.quantity - (tool.in_use || 0),
+            inUse: tool.in_use || 0,
+            damaged: tool.toolCondition === 'Damaged' ? 1 : 0,
+            condition: normalizedCondition
+          };
+        });
+
+        setTools(mappedTools);
+
+        // Handle stats
+        if (!statsRes.ok) throw new Error('Failed to fetch stats');
+        const statsData = await statsRes.json();
+        if (!statsData.success) throw new Error(statsData.message);
+
+        setStats(statsData.data);
+      } catch (err: any) {
+        console.error('Fetch Error:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message);
-
-      const mappedTools = data.data.map((tool: any) => ({
-        id: tool.id.toString(),
-        name: tool.name,
-        category: tool.category,
-        quantity: tool.quantity,
-        available: tool.quantity, // or calculate from assignments
-        inUse: 0,
-        damaged: tool.toolCondition === 'Damaged' ? 1 : 0,
-        condition: ['excellent', 'good', 'fair', 'poor', 'damaged'].includes(tool.toolCondition?.toLowerCase())
-          ? tool.toolCondition.toLowerCase()
-          : 'good',
-        status: tool.status,
-        location: tool.location || 'Warehouse',
-        lastMaintenance: tool.lastMaintenance || '2024-01-01',
-        nextMaintenance: tool.nextMaintenance || '2025-01-01',
-        serialNumber: tool.toolId || `TOL-${tool.id}`,
-        purchaseDate: tool.purchaseDate || '2023-01-01',
-        warranty: tool.warranty || '1 year',
-        supplier: tool.supplier || 'Unknown',
-        cost: tool.cost || 0
-      }));
-
-      setTools(mappedTools);
-    } catch (err: any) {
-      console.error('Fetch Error:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  fetchTools();
-}, []);
+    fetchData();
+  }, []);
 
   const filteredTools = tools.filter(tool => {
-    const matchesSearch = 
-      tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tool.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tool.serialNumber.toLowerCase().includes(searchTerm.toLowerCase());
-    
+    const matchesSearch =
+      (tool.name ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (tool.category ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (tool.toolId ?? '').toLowerCase().includes(searchTerm.toLowerCase());
+
     const matchesCategory = categoryFilter === 'all' || tool.category === categoryFilter;
     const matchesCondition = conditionFilter === 'all' || tool.condition === conditionFilter;
-    
+
     return matchesSearch && matchesCategory && matchesCondition;
   });
 
@@ -148,6 +185,32 @@ const InventoryManagement: React.FC = () => {
     return (tool.available / tool.quantity) * 100;
   };
 
+  const deleteTool = async (id: string) => {
+    const confirm = window.confirm("Are you sure you want to delete this tool? This cannot be undone.");
+    if (!confirm) return;
+
+    try {
+      const res = await fetch(`http://localhost:5001/api/tools/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to delete tool');
+      }
+
+      setTools(prev => prev.filter(tool => tool.id !== id));
+      alert(data.message);
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      alert(`❌ Error: ${err.message}`);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -163,34 +226,6 @@ const InventoryManagement: React.FC = () => {
       </div>
     );
   }
-
-
-  const deleteTool = async (id: string) => {
-  const confirm = window.confirm("Are you sure you want to delete this tool? This cannot be undone.");
-  if (!confirm) return;
-
-  try {
-    const res = await fetch(`http://localhost:5001/api/tools/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.message || 'Failed to delete tool');
-    }
-
-    // ✅ Remove from UI
-    setTools(prev => prev.filter(tool => tool.id !== id));
-    alert(data.message); // "Tool X deleted successfully"
-  } catch (err: any) {
-    console.error('Delete error:', err);
-    alert(`❌ Error: ${err.message}`);
-  }
-};
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -211,7 +246,7 @@ const InventoryManagement: React.FC = () => {
             <Download className="w-4 h-4" />
             <span>Export</span>
           </button>
-          <button 
+          <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-orange-600 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105"
           >
@@ -227,7 +262,7 @@ const InventoryManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-100">Total Tools</p>
-               <p className="text-3xl font-bold">{tools.length}</p>
+              <p className="text-3xl font-bold">{stats.totalTools}</p>
             </div>
             <Wrench className="w-8 h-8 text-blue-200 animate-pulse" />
           </div>
@@ -237,7 +272,7 @@ const InventoryManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100">Available</p>
-              <p className="text-3xl font-bold">{tools.reduce((sum, tool) => sum + tool.available, 0)}</p>
+              <p className="text-3xl font-bold">{stats.availableTools}</p>
             </div>
             <CheckCircle className="w-8 h-8 text-green-200 animate-pulse" />
           </div>
@@ -247,7 +282,7 @@ const InventoryManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-orange-100">In Use</p>
-              <p className="text-3xl font-bold">{tools.reduce((sum, tool) => sum + tool.inUse, 0)}</p>
+              <p className="text-3xl font-bold">{stats.toolsInUse}</p>
             </div>
             <Package className="w-8 h-8 text-orange-200 animate-spin" />
           </div>
@@ -257,7 +292,7 @@ const InventoryManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-red-100">Damaged</p>
-              <p className="text-3xl font-bold">{tools.reduce((sum, tool) => sum + tool.damaged, 0)}</p>
+              <p className="text-3xl font-bold">{stats.damagedTools}</p>
             </div>
             <AlertTriangle className="w-8 h-8 text-red-200 animate-bounce" />
           </div>
@@ -277,8 +312,8 @@ const InventoryManagement: React.FC = () => {
               className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
             />
           </div>
-          
-          <select 
+
+          <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             className="px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent"
@@ -289,7 +324,7 @@ const InventoryManagement: React.FC = () => {
             ))}
           </select>
 
-          <select 
+          <select
             value={conditionFilter}
             onChange={(e) => setConditionFilter(e.target.value)}
             className="px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent"
@@ -315,7 +350,11 @@ const InventoryManagement: React.FC = () => {
           <p className="text-center py-10 text-gray-500">No tools found matching your filters.</p>
         ) : (
           filteredTools.map((tool, index) => (
-            <div key={tool.id} className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02]" style={{ animationDelay: `${index * 0.1}s` }}>
+            <div
+              key={tool.id}
+              className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02]"
+              style={{ animationDelay: `${index * 0.1}s` }}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
                   <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${
@@ -327,7 +366,7 @@ const InventoryManagement: React.FC = () => {
                   } flex items-center justify-center shadow-lg`}>
                     {getConditionIcon(tool.condition)}
                   </div>
-                  
+
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
                       <h3 className="text-xl font-bold text-gray-800">{tool.name}</h3>
@@ -335,20 +374,23 @@ const InventoryManagement: React.FC = () => {
                         {tool.condition}
                       </span>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <p className="text-sm text-gray-600 mb-1">
                           <span className="font-medium">Category:</span> {tool.category}
                         </p>
                         <p className="text-sm text-gray-600 mb-1">
-                          <span className="font-medium">Serial:</span> {tool.serialNumber}
+                          <span className="font-medium">Brand:</span> {tool.brand}
+                        </p>
+                        <p className="text-sm text-gray-600 mb-1">
+                          <span className="font-medium">Serial:</span> {tool.toolId}
                         </p>
                         <p className="text-sm text-gray-600">
-                          <span className="font-medium">Location:</span> {tool.location}
+                          <span className="font-medium">Status:</span> {tool.status}
                         </p>
                       </div>
-                      
+
                       <div>
                         <p className="text-sm text-gray-600 mb-1">
                           <span className="font-medium">Supplier:</span> {tool.supplier}
@@ -357,16 +399,16 @@ const InventoryManagement: React.FC = () => {
                           <span className="font-medium">Warranty:</span> {tool.warranty}
                         </p>
                         <p className="text-sm text-gray-600">
-  <span className="font-medium">Cost:</span> ${typeof tool.cost === 'number' ? tool.cost.toFixed(2) : '0.00'}
-</p>
+                          <span className="font-medium">Cost:</span> ETB {typeof tool.cost === 'number' ? tool.cost.toFixed(2) : '0.00'}
+                        </p>
                       </div>
-                      
+
                       <div>
                         <p className="text-sm text-gray-600 mb-1">
-                          <span className="font-medium">Last Maintenance:</span> {tool.lastMaintenance}
+                          <span className="font-medium">Purchase Date:</span> {tool.purchaseDate || 'N/A'}
                         </p>
                         <p className="text-sm text-gray-600">
-                          <span className="font-medium">Next Maintenance:</span> {tool.nextMaintenance}
+                          <span className="font-medium">Min Stock:</span> {tool.minStock}
                         </p>
                       </div>
                     </div>
@@ -375,9 +417,6 @@ const InventoryManagement: React.FC = () => {
 
                 <div className="text-right space-y-3">
                   <div className="flex items-center space-x-6">
-                    <div className="text-center">
-                     
-                    </div>
                     <div className="text-center">
                       <p className="text-2xl font-bold text-green-600">{tool.available}</p>
                       <p className="text-sm text-gray-600">available</p>
@@ -393,14 +432,14 @@ const InventoryManagement: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="w-32">
                     <div className="flex justify-between text-xs text-gray-500 mb-1">
                       <span>Availability</span>
                       <span>{Math.round(getAvailabilityPercentage(tool))}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
+                      <div
                         className={`h-2 rounded-full ${
                           getAvailabilityPercentage(tool) > 70 ? 'bg-green-500' :
                           getAvailabilityPercentage(tool) > 30 ? 'bg-yellow-500' : 'bg-red-500'
@@ -409,9 +448,9 @@ const InventoryManagement: React.FC = () => {
                       ></div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2">
-                    <button 
+                    <button
                       onClick={() => setSelectedTool(tool)}
                       className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                     >
@@ -423,19 +462,12 @@ const InventoryManagement: React.FC = () => {
                     <button className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors">
                       <QrCode className="w-4 h-4" />
                     </button>
-                    {tool.condition === 'damaged' || tool.condition === 'poor' ? (
-                      <button className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                        <AlertTriangle className="w-4 h-4" />
-                      </button>
-                    ) : (
-                      <button
-                            onClick={() => deleteTool(tool.id)}
-                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            aria-label="Delete tool"
-                                  >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => deleteTool(tool.id)}
+                      className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -444,10 +476,11 @@ const InventoryManagement: React.FC = () => {
         )}
       </div>
 
-      <AddToolModal 
-        show={showAddModal} 
-        onClose={() => setShowAddModal(false)} 
-        categories={categories} 
+      {/* Add Tool Modal */}
+      <AddToolModal
+        show={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        categories={categories}
       />
 
       {/* Tool Details Modal */}
@@ -456,14 +489,14 @@ const InventoryManagement: React.FC = () => {
           <div className="bg-white rounded-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-800">Tool Details</h2>
-              <button 
+              <button
                 onClick={() => setSelectedTool(null)}
                 className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div>
@@ -475,8 +508,12 @@ const InventoryManagement: React.FC = () => {
                   <p className="text-gray-800">{selectedTool.category}</p>
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-500">Brand</label>
+                  <p className="text-gray-800">{selectedTool.brand}</p>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-500">Serial Number</label>
-                  <p className="text-gray-800 font-mono">{selectedTool.serialNumber}</p>
+                  <p className="text-gray-800 font-mono">{selectedTool.toolId}</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Condition</label>
@@ -485,11 +522,11 @@ const InventoryManagement: React.FC = () => {
                   </span>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500">Location</label>
-                  <p className="text-gray-800">{selectedTool.location}</p>
+                  <label className="block text-sm font-medium text-gray-500">Status</label>
+                  <p className="text-gray-800">{selectedTool.status}</p>
                 </div>
               </div>
-              
+
               <div className="space-y-4">
                 <div className="grid grid-cols-3 gap-4">
                   <div>
@@ -511,7 +548,7 @@ const InventoryManagement: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Purchase Date</label>
-                  <p className="text-gray-800">{selectedTool.purchaseDate}</p>
+                  <p className="text-gray-800">{selectedTool.purchaseDate || 'N/A'}</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Warranty</label>
@@ -519,30 +556,31 @@ const InventoryManagement: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Cost</label>
-                 <p className="text-lg font-semibold text-blue-600">
-                    ${typeof selectedTool.cost === 'number' ? selectedTool.cost.toFixed(2) : '0.00'}</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    ${typeof selectedTool.cost === 'number' ? selectedTool.cost.toFixed(2) : '0.00'}
+                  </p>
                 </div>
               </div>
             </div>
-            
+
             <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-2">Maintenance Schedule</label>
+                <label className="block text-sm font-medium text-gray-500 mb-2">Stock Info</label>
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-600 mb-1">
-                    <span className="font-medium">Last Maintenance:</span> {selectedTool.lastMaintenance}
+                    <span className="font-medium">Min Stock:</span> {selectedTool.minStock}
                   </p>
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">Next Maintenance:</span> {selectedTool.nextMaintenance}
+                    <span className="font-medium">Notes:</span> {selectedTool.notes || 'None'}
                   </p>
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-500 mb-2">Availability Status</label>
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
-                    <div 
+                    <div
                       className={`h-3 rounded-full ${
                         getAvailabilityPercentage(selectedTool) > 70 ? 'bg-green-500' :
                         getAvailabilityPercentage(selectedTool) > 30 ? 'bg-yellow-500' : 'bg-red-500'
@@ -551,22 +589,14 @@ const InventoryManagement: React.FC = () => {
                     ></div>
                   </div>
                   <p className="text-sm text-gray-600">
-                    {Math.round(getAvailabilityPercentage(selectedTool))}% available for use
+                    {Math.round(getAvailabilityPercentage(selectedTool))}% available
                   </p>
                 </div>
               </div>
             </div>
-            
-            <div className="flex space-x-4 pt-6 border-t mt-6">
-              <button className="flex-1 bg-gradient-to-r from-orange-600 to-blue-600 text-white py-3 rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105">
-                <Edit className="w-4 h-4 mr-2 inline" />
-                Edit Tool
-              </button>
-              <button className="px-6 py-3 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
-                <QrCode className="w-4 h-4 mr-2 inline" />
-                Generate QR
-              </button>
-              <button 
+
+            <div className="flex justify-end pt-6 border-t mt-6">
+              <button
                 onClick={() => setSelectedTool(null)}
                 className="px-6 py-3 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
               >

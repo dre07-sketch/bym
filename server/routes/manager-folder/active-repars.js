@@ -369,5 +369,178 @@ router.post('/ordered-parts', (req, res) => {
   });
 });
 
+router.get("/progress/:ticket_number", (req, res) => {
+  const { ticket_number } = req.params;
+
+  if (!ticket_number) {
+    return res.status(400).json({ message: "ticket_number is required" });
+  }
+
+  const query = `
+    SELECT 
+      id,
+      ticket_number,
+      date,
+      time,
+      status,
+      description,
+      created_at
+    FROM progress_logs
+    WHERE ticket_number = ?
+    ORDER BY date ASC, time ASC
+  `;
+
+  db.query(query, [ticket_number], (err, results) => {
+    if (err) {
+      console.error("Error fetching progress logs:", err);
+      return res.status(500).json({ message: "Database error" });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ message: "No progress logs found for this ticket" });
+    }
+
+    res.json(results);
+  });
+});
+
+router.get("/diassmbled/:ticket_number", (req, res) => {
+  const { ticket_number } = req.params;
+
+  if (!ticket_number) {
+    return res.status(400).json({ message: "ticket_number is required" });
+  }
+
+  const query = `
+    SELECT 
+      id,
+      ticket_number,
+      part_name,
+      condition,
+      status,
+      notes,
+      logged_at,
+      reassembly_verified
+    FROM disassembled_parts
+    WHERE ticket_number = ?
+    ORDER BY logged_at ASC
+  `;
+
+  db.query(query, [ticket_number], (err, results) => {
+    if (err) {
+      console.error("Error fetching disassembled parts:", err);
+      return res.status(500).json({ message: "Database error" });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ message: "No disassembled parts found for this ticket" });
+    }
+
+    res.json(results);
+  });
+});
+
+router.get("/used-tools/:ticket_number", (req, res) => {
+  const { ticket_number } = req.params;
+
+  if (!ticket_number) {
+    return res.status(400).json({ message: "ticket_number is required" });
+  }
+
+  const query = `
+    SELECT 
+      id,
+      tool_id,
+      tool_name,
+      ticket_id,
+      ticket_number,
+      assigned_quantity,
+      assigned_by,
+      status,
+      assigned_at,
+      returned_at,
+      updated_at
+    FROM tool_assignments
+    WHERE ticket_number = ?
+    ORDER BY assigned_at ASC
+  `;
+
+  db.query(query, [ticket_number], (err, results) => {
+    if (err) {
+      console.error("Error fetching tool assignments:", err);
+      return res.status(500).json({ message: "Database error" });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ message: "No tool assignments found for this ticket" });
+    }
+
+    res.json(results);
+  });
+});
+
+router.get("/inspection/:ticket_number", (req, res) => {
+  const { ticket_number } = req.params;
+
+  if (!ticket_number) {
+    return res.status(400).json({ message: "ticket_number is required" });
+  }
+
+  const query = `
+    SELECT 
+      id,
+      ticket_number,
+      main_issue_resolved,
+      reassembly_verified,
+      general_condition,
+      notes,
+      inspection_date,
+      inspection_status,
+      created_at,
+      updated_at
+    FROM inspections
+    WHERE ticket_number = ?
+    ORDER BY created_at DESC
+  `;
+
+  db.query(query, [ticket_number], (err, results) => {
+    if (err) {
+      console.error("Error fetching inspection records:", err);
+      return res.status(500).json({ message: "Database error" });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ message: "No inspection records found for this ticket" });
+    }
+
+    res.json(results);
+  });
+});
+
+router.post("/outsource", (req, res) => {
+  const { ticket_number, name, category, quantity } = req.body;
+
+  if (!ticket_number || !name || !category || !quantity) {
+    return res.status(400).json({
+      success: false,
+      message: "Ticket number, name, category, and quantity are required",
+    });
+  }
+
+  const sql = `
+    INSERT INTO outsource_stock 
+      (ticket_number, name, category, quantity, status, requested_at) 
+    VALUES (?, ?, ?, ?, 'awaiting_request', NOW())
+  `;
+
+  db.query(sql, [ticket_number, name, category, quantity], (err, result) => {
+    if (err) {
+      console.error("Error inserting outsourced part:", err);
+      return res.status(500).json({ success: false, message: "Server error" });
+    }
+
+    res.json({ success: true, message: "Part saved successfully", insertId: result.insertId });
+  });
+});
 
 module.exports = router;

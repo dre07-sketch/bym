@@ -28,12 +28,12 @@ const Render_Store_Manager: React.FC<Render_Store_ManagerDashboardProps> = ({ on
 
   const navigation = [
     { id: 'dashboard', label: 'Dashboard', icon: Wrench },
-    { id: 'requests', label: 'Tool Requests', icon: Package },
+    { id: 'requests', label: 'Assign Tool', icon: Package },
     { id: 'inventory', label: 'Inventory Management', icon: Package },
     { id: 'assignments', label: 'Assignment & Return', icon: UserCheck },
     { id: 'damage-reports', label: 'Damage Reports', icon: AlertTriangle },
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
-    { id: 'users', label: 'User Management', icon: Users },
+    
   ];
 
   const notifications = [
@@ -71,7 +71,7 @@ const Render_Store_Manager: React.FC<Render_Store_ManagerDashboardProps> = ({ on
       case 'assignments': return <AssignmentReturn />;
       case 'damage-reports': return <DamageReportPage />;
       case 'reports': return <Reports />;
-      case 'users': return <AssignmentReturn />;
+     
       default: return <ToolDashboard onLogout={onLogout} userRole={userRole} />;
     }
   };

@@ -74,60 +74,23 @@ router.get('/categories', async (req, res) => {
 });
 
 // GET /api/tools
-router.get('/', async (req, res) => {
+router.get('/tools-get', async (req, res) => {
   try {
-  const sql = `
-  SELECT 
-    id,
-    tool_id AS toolId,
-    tool_name AS name,
-    brand,
-    category,
-    quantity,
-    min_stock AS minStock,
-    status,
-    tool_condition AS toolCondition,
-    cost,
-    purchase_date AS purchaseDate,
-    supplier,
-    warranty,
-    notes,
-    image_url AS imageUrl,
-    document_paths AS documentPaths,
-    created_at AS createdAt,
-    updated_at AS updatedAt
-  FROM tools
-  ORDER BY updated_at DESC
-`;
+    const [tools] = await db.promise().execute(`
+      SELECT 
+        t.*,
+        COALESCE(SUM(ta.assigned_quantity), 0) AS in_use
+      FROM tools t
+      LEFT JOIN tool_assignments ta ON t.id = ta.tool_id AND ta.status = 'In Use'
+      GROUP BY t.id
+    `);
 
-    const [rows] = await db.promise().execute(sql);
-
-    const tools = rows.map(tool => {
-      let status = tool.status;
-      if (tool.quantity === 0) status = 'Out of Stock';
-      else if (tool.quantity <= tool.minStock) status = 'Low Stock';
-      else if (status !== 'Under Maintenance' && status !== 'Retired') status = 'Available';
-
-      return {
-        ...tool,
-        status,
-        documentPaths: tool.documentPaths ? JSON.parse(tool.documentPaths) : [],
-        purchaseDate: tool.purchaseDate ? tool.purchaseDate.toISOString().split('T')[0] : null,
-        createdAt: tool.createdAt.toISOString(),
-        updatedAt: tool.updatedAt.toISOString()
-      };
-    });
-
-    res.status(200).json({
+    res.json({
       success: true,
       data: tools
     });
   } catch (error) {
-    console.error('Error fetching tools:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch tools' });
   }
 });
 
@@ -136,7 +99,7 @@ router.get('/', async (req, res) => {
 // GET /api/tools/stats
 router.get('/stats', async (req, res) => {
   try {
-    // 1. Total & Available Tools (from tools table)
+    // 1. Total & Available Tools
     const [rows] = await db.promise().execute(`
       SELECT 
         SUM(quantity) AS totalQuantity,
@@ -146,7 +109,7 @@ router.get('/stats', async (req, res) => {
 
     const totalQuantity = rows[0]?.totalQuantity || 0;
 
-    // 2. Tools In Use (sum of assigned_quantity where status = 'In Use')
+    // 2. Tools In Use
     const [inUseRows] = await db.promise().execute(`
       SELECT 
         COALESCE(SUM(assigned_quantity), 0) AS toolsInUse
@@ -156,16 +119,33 @@ router.get('/stats', async (req, res) => {
 
     const toolsInUse = inUseRows[0]?.toolsInUse || 0;
 
-    // 3. Available Tools = Total Inventory Quantity - Tools Currently In Use
+    // 3. Available Tools
     const availableTools = totalQuantity - toolsInUse;
 
-    // 4. Damaged Tools — Fixed: using tool_condition instead of condition
+    // 4. Damaged Tools
     const [damagedRows] = await db.promise().execute(`
       SELECT COUNT(*) AS damagedCount 
       FROM tools 
       WHERE status = 'Damaged' OR tool_condition = 'Damaged'
     `);
     const damagedTools = damagedRows[0]?.damagedCount || 0;
+
+    // 5. Returned Tools (all time)
+    const [returnedRows] = await db.promise().execute(`
+      SELECT COUNT(*) AS returnedCount 
+      FROM tool_assignments
+      WHERE status = 'Returned'
+    `);
+    const returnedTools = returnedRows[0]?.returnedCount || 0;
+
+    // 6. Returned Today
+    const [returnedTodayRows] = await db.promise().execute(`
+      SELECT COUNT(*) AS returnedTodayCount 
+      FROM tool_assignments
+      WHERE status = 'Returned'
+        AND DATE(returned_at) = CURDATE()
+    `);
+    const returnedToday = returnedTodayRows[0]?.returnedTodayCount || 0;
 
     return res.status(200).json({
       success: true,
@@ -174,7 +154,9 @@ router.get('/stats', async (req, res) => {
         totalQuantity,
         toolsInUse: parseInt(toolsInUse),
         availableTools: Math.max(0, availableTools),
-        damagedTools
+        damagedTools,
+        returnedTools,
+        returnedToday
       }
     });
   } catch (error) {
@@ -185,6 +167,7 @@ router.get('/stats', async (req, res) => {
     });
   }
 });
+
 
 
 
@@ -263,8 +246,83 @@ router.post('/return', async (req, res) => {
     });
   }
 });
+
+// GET /api/tools/history/:ticketId
+// GET /api/tools/history/by-ticket-number/:ticketNumber
+// 📌 GET /api/tools/returned/:ticketNumber
+// 📌 GET /api/tools/returned/:ticketNumber
+router.get('/returned/:ticketNumber', (req, res) => {
+  const { ticketNumber } = req.params;
+
+  if (!ticketNumber || ticketNumber.trim() === '') {
+    return res.status(400).json({
+      success: false,
+      message: 'ticketNumber is required',
+    });
+  }
+
+  const query = `
+    SELECT 
+      ta.id AS assignment_id,
+      ta.tool_id,
+      ta.tool_name,
+      ta.ticket_id,
+      ta.ticket_number,
+      ta.assigned_quantity,
+      ta.assigned_by,
+      ta.status,
+      ta.assigned_at,
+      ta.returned_at,
+      st.customer_name,
+      st.vehicle_id,
+      st.vehicle_info,
+      st.license_plate,
+      st.title,
+      st.mechanic_assign AS assigned_mechanic
+    FROM tool_assignments ta
+    INNER JOIN service_tickets st 
+      ON TRIM(UPPER(st.ticket_number)) = TRIM(UPPER(?))
+    WHERE TRIM(UPPER(ta.ticket_number)) = TRIM(UPPER(?))
+      AND UPPER(ta.status) = 'RETURNED'
+    ORDER BY 
+      ta.returned_at DESC, 
+      ta.assigned_at DESC
+  `;
+
+  db.getConnection((err, connection) => {
+    if (err) {
+      console.error('DB connection error:', err);
+      return res.status(500).json({
+        success: false,
+        message: 'Database connection failed',
+      });
+    }
+
+    connection.query(query, [ticketNumber, ticketNumber], (error, results) => {
+      connection.release();
+
+      if (error) {
+        console.error('Error fetching returned tools:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Server error while fetching returned tools',
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        count: results.length,
+        data: results,
+      });
+    });
+  });
+});
+
+
+
+
 // POST /api/tools
-router.post('/', async (req, res) => {
+router.post('/tools-post', async (req, res) => {
   upload(req, res, async (err) => {
     if (err) {
       return res.status(400).json({
@@ -894,7 +952,7 @@ router.post('/damage', async (req, res) => {
 
 
 // POST /api/tools/assign
-router.post('/assign', async (req, res) => {
+router.post('/assign', (req, res) => {
   const { toolID, ticketID, quantity, assignedBy = 'Unknown' } = req.body;
 
   if (!toolID || !ticketID || !quantity || quantity < 1) {
@@ -904,78 +962,125 @@ router.post('/assign', async (req, res) => {
     });
   }
 
-  let connection;
-  try {
-    connection = await db.promise().getConnection();
-    await connection.beginTransaction();
-
-    // Get tool with FOR UPDATE to prevent race conditions
-    const [[tool]] = await connection.execute(
-      'SELECT id, quantity FROM tools WHERE id = ? FOR UPDATE',
-      [toolID]
-    );
-
-    if (!tool) {
-      await connection.rollback();
-      return res.status(404).json({ success: false, message: 'Tool not found' });
+  db.getConnection((err, connection) => {
+    if (err) {
+      console.error('Error getting DB connection:', err);
+      return res.status(500).json({ success: false, message: 'Database connection error' });
     }
 
-    if (tool.quantity < quantity) {
-      await connection.rollback();
-      return res.status(400).json({
-        success: false,
-        message: `Only ${tool.quantity} available. Cannot assign ${quantity}.`
-      });
-    }
+    connection.beginTransaction(err => {
+      if (err) {
+        connection.release();
+        console.error('Transaction start error:', err);
+        return res.status(500).json({ success: false, message: 'Failed to start transaction' });
+      }
 
-    // Reduce tool quantity and update status
-    await connection.execute(
-      `UPDATE tools 
-       SET quantity = quantity - ?, 
-           status = CASE 
-                      WHEN quantity - ? <= 0 THEN 'Out of Stock'
-                      WHEN quantity - ? <= min_stock THEN 'Low Stock'
-                      ELSE 'Available'
-                    END,
-           updated_at = NOW()
-       WHERE id = ?`,
-      [quantity, quantity, quantity, toolID]
-    );
+      // Lock tool row and get tool_name
+      connection.query(
+        'SELECT id, tool_name, quantity FROM tools WHERE id = ? FOR UPDATE',
+        [toolID],
+        (err, toolRows) => {
+          if (err) {
+            return rollback(connection, res, 'Error checking tool', err);
+          }
 
-    // Record assignment
-    await connection.execute(
-      `INSERT INTO tool_assignments 
-       (tool_id, ticket_id, assigned_quantity, assigned_by)
-       VALUES (?, ?, ?, ?)`,
-      [toolID, ticketID, quantity, assignedBy]
-    );
+          if (toolRows.length === 0) {
+            return rollback(connection, res, 'Tool not found');
+          }
 
-    // After successful assignment
-await connection.execute(
-  `INSERT INTO tool_activity_log (type, tool_id, ticket_id, user, message)
-   VALUES ('assignment', ?, ?, ?, CONCAT('Tool assigned by ', ?))`,
-  [toolID, ticketID, assignedBy, assignedBy]
-);
+          const tool = toolRows[0];
+          if (tool.quantity < quantity) {
+            return rollback(connection, res, `Only ${tool.quantity} available. Cannot assign ${quantity}.`);
+          }
 
-    await connection.commit();
+          // Get ticket_number
+          connection.query(
+            'SELECT ticket_number FROM service_tickets WHERE id = ?',
+            [ticketID],
+            (err, ticketRows) => {
+              if (err) {
+                return rollback(connection, res, 'Error fetching ticket', err);
+              }
+              if (ticketRows.length === 0) {
+                return rollback(connection, res, 'Service ticket not found');
+              }
+
+              const ticketNumber = ticketRows[0].ticket_number;
+
+              // Update tool stock
+              connection.query(
+                `UPDATE tools 
+                 SET quantity = quantity - ?, 
+                     status = CASE 
+                                WHEN quantity - ? <= 0 THEN 'Out of Stock'
+                                WHEN quantity - ? <= min_stock THEN 'Low Stock'
+                                ELSE 'Available'
+                              END,
+                     updated_at = NOW()
+                 WHERE id = ?`,
+                [quantity, quantity, quantity, toolID],
+                (err) => {
+                  if (err) {
+                    return rollback(connection, res, 'Error updating tool quantity', err);
+                  }
+
+                  // Insert tool assignment with tool_name
+                  connection.query(
+                    `INSERT INTO tool_assignments 
+                     (tool_id, tool_name, ticket_id, ticket_number, assigned_quantity, assigned_by)
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [toolID, tool.tool_name, ticketID, ticketNumber, quantity, assignedBy],
+                    (err) => {
+                      if (err) {
+                        return rollback(connection, res, 'Error inserting assignment', err);
+                      }
+
+                      // Insert activity log with tool_name
+                      connection.query(
+                        `INSERT INTO tool_activity_log 
+                         (type, tool_id, tool_name, ticket_id, ticket_number, user, message)
+                         VALUES ('assignment', ?, ?, ?, ?, ?, CONCAT('Tool assigned by ', ?))`,
+                        [toolID, tool.tool_name, ticketID, ticketNumber, assignedBy, assignedBy],
+                        (err) => {
+                          if (err) {
+                            return rollback(connection, res, 'Error inserting log', err);
+                          }
+
+                          // Commit transaction
+                          connection.commit(err => {
+                            if (err) {
+                              return rollback(connection, res, 'Commit failed', err);
+                            }
+
+                            connection.release();
+                            res.status(200).json({
+                              success: true,
+                              message: 'Tool assigned successfully'
+                            });
+                          });
+                        }
+                      );
+                    }
+                  );
+                }
+              );
+            }
+          );
+        }
+      );
+    });
+  });
+});
+
+// helper
+function rollback(connection, res, message, err = null) {
+  connection.rollback(() => {
     connection.release();
+    if (err) console.error(message, err);
+    res.status(400).json({ success: false, message });
+  });
+}
 
-    return res.status(200).json({
-      success: true,
-      message: 'Tool assigned successfully'
-    });
-  } catch (error) {
-    if (connection) {
-      await connection.rollback().catch(console.error);
-      connection.release();
-    }
-    console.error('Error in tool assignment:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error during tool assignment'
-    });
-  }
-}); 
 
 
 // GET /api/tools/tickets/in-progress
