@@ -412,19 +412,20 @@ router.get("/diassmbled/:ticket_number", (req, res) => {
   }
 
   const query = `
-    SELECT 
-      id,
-      ticket_number,
-      part_name,
-      condition,
-      status,
-      notes,
-      logged_at,
-      reassembly_verified
-    FROM disassembled_parts
-    WHERE ticket_number = ?
-    ORDER BY logged_at ASC
-  `;
+  SELECT 
+    id,
+    ticket_number,
+    part_name,
+    \`condition\`,
+    \`status\`,
+    notes,
+    logged_at,
+    reassembly_verified
+  FROM disassembled_parts
+  WHERE ticket_number = ?
+  ORDER BY logged_at ASC
+`;
+
 
   db.query(query, [ticket_number], (err, results) => {
     if (err) {
@@ -520,10 +521,10 @@ router.get("/inspection/:ticket_number", (req, res) => {
 router.post("/outsource", (req, res) => {
   const { ticket_number, name, category, quantity } = req.body;
 
-  if (!ticket_number || !name || !category || !quantity) {
+  if (!ticket_number) {
     return res.status(400).json({
       success: false,
-      message: "Ticket number, name, category, and quantity are required",
+      message: "Ticket number is required",
     });
   }
 
@@ -533,7 +534,7 @@ router.post("/outsource", (req, res) => {
     VALUES (?, ?, ?, ?, 'awaiting_request', NOW())
   `;
 
-  db.query(sql, [ticket_number, name, category, quantity], (err, result) => {
+  db.query(sql, [ticket_number, name || null, category || null, quantity || 0], (err, result) => {
     if (err) {
       console.error("Error inserting outsourced part:", err);
       return res.status(500).json({ success: false, message: "Server error" });
@@ -542,5 +543,36 @@ router.post("/outsource", (req, res) => {
     res.json({ success: true, message: "Part saved successfully", insertId: result.insertId });
   });
 });
+
+router.get("/get-outsource-part", (req, res) => {
+  const sql = `
+    SELECT 
+      auto_id,
+      id,
+      ticket_number,
+      name,
+      category,
+      sku,
+      price,
+      quantity,
+      source_shop,
+      status,
+      requested_at,
+      received_at,
+      notes,
+      updated_at
+    FROM outsource_stock
+    ORDER BY requested_at DESC
+  `;
+
+  db.query(sql, (err, rows) => {
+    if (err) {
+      console.error("Error fetching outsourced parts:", err);
+      return res.status(500).json({ success: false, message: "Server error" });
+    }
+    res.json({ success: true, data: rows });
+  });
+});
+
 
 module.exports = router;

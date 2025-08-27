@@ -61,6 +61,7 @@ const Activerepair = () => {
   const [inspectors, setInspectors] = useState([]);
   const [loadingInspectors, setLoadingInspectors] = useState(false);
   const [inspectorError, setInspectorError] = useState(null);
+  const [partsSubTab, setPartsSubTab] = useState('stock');
   
   // State variables for tabs and additional data
   const [activeTab, setActiveTab] = useState('overview');
@@ -72,12 +73,11 @@ const Activerepair = () => {
   const [loadingDisassembledParts, setLoadingDisassembledParts] = useState(false);
   const [loadingUsedTools, setLoadingUsedTools] = useState(false);
   const [loadingInspectionRecords, setLoadingInspectionRecords] = useState(false);
-
+  
   // Add new state variables for the outsource modal
-const [showOutsourceModal, setShowOutsourceModal] = useState(false);
+  const [showOutsourceModal, setShowOutsourceModal] = useState(false);
   const [outsourcedParts, setOutsourcedParts] = useState([]);
   const [ticketNumber, setTicketNumber] = useState("");
-
   const [outsourceForm, setOutsourceForm] = useState({
     name: '',
     category: 'Engine Parts',
@@ -85,110 +85,184 @@ const [showOutsourceModal, setShowOutsourceModal] = useState(false);
   });
 
   // Handle form changes
-  const handleOutsourceFormChange = (field, value) => {
-    setOutsourceForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  // Add part to list
-  const handleOutsourceSubmit = () => {
-    const trimmedName = outsourceForm.name.trim();
-    if (!trimmedName) {
-      toast.error("❌ Please enter a valid part name");
+  const handleFinalOutsourceSubmit = async () => {
+    if (outsourcedParts.length === 0) {
+      alert("⚠️ No parts to submit");
       return;
     }
-
-    const newPart = {
-      id: Date.now(), // Unique ID
-      name: trimmedName,
-      category: outsourceForm.category,
-      quantity: outsourceForm.quantity,
-    };
-
-    setOutsourcedParts((prev) => [...prev, newPart]);
-
-    // Show success toast
-    toast.success(`✅ Added: ${newPart.name} ×${newPart.quantity}`, {
-      duration: 2000,
-    });
-
-    // Reset only the name field, keep category & reset quantity
-    setOutsourceForm((prev) => ({
-      ...prev,
-      name: '',
-      quantity: 1, // reset quantity to 1, or keep: prev.quantity
-    }));
-
-    // Refocus name input for fast entry
-    setTimeout(() => {
-      document.getElementById('part-name-input')?.focus();
-    }, 100);
+    const ticketNumber = selectedRepair?.ticketNumber?.trim();
+    if (!ticketNumber) {
+      alert("❌ Ticket number missing from repair");
+      return;
+    }
+    try {
+      const submitPromises = outsourcedParts.map((part) => {
+        // Validate each part has required fields
+        if (!part.name || !part.category || !part.quantity) {
+          throw new Error(`Missing required fields in part: ${JSON.stringify(part)}`);
+        }
+        return fetch("http://localhost:5001/api/active-progress/outsource", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ticket_number: ticketNumber,
+            name: part.name,
+            category: part.category,
+            quantity: part.quantity,
+          }),
+        }).then((res) => {
+          if (!res.ok) {
+            return res.json().then(errData => {
+              throw new Error(errData.message || "Failed to submit part");
+            });
+          }
+          return res.json();
+        });
+      });
+      const results = await Promise.all(submitPromises);
+      const succeeded = results.filter(r => r.success);
+      const failed = results.filter(r => !r.success);
+      if (failed.length === 0) {
+        alert(`✅ Successfully submitted ${succeeded.length} part(s)!`);
+      } else {
+        alert(`✅ ${succeeded.length} saved, ❌ ${failed.length} failed`);
+      }
+      // Reset and close
+      setShowOutsourceModal(false);
+      setOutsourcedParts([]);
+      setOutsourceForm({ name: '', category: 'Engine Parts', quantity: 1 });
+    } catch (err) {
+      console.error("Error submitting outsourced parts:", err);
+      alert(`❌ Error: ${err.message}`);
+    }
   };
 
   // Remove a part from the list
   const removeOutsourcedPart = (id) => {
     setOutsourcedParts((prev) => prev.filter((part) => part.id !== id));
-    toast.success("🗑️ Part removed");
+    alert("🗑️ Part removed");
   };
 
-  // Final submit (e.g., send to backend)
-const handleFinalOutsourceSubmit = async () => {
-  if (outsourcedParts.length === 0) {
-    toast.error("⚠️ No parts to submit");
-    return;
-  }
+  // Add this function to the component (before the return statement)
+  const handleOutsourceFormChange = (field, value) => {
+    setOutsourceForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
 
-  if (!ticketNumber.trim()) {
-    toast.error("⚠️ Please enter a ticket number");
-    return;
-  }
-
-  const trimmedTicketNumber = ticketNumber.trim();
-
-  // Show loading
-  toast.loading("Submitting parts...", { id: "submit-parts" });
-
-  try {
-    // Submit all parts one by one (or use Promise.all)
-    const submitPromises = outsourcedParts.map((part) =>
-      fetch("http://localhost:5001/api/active-progress/outsource", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ticket_number: trimmedTicketNumber,
-          name: part.name,
-          category: part.category,
-          quantity: part.quantity,
-        }),
-      }).then((res) => res.json())
-    );
-
-    const results = await Promise.all(submitPromises);
-
-    const failed = results.filter((r) => !r.success);
-    const succeeded = results.filter((r) => r.success);
-
-    // Update toast
-    if (failed.length === 0) {
-      toast.success(`✅ Successfully submitted ${succeeded.length} part(s)!`, { id: "submit-parts" });
-    } else {
-      toast.error(`✅ ${succeeded.length} saved, ❌ ${failed.length} failed`, { id: "submit-parts" });
+  const handleOutsourceSubmit = () => {
+    if (!outsourceForm.name.trim()) {
+      alert("Please enter a part name");
+      return;
     }
+    
+    const newPart = {
+      id: Date.now(), // Simple unique ID
+      name: outsourceForm.name,
+      category: outsourceForm.category,
+      quantity: outsourceForm.quantity
+    };
+    
+    setOutsourcedParts(prev => [...prev, newPart]);
+    
+    // Reset form but keep category and quantity defaults
+    setOutsourceForm(prev => ({
+      ...prev,
+      name: '',
+      quantity: 1
+    }));
+    
+    // Focus back to the name input
+    setTimeout(() => {
+      const nameInput = document.getElementById('part-name-input');
+      if (nameInput) nameInput.focus();
+    }, 0);
+  };
 
-    console.log("Results:", results);
-
-    // Reset and close
-    setShowOutsourceModal(false);
-    setOutsourcedParts([]);
-    setOutsourceForm({ name: '', category: 'Engine Parts', quantity: 1 });
-    setTicketNumber("");
-  } catch (err) {
-    console.error("Error submitting parts:", err);
-    toast.error("❌ Network error. Could not submit parts.", { id: "submit-parts" });
-  }
-};
-
+  // Reusable component for outsourced parts tab
+  const OutsourcedPartsTabContent = ({ ticketNumber }) => {
+    const [data, setData] = useState([]);
+    const [loading, setLoading] = useState(false);
+    
+    useEffect(() => {
+      if (!ticketNumber) return;
+      setLoading(true);
+      fetch(`http://localhost:5001/api/active-progress/get-outsource-part`)
+        .then(res => res.json())
+        .then(result => {
+          if (result.success) {
+            const filtered = result.data.filter(p => p.ticket_number === ticketNumber);
+            setData(filtered);
+          } else {
+            setData([]);
+          }
+        })
+        .catch(err => {
+          console.error("Error fetching outsourced parts:", err);
+          setData([]);
+        })
+        .finally(() => setLoading(false));
+    }, [ticketNumber]);
+    
+    if (loading) {
+      return (
+        <div className="flex justify-center py-10">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500"></div>
+        </div>
+      );
+    }
+    
+    if (data.length === 0) {
+      return (
+        <div className="text-center py-10 bg-gray-50 rounded-xl">
+          <Package size={32} className="mx-auto mb-2 text-gray-300" />
+          <p className="text-gray-500">No outsourced parts found for this repair.</p>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-xl">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Part Name</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requested At</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source Shop</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {data.map((part) => (
+              <tr key={part.auto_id} className="hover:bg-gray-50">
+                <td className="px-6 py-4 text-sm font-medium">{part.name}</td>
+                <td className="px-6 py-4 text-sm text-gray-500">{part.category}</td>
+                <td className="px-6 py-4 text-sm">{part.quantity}</td>
+                <td className="px-6 py-4 text-sm">
+                  <span className={`px-2 py-1 rounded-full text-xs ${
+                    part.status === 'received' ? 'bg-green-100 text-green-800' :
+                    part.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {part.status}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-500">
+                  {new Date(part.requested_at).toLocaleDateString()}
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-600">{part.source_shop || 'N/A'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   // Map ticket data to repair format
   const mapTicketToRepair = (ticket) => {
@@ -721,11 +795,13 @@ const handleFinalOutsourceSubmit = async () => {
           </div>
         </div>
       )}
+
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Active Repairs</h1>
         <p className="text-gray-500 mt-1">Track ongoing vehicle repairs and maintenance</p>
       </div>
+
       {/* Search & Filter */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="flex-1 relative">
@@ -752,6 +828,7 @@ const handleFinalOutsourceSubmit = async () => {
           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
         </div>
       </div>
+
       {/* Repair List */}
       <div className="space-y-4">
         {loading ? (
@@ -833,6 +910,7 @@ const handleFinalOutsourceSubmit = async () => {
           </div>
         )}
       </div>
+
       {/* Repair Details Modal */}
       {selectedRepair && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4 py-8">
@@ -863,30 +941,31 @@ const handleFinalOutsourceSubmit = async () => {
               </div>
               
               {/* Tab Navigation */}
-             <div className="flex mt-6 overflow-x-auto">
-  {[
-    { id: 'overview', label: 'Overview', icon: SquareStack },
-    { id: 'progressLogs', label: 'Progress Logs', icon: ClipboardCheck },
-    { id: 'disassembledParts', label: 'Disassembled Parts', icon: Scissors },
-    { id: 'usedTools', label: 'Used Tools', icon: Wrench },
-    { id: 'orderedParts', label: 'Ordered Parts', icon: PackagePlus },
-    { id: 'inspection', label: 'Inspection', icon: FileCheck }
-  ].map(tab => (
-    <button
-      key={tab.id}
-      className={`flex items-center gap-2 px-4 py-2 font-medium text-sm transition-colors whitespace-nowrap ${
-        activeTab === tab.id 
-          ? 'text-white bg-blue-500/30 rounded-lg' 
-          : 'text-blue-100 hover:text-white hover:bg-blue-500/20 rounded-lg'
-      }`}
-      onClick={() => setActiveTab(tab.id)}
-    >
-      <tab.icon size={16} />
-      {tab.label}
-    </button>
-  ))}
-</div>
+              <div className="flex mt-6 overflow-x-auto">
+                {[
+                  { id: 'overview', label: 'Overview', icon: SquareStack },
+                  { id: 'progressLogs', label: 'Progress Logs', icon: ClipboardCheck },
+                  { id: 'disassembledParts', label: 'Disassembled Parts', icon: Scissors },
+                  { id: 'usedTools', label: 'Used Tools', icon: Wrench },
+                  { id: 'orderedParts', label: 'Ordered Parts', icon: PackagePlus },
+                  { id: 'inspection', label: 'Inspection', icon: FileCheck }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    className={`flex items-center gap-2 px-4 py-2 font-medium text-sm transition-colors whitespace-nowrap ${
+                      activeTab === tab.id 
+                        ? 'text-white bg-blue-500/30 rounded-lg' 
+                        : 'text-blue-100 hover:text-white hover:bg-blue-500/20 rounded-lg'
+                    }`}
+                    onClick={() => setActiveTab(tab.id)}
+                  >
+                    <tab.icon size={16} />
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
+            
             <div className="p-6 overflow-y-auto flex-1">
               {activeTab === 'overview' && (
                 <>
@@ -943,7 +1022,7 @@ const handleFinalOutsourceSubmit = async () => {
                   </div>
                 </>
               )}
-
+              
               {activeTab === 'progressLogs' && (
                 <div className="space-y-6">
                   <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -1006,7 +1085,7 @@ const handleFinalOutsourceSubmit = async () => {
                   )}
                 </div>
               )}
-
+              
               {activeTab === 'disassembledParts' && (
                 <div className="space-y-6">
                   <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -1075,7 +1154,7 @@ const handleFinalOutsourceSubmit = async () => {
                   )}
                 </div>
               )}
-
+              
               {activeTab === 'usedTools' && (
                 <div className="space-y-6">
                   <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -1143,7 +1222,7 @@ const handleFinalOutsourceSubmit = async () => {
                   )}
                 </div>
               )}
-
+              
               {activeTab === 'orderedParts' && (
                 <div className="space-y-6">
                   <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -1151,57 +1230,101 @@ const handleFinalOutsourceSubmit = async () => {
                     Ordered Parts
                   </h3>
                   
-                  {selectedRepair.parts?.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-xl overflow-hidden">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part Name</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {selectedRepair.parts.map((part, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{part.name}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.sku}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.category}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${(parseFloat(part.price) || 0).toFixed(2)}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{part.quantity}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                <span className={`px-2 py-1 rounded-full text-xs ${
-                                  part.status === 'delivered' ? 'bg-green-100 text-green-800' :
-                                  part.status === 'ordered' ? 'bg-blue-100 text-blue-800' :
-                                  part.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {part.status || 'ordered'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="text-center py-10 bg-gray-50 rounded-xl">
-                      <PackagePlus size={48} className="mx-auto text-gray-300 mb-3" />
-                      <p className="text-gray-500">No parts ordered for this repair</p>
-                      <button 
-                        onClick={() => setShowPartsModal(true)}
-                        className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 mx-auto"
-                      >
-                        <PackagePlus size={16} /> Order Parts
-                      </button>
-                    </div>
+                  {/* Internal Tabs */}
+                  <div className="flex space-x-1 border-b">
+                    <button
+                      onClick={() => setPartsSubTab('stock')}
+                      className={`py-2 px-4 font-medium text-sm border-b-2 transition-colors ${
+                        partsSubTab === 'stock'
+                          ? 'border-green-600 text-green-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Stock Parts
+                    </button>
+                    <button
+                      onClick={() => setPartsSubTab('outsourced')}
+                      className={`py-2 px-4 font-medium text-sm border-b-2 transition-colors ${
+                        partsSubTab === 'outsourced'
+                          ? 'border-purple-600 text-purple-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Outsource History
+                    </button>
+                  </div>
+                  
+                  {/* Stock Parts Tab */}
+                  {partsSubTab === 'stock' && (
+                    <>
+                      {selectedRepair.parts?.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-xl overflow-hidden">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {selectedRepair.parts.map((part, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50">
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{part.name}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.sku}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.category}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${(parseFloat(part.price) || 0).toFixed(2)}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{part.quantity}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                    <span className={`px-2 py-1 rounded-full text-xs ${
+                                      part.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                                      part.status === 'ordered' ? 'bg-blue-100 text-blue-800' :
+                                      part.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {part.status || 'ordered'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-10 bg-gray-50 rounded-xl">
+                          <PackagePlus size={48} className="mx-auto text-gray-300 mb-3" />
+                          <p className="text-gray-500">No stock parts ordered for this repair</p>
+                          <button 
+                            onClick={() => setShowPartsModal(true)}
+                            className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 mx-auto"
+                          >
+                            <PackagePlus size={16} /> Order Stock Part
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Outsource History Tab */}
+                  {partsSubTab === 'outsourced' && (
+                    <>
+                      <OutsourcedPartsTabContent ticketNumber={selectedRepair?.ticketNumber} />
+                      <div className="mt-4 flex justify-end">
+                        <button
+                          onClick={() => setShowOutsourceModal(true)}
+                          className="px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center gap-2 text-sm"
+                        >
+                          <Plus size={16} /> Outsource New Part
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
               )}
-
+              
               {activeTab === 'inspection' && (
                 <div className="space-y-6">
                   <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -1286,12 +1409,11 @@ const handleFinalOutsourceSubmit = async () => {
                     <div className="text-center py-10 bg-gray-50 rounded-xl">
                       <FileCheck size={48} className="mx-auto text-gray-300 mb-3" />
                       <p className="text-gray-500">No inspection records available for this repair</p>
-                      
                     </div>
                   )}
                 </div>
               )}
-
+              
               <div className="mt-8 flex flex-wrap gap-3 justify-end">
                 <button onClick={() => setShowPartsModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
                   <PackagePlus size={20} /> Order Parts
@@ -1322,6 +1444,7 @@ const handleFinalOutsourceSubmit = async () => {
           </div>
         </div>
       )}
+
       {/* Inspector Modal */}
       {showInspectorModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
@@ -1432,6 +1555,7 @@ const handleFinalOutsourceSubmit = async () => {
           </div>
         </div>
       )}
+
       {/* Confirmation Modal */}
       {showConfirmInspectorModal && selectedInspector && (
         <div className="fixed inset-0 z-50 text-black flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -1461,6 +1585,7 @@ const handleFinalOutsourceSubmit = async () => {
           </div>
         </div>
       )}
+
       {/* Completion Time Modal */}
       {showCompletionTimeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center text-black bg-black/50 backdrop-blur-sm">
@@ -1493,92 +1618,93 @@ const handleFinalOutsourceSubmit = async () => {
           </div>
         </div>
       )}
+
       {/* Parts Modal */}
       {showPartsModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center text-black bg-black/50 backdrop-blur-sm">
-    <div className="bg-white rounded-2xl p-6 w-full max-w-3xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold">Order Parts</h3>
-        <button onClick={() => setShowPartsModal(false)} className="p-1 hover:bg-gray-200 rounded-full">
-          <X size={20} />
-        </button>
-      </div>
-      <div className="overflow-y-auto flex-1">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left py-2">Select</th>
-              <th className="text-left py-2">Name</th>
-              <th className="text-left py-2">SKU</th>
-              <th className="text-left py-2">Category</th>
-              <th className="text-left py-2">Price</th>
-              <th className="text-left py-2">In Stock</th>
-              <th className="text-left py-2">Quantity</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredParts.map(part => (
-              <tr key={part.id} className="border-b hover:bg-gray-50">
-                <td className="py-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedParts.includes(part.id)}
-                    onChange={e => handleSelectPart(part.id, e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                </td>
-                <td className="py-2 text-gray-800">{part.name}</td>
-                <td className="py-2 text-gray-600">{part.sku}</td>
-                <td className="py-2 text-gray-600">{part.category}</td>
-                <td className="py-2 text-gray-800">
-                  ${(parseFloat(part.price) || 0).toFixed(2)}
-                </td>
-                <td className="py-2 text-gray-600">{part.inStock}</td>
-                <td className="py-2">
-                  {selectedParts.includes(part.id) && (
-                    <input
-                      type="number"
-                      min="1"
-                      max={part.inStock}
-                      value={quantities[part.id] || 1}
-                      onChange={e => handleQuantityChange(part.id, parseInt(e.target.value))}
-                      className="w-20 px-2 py-1 border rounded"
-                    />
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-4 flex justify-between items-center">
-        <button
-          onClick={() => setShowOutsourceModal(true)}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center gap-2"
-        >
-          <Plus size={16} /> Outsource Part
-        </button>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowPartsModal(false)}
-            className="px-4 py-2 bg-gray-500 text-white rounded-lg"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleOrderParts}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
-          >
-            Order Selected
-          </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center text-black bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-3xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold">Order Parts</h3>
+              <button onClick={() => setShowPartsModal(false)} className="p-1 hover:bg-gray-200 rounded-full">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2">Select</th>
+                    <th className="text-left py-2">Name</th>
+                    <th className="text-left py-2">SKU</th>
+                    <th className="text-left py-2">Category</th>
+                    <th className="text-left py-2">Price</th>
+                    <th className="text-left py-2">In Stock</th>
+                    <th className="text-left py-2">Quantity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredParts.map(part => (
+                    <tr key={part.id} className="border-b hover:bg-gray-50">
+                      <td className="py-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedParts.includes(part.id)}
+                          onChange={e => handleSelectPart(part.id, e.target.checked)}
+                          className="w-4 h-4"
+                        />
+                      </td>
+                      <td className="py-2 text-gray-800">{part.name}</td>
+                      <td className="py-2 text-gray-600">{part.sku}</td>
+                      <td className="py-2 text-gray-600">{part.category}</td>
+                      <td className="py-2 text-gray-800">
+                        ${(parseFloat(part.price) || 0).toFixed(2)}
+                      </td>
+                      <td className="py-2 text-gray-600">{part.inStock}</td>
+                      <td className="py-2">
+                        {selectedParts.includes(part.id) && (
+                          <input
+                            type="number"
+                            min="1"
+                            max={part.inStock}
+                            value={quantities[part.id] || 1}
+                            onChange={e => handleQuantityChange(part.id, parseInt(e.target.value))}
+                            className="w-20 px-2 py-1 border rounded"
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 flex justify-between items-center">
+              <button
+                onClick={() => setShowOutsourceModal(true)}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center gap-2"
+              >
+                <Plus size={16} /> Outsource Part
+              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowPartsModal(false)}
+                  className="px-4 py-2 bg-gray-500 text-white rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleOrderParts}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
+                >
+                  Order Selected
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
 
-// Add the Outsource modal
- {showOutsourceModal && (
+      {/* Outsource Parts Modal */}
+      {showOutsourceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center text-black bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
             {/* Header */}
@@ -1589,15 +1715,17 @@ const handleFinalOutsourceSubmit = async () => {
                   setShowOutsourceModal(false);
                   setOutsourcedParts([]);
                   setOutsourceForm({ name: '', category: 'Engine Parts', quantity: 1 });
-                  setTicketNumber('');
                 }}
                 className="p-1 hover:bg-gray-200 rounded-full"
               >
                 <X size={20} />
               </button>
             </div>
-
             <div className="flex-1 overflow-hidden flex flex-col">
+              {/* Auto-Display Ticket Number */}
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <strong>Ticket Number:</strong> {selectedRepair?.ticketNumber || 'N/A'}
+              </div>
               {/* Add New Part Form */}
               <div className="bg-gray-50 p-4 rounded-lg mb-4">
                 <h4 className="font-medium mb-3">Add New Part</h4>
@@ -1668,21 +1796,6 @@ const handleFinalOutsourceSubmit = async () => {
                   <Plus size={16} /> Add to List
                 </button>
               </div>
-
-              {/* Ticket Number Input */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ticket Number <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={ticketNumber}
-                  onChange={(e) => setTicketNumber(e.target.value)}
-                  placeholder="Enter ticket number"
-                  className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                />
-              </div>
-
               {/* Parts List */}
               <div className="flex-1 overflow-hidden flex flex-col">
                 <h4 className="font-medium mb-3">
@@ -1725,7 +1838,6 @@ const handleFinalOutsourceSubmit = async () => {
                 )}
               </div>
             </div>
-
             {/* Footer Buttons */}
             <div className="mt-6 flex gap-3 justify-end">
               <button
@@ -1733,7 +1845,6 @@ const handleFinalOutsourceSubmit = async () => {
                   setShowOutsourceModal(false);
                   setOutsourcedParts([]);
                   setOutsourceForm({ name: '', category: 'Engine Parts', quantity: 1 });
-                  setTicketNumber('');
                 }}
                 className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
               >
@@ -1741,11 +1852,11 @@ const handleFinalOutsourceSubmit = async () => {
               </button>
               <button
                 onClick={handleFinalOutsourceSubmit}
-                disabled={outsourcedParts.length === 0 || !ticketNumber.trim()}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                  outsourcedParts.length === 0 || !ticketNumber.trim()
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                disabled={outsourcedParts.length === 0}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 ${
+                  outsourcedParts.length === 0
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-80'
+                    : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow active:scale-95'
                 }`}
               >
                 <PackagePlus size={16} /> Submit All Parts
@@ -1754,6 +1865,7 @@ const handleFinalOutsourceSubmit = async () => {
           </div>
         </div>
       )}
+
       {/* Notification Modal */}
       {showNotificationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -1794,8 +1906,213 @@ const handleFinalOutsourceSubmit = async () => {
           </div>
         </div>
       )}
+
       {/* Bill Modal */}
-    
+      {showBillModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold">Calculate Bill</h3>
+              <button onClick={() => setShowBillModal(false)} className="p-1 hover:bg-gray-200 rounded-full">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="overflow-y-auto flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                  <h4 className="font-medium mb-3">Labor Details</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Hours</label>
+                      <input
+                        type="number"
+                        min="0.5"
+                        step="0.5"
+                        value={laborHours}
+                        onChange={(e) => setLaborHours(parseFloat(e.target.value) || 0)}
+                        className="w-full p-2 border border-gray-300 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Rate ($/hour)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={laborRate}
+                        onChange={(e) => setLaborRate(parseFloat(e.target.value) || 0)}
+                        className="w-full p-2 border border-gray-300 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Description</label>
+                      <textarea
+                        value={laborDescription}
+                        onChange={(e) => setLaborDescription(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-lg"
+                        rows={2}
+                        placeholder="Labor description..."
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h4 className="font-medium mb-3">Bill Summary</h4>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Parts Total:</span>
+                        <span>${billDetails.parts.reduce((sum, part) => sum + (part.price * part.quantity), 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Labor Total:</span>
+                        <span>${billDetails.labor.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Tools Total:</span>
+                        <span>${billDetails.tools.reduce((sum, tool) => sum + tool.fee, 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-medium">
+                        <span>Subtotal:</span>
+                        <span>${billDetails.subtotal.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-green-600">
+                        <span>Discount (10%):</span>
+                        <span>-${billDetails.discount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Tax (8.5%):</span>
+                        <span>${billDetails.tax.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                        <span>Total:</span>
+                        <span>${billDetails.total.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-medium">Parts</h4>
+                  <button
+                    onClick={addNewPart}
+                    className="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-lg hover:bg-blue-200"
+                  >
+                    Add Part
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {parts.map((part, index) => (
+                    <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-5">
+                        <input
+                          type="text"
+                          value={part.name}
+                          onChange={(e) => updatePart(index, 'name', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                          placeholder="Part name"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={part.price}
+                          onChange={(e) => updatePart(index, 'price', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                          placeholder="Price"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <input
+                          type="number"
+                          min="1"
+                          value={part.quantity}
+                          onChange={(e) => updatePart(index, 'quantity', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                        />
+                      </div>
+                      <div className="col-span-2 flex justify-center">
+                        <button
+                          onClick={() => setParts(parts.filter((_, i) => i !== index))}
+                          className="p-1 text-red-600 hover:bg-red-50 rounded-full"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-medium">Tools</h4>
+                  <button
+                    onClick={addNewTool}
+                    className="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-lg hover:bg-blue-200"
+                  >
+                    Add Tool
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {tools.map((tool, index) => (
+                    <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-9">
+                        <input
+                          type="text"
+                          value={tool.name}
+                          onChange={(e) => updateTool(index, 'name', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                          placeholder="Tool name"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={tool.fee}
+                          onChange={(e) => updateTool(index, 'fee', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                          placeholder="Fee"
+                        />
+                      </div>
+                      <div className="col-span-1 flex justify-center">
+                        <button
+                          onClick={() => setTools(tools.filter((_, i) => i !== index))}
+                          className="p-1 text-red-600 hover:bg-red-50 rounded-full"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-6 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowBillModal(false)}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={generateInvoice}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center gap-2"
+              >
+                <DollarSign size={16} /> Generate Invoice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
