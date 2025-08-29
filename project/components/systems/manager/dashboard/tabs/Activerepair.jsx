@@ -29,6 +29,8 @@ import {
   FileCheck
 } from 'lucide-react';
 
+import OutsourceMechanicModal from './pop up/OutsourceMechanicModal';
+
 const Activerepair = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -73,6 +75,7 @@ const Activerepair = () => {
   const [loadingDisassembledParts, setLoadingDisassembledParts] = useState(false);
   const [loadingUsedTools, setLoadingUsedTools] = useState(false);
   const [loadingInspectionRecords, setLoadingInspectionRecords] = useState(false);
+  const [showOutsourceMechanicModal, setShowOutsourceMechanicModal] = useState(false);
   
   // Add new state variables for the outsource modal
   const [showOutsourceModal, setShowOutsourceModal] = useState(false);
@@ -138,6 +141,30 @@ const Activerepair = () => {
       alert(`❌ Error: ${err.message}`);
     }
   };
+
+const handleOutsourceMechanicSuccess = (data) => {
+  alert(`✅ Mechanic outsourced successfully! ID: ${data.id}`);
+  
+  // Refresh repair data to get updated outsource mechanic info
+  if (selectedRepair) {
+    fetchRepairData(selectedRepair.id).then(updatedRepair => {
+      setSelectedRepair(prev => ({
+        ...prev,
+        ...updatedRepair,
+        tools: prev.tools // Preserve tools state
+      }));
+      setRepairs(prev =>
+        prev.map(repair =>
+          repair.id === selectedRepair.id ? updatedRepair : repair
+        )
+      );
+    }).catch(err => {
+      console.error('Error refreshing repair data:', err);
+    });
+  }
+};
+
+
 
   // Remove a part from the list
   const removeOutsourcedPart = (id) => {
@@ -226,7 +253,7 @@ const Activerepair = () => {
     
     return (
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-xl">
+        <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-xl text-black">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Part Name</th>
@@ -266,44 +293,46 @@ const Activerepair = () => {
 
   // Map ticket data to repair format
   const mapTicketToRepair = (ticket) => {
-    const customerName = ticket.customer_name || 'Unknown Customer';
-    const email = ticket.email || 'N/A';
-    const phone = ticket.phone || 'N/A';
-    const vehicle = ticket.vehicle_info || 'Unknown Vehicle';
-    const licensePlate = ticket.license_plate || 'N/A';
-    const issueSeverity = ticket.urgency_level
-      ? ticket.urgency_level === 'Critical' ? 'Critical'
-      : ticket.urgency_level === 'High' ? 'Critical'
-      : ticket.urgency_level === 'Medium' ? 'Moderate'
-      : 'Minor'
-      : 'Moderate';
-    
-    return {
-      id: ticket.id,
-      ticketNumber: ticket.ticket_number || `TKT-${ticket.id}`,
-      customerName,
-      licensePlate,
-      vehicle,
-      status: ticket.status || 'In Progress',
-      carStatus: issueSeverity,
-      startDate: ticket.created_at
-        ? new Date(ticket.created_at).toISOString().split('T')[0]
-        : null,
-      estimatedCompletion: ticket.estimated_completion_date
-        ? new Date(ticket.estimated_completion_date).toISOString().split('T')[0]
-        : null,
-      assignedMechanic: ticket.mechanic_assign || 'Unassigned',
-      assignedInspector: ticket.inspector_assign || null,
-      serviceType: ticket.title || ticket.type || 'General Repair',
-      contact: phone,
-      email,
-      location: 'Main Bay',
-      progress: 0, // Default progress if not provided
-      notes: ticket.description || 'No additional notes provided for this repair.',
-      parts: ticket.ordered_parts || [], // Use ordered_parts from API
-      tools: []
-    };
+  const customerName = ticket.customer_name || 'Unknown Customer';
+  const email = ticket.email || 'N/A';
+  const phone = ticket.phone || 'N/A';
+  const vehicle = ticket.vehicle_info || 'Unknown Vehicle';
+  const licensePlate = ticket.license_plate || 'N/A';
+  const issueSeverity = ticket.urgency_level
+    ? ticket.urgency_level === 'Critical' ? 'Critical'
+    : ticket.urgency_level === 'High' ? 'Critical'
+    : ticket.urgency_level === 'Medium' ? 'Moderate'
+    : 'Minor'
+    : 'Moderate';
+
+  return {
+    id: ticket.id,
+    ticketNumber: ticket.ticket_number || `TKT-${ticket.id}`,
+    customerName,
+    licensePlate,
+    vehicle,
+    status: ticket.status || 'In Progress',
+    carStatus: issueSeverity,
+    startDate: ticket.created_at
+      ? new Date(ticket.created_at).toISOString().split('T')[0]
+      : null,
+    estimatedCompletion: ticket.estimated_completion_date
+      ? new Date(ticket.estimated_completion_date).toISOString().split('T')[0]
+      : null,
+    assignedMechanic: ticket.mechanic_assign || 'Unassigned',
+    assignedInspector: ticket.inspector_assign || null,
+    serviceType: ticket.title || ticket.type || 'General Repair',
+    contact: phone,
+    email,
+    location: 'Main Bay',
+    progress: 0,
+    notes: ticket.description || 'No additional notes provided for this repair.',
+    parts: ticket.ordered_parts || [],
+    tools: [],
+    // Add this line to include outsource_mechanic
+    outsource_mechanic: ticket.outsource_mechanic || null,
   };
+};
 
   // Fetch single repair data
   const fetchRepairData = async (repairId) => {
@@ -980,6 +1009,9 @@ const Activerepair = () => {
                         <p><strong>Type:</strong> {selectedRepair.serviceType}</p>
                         <p><strong>Location:</strong> {selectedRepair.location}</p>
                         <p><strong>Mechanic:</strong> {selectedRepair.assignedMechanic}</p>
+                        {selectedRepair.outsource_mechanic && (
+                          <p><strong>Outsource Mechanic:</strong> {selectedRepair.outsource_mechanic}</p>
+                        )}
                         {selectedRepair.assignedInspector && (
                           <p><strong>Inspector:</strong> {selectedRepair.assignedInspector}</p>
                         )}
@@ -1327,7 +1359,7 @@ const Activerepair = () => {
               
               {activeTab === 'inspection' && (
                 <div className="space-y-6">
-                  <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <h3 className="text-xl font-bold text-black flex items-center gap-2">
                     <FileCheck size={24} className="text-indigo-600" />
                     Inspection Records
                   </h3>
@@ -1390,14 +1422,14 @@ const Activerepair = () => {
                           </div>
                           
                           <div className="mb-4">
-                            <p className="text-sm font-medium text-gray-700 mb-1">General Condition</p>
+                            <p className="text-sm font-medium text-black mb-1">General Condition</p>
                             <div className="text-sm bg-white p-3 rounded-lg border border-gray-200">
                               {record.general_condition}
                             </div>
                           </div>
                           
                           <div>
-                            <p className="text-sm font-medium text-gray-700 mb-1">Notes</p>
+                            <p className="text-sm font-medium text-black mb-1">Notes</p>
                             <div className="text-sm bg-gray-50 p-3 rounded-lg border border-gray-200">
                               {record.notes || 'No additional notes provided.'}
                             </div>
@@ -1433,8 +1465,11 @@ const Activerepair = () => {
                 <button onClick={() => setShowCompletionTimeModal(true)} className="flex items-center gap-2 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors">
                   <Clock size={20} /> Set Completion Time
                 </button>
-                <button onClick={() => setShowBillModal(true)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-lg hover:opacity-90 shadow transition-all">
-                  <DollarSign size={20} /> Calculate Bill
+               <button 
+                  onClick={() => setShowOutsourceMechanicModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  <UserCheck size={20} /> Outsource Mechanic
                 </button>
                 <button onClick={handleFinishRepair} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg hover:opacity-90 shadow transition-all">
                   <CheckCircle size={20} /> Finish Repair
@@ -1908,211 +1943,12 @@ const Activerepair = () => {
       )}
 
       {/* Bill Modal */}
-      {showBillModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold">Calculate Bill</h3>
-              <button onClick={() => setShowBillModal(false)} className="p-1 hover:bg-gray-200 rounded-full">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <h4 className="font-medium mb-3">Labor Details</h4>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Hours</label>
-                      <input
-                        type="number"
-                        min="0.5"
-                        step="0.5"
-                        value={laborHours}
-                        onChange={(e) => setLaborHours(parseFloat(e.target.value) || 0)}
-                        className="w-full p-2 border border-gray-300 rounded-lg"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Rate ($/hour)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={laborRate}
-                        onChange={(e) => setLaborRate(parseFloat(e.target.value) || 0)}
-                        className="w-full p-2 border border-gray-300 rounded-lg"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-600 mb-1">Description</label>
-                      <textarea
-                        value={laborDescription}
-                        onChange={(e) => setLaborDescription(e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded-lg"
-                        rows={2}
-                        placeholder="Labor description..."
-                      />
-                    </div>
-                  </div>
-                </div>
-                
-                <div>
-                  <h4 className="font-medium mb-3">Bill Summary</h4>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>Parts Total:</span>
-                        <span>${billDetails.parts.reduce((sum, part) => sum + (part.price * part.quantity), 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Labor Total:</span>
-                        <span>${billDetails.labor.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Tools Total:</span>
-                        <span>${billDetails.tools.reduce((sum, tool) => sum + tool.fee, 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between font-medium">
-                        <span>Subtotal:</span>
-                        <span>${billDetails.subtotal.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-green-600">
-                        <span>Discount (10%):</span>
-                        <span>-${billDetails.discount.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Tax (8.5%):</span>
-                        <span>${billDetails.tax.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between font-bold text-lg pt-2 border-t">
-                        <span>Total:</span>
-                        <span>${billDetails.total.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="mb-6">
-                <div className="flex justify-between items-center mb-3">
-                  <h4 className="font-medium">Parts</h4>
-                  <button
-                    onClick={addNewPart}
-                    className="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-lg hover:bg-blue-200"
-                  >
-                    Add Part
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {parts.map((part, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-5">
-                        <input
-                          type="text"
-                          value={part.name}
-                          onChange={(e) => updatePart(index, 'name', e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-lg text-sm"
-                          placeholder="Part name"
-                        />
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={part.price}
-                          onChange={(e) => updatePart(index, 'price', e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-lg text-sm"
-                          placeholder="Price"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <input
-                          type="number"
-                          min="1"
-                          value={part.quantity}
-                          onChange={(e) => updatePart(index, 'quantity', e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-lg text-sm"
-                        />
-                      </div>
-                      <div className="col-span-2 flex justify-center">
-                        <button
-                          onClick={() => setParts(parts.filter((_, i) => i !== index))}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded-full"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <div>
-                <div className="flex justify-between items-center mb-3">
-                  <h4 className="font-medium">Tools</h4>
-                  <button
-                    onClick={addNewTool}
-                    className="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-lg hover:bg-blue-200"
-                  >
-                    Add Tool
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {tools.map((tool, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-9">
-                        <input
-                          type="text"
-                          value={tool.name}
-                          onChange={(e) => updateTool(index, 'name', e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-lg text-sm"
-                          placeholder="Tool name"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={tool.fee}
-                          onChange={(e) => updateTool(index, 'fee', e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-lg text-sm"
-                          placeholder="Fee"
-                        />
-                      </div>
-                      <div className="col-span-1 flex justify-center">
-                        <button
-                          onClick={() => setTools(tools.filter((_, i) => i !== index))}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded-full"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            
-            <div className="mt-6 flex gap-3 justify-end">
-              <button
-                onClick={() => setShowBillModal(false)}
-                className="px-4 py-2 bg-gray-500 text-white rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={generateInvoice}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center gap-2"
-              >
-                <DollarSign size={16} /> Generate Invoice
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+    <OutsourceMechanicModal
+  isOpen={showOutsourceMechanicModal}
+  onClose={() => setShowOutsourceMechanicModal(false)}
+  ticketNumber={selectedRepair?.ticketNumber}
+  onSuccess={handleOutsourceMechanicSuccess}
+/>
     </div>
   );
 };

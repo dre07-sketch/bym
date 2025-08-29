@@ -29,6 +29,7 @@ router.get('/in-progress', (req, res) => {
       st.urgency_level,
       st.status,
       st.appointment_id,
+      st.outsource_mechanic,
       st.completion_date,
       st.estimated_completion_date,
       st.created_at,
@@ -89,6 +90,7 @@ router.get('/in-progress', (req, res) => {
           vehicle_info: row.vehicle_info,
           title: row.title,
           mechanic_assign: row.mechanic_assign,
+          outsource_mechanic: row.outsource_mechanic,
           inspector_assign: row.inspector_assign,
           description: row.description,
           priority: row.priority,
@@ -518,31 +520,57 @@ router.get("/inspection/:ticket_number", (req, res) => {
   });
 });
 
-router.post("/outsource", (req, res) => {
-  const { ticket_number, name, category, quantity } = req.body;
-
-  if (!ticket_number) {
-    return res.status(400).json({
-      success: false,
-      message: "Ticket number is required",
+// Helper function for retrying on deadlocks
+function executeWithRetry(query, params, retries = 3) {
+  return new Promise((resolve, reject) => {
+    db.query(query, params, (err, result) => {
+      if (err && err.code === "ER_LOCK_DEADLOCK" && retries > 0) {
+        console.warn("Deadlock detected, retrying...");
+        return resolve(executeWithRetry(query, params, retries - 1));
+      }
+      if (err) return reject(err);
+      resolve(result);
     });
-  }
+  });
+}
 
-  const sql = `
-    INSERT INTO outsource_stock 
-      (ticket_number, name, category, quantity, status, requested_at) 
-    VALUES (?, ?, ?, ?, 'awaiting_request', NOW())
-  `;
 
-  db.query(sql, [ticket_number, name || null, category || null, quantity || 0], (err, result) => {
-    if (err) {
-      console.error("Error inserting outsourced part:", err);
-      return res.status(500).json({ success: false, message: "Server error" });
+router.post("/outsource", async (req, res) => {
+  try {
+    const { ticket_number, name, category, quantity } = req.body;
+
+    if (!ticket_number) {
+      return res.status(400).json({
+        success: false,
+        message: "Ticket number is required",
+      });
     }
 
-    res.json({ success: true, message: "Part saved successfully", insertId: result.insertId });
-  });
+    const sql = `
+      INSERT INTO outsource_stock 
+        (ticket_number, name, category, quantity, status, requested_at) 
+      VALUES (?, ?, ?, ?, 'awaiting_request', NOW())
+    `;
+
+    const result = await executeWithRetry(sql, [
+      ticket_number,
+      name || null,
+      category || null,
+      quantity || 0,
+    ]);
+
+    res.json({
+      success: true,
+      message: "Part saved successfully",
+      insertId: result.insertId,
+    });
+  } catch (err) {
+    console.error("Error inserting outsourced part:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 });
+
+
 
 router.get("/get-outsource-part", (req, res) => {
   const sql = `
@@ -573,6 +601,106 @@ router.get("/get-outsource-part", (req, res) => {
     res.json({ success: true, data: rows });
   });
 });
+
+
+// POST outsource mechanic
+router.post("/outsource-mechanic", (req, res) => {
+  const { ticket_number, mechanic_name, phone, payment, payment_method, work_done, notes } = req.body;
+
+  // ✅ Validation
+  if (!ticket_number || !mechanic_name || payment === undefined || !payment_method || !work_done) {
+    return res.status(400).json({
+      success: false,
+      message: "ticket_number, mechanic_name, payment, payment_method, and work_done are required",
+    });
+  }
+
+  console.log("Incoming outsource mechanic:", req.body);
+
+  // 1️⃣ Insert into outsource_mechanics
+  const insertQuery = `
+    INSERT INTO outsource_mechanics 
+      (ticket_number, mechanic_name, phone, payment, payment_method, work_done, notes) 
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  db.query(
+    insertQuery,
+    [ticket_number, mechanic_name, phone || null, payment, payment_method, work_done, notes || null],
+    (err, result) => {
+      if (err) {
+        console.error("Error inserting outsource mechanic:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Database error inserting outsource mechanic",
+          error: err.message,
+        });
+      }
+
+      // 2️⃣ Update service_tickets (try ticket_number first)
+      const updateByNumber = `
+        UPDATE service_tickets 
+        SET outsource_mechanic = ? 
+        WHERE ticket_number = ?
+      `;
+
+      db.query(updateByNumber, [mechanic_name, ticket_number], (updateErr, updateResult) => {
+        if (updateErr) {
+          console.error("Error updating service ticket:", updateErr);
+          return res.status(500).json({
+            success: false,
+            message: "Database error updating service ticket",
+            error: updateErr.message,
+          });
+        }
+
+        if (updateResult.affectedRows === 0) {
+          // ⚡ fallback: maybe it's stored as ID not ticket_number
+          const updateById = `
+            UPDATE service_tickets 
+            SET outsource_mechanic = ? 
+            WHERE id = ?
+          `;
+
+          db.query(updateById, [mechanic_name, ticket_number], (idErr, idResult) => {
+            if (idErr) {
+              console.error("Error updating service ticket by ID:", idErr);
+              return res.status(500).json({
+                success: false,
+                message: "Database error updating service ticket by ID",
+                error: idErr.message,
+              });
+            }
+
+            if (idResult.affectedRows === 0) {
+              return res.status(404).json({
+                success: false,
+                message: `No service ticket found with ticket_number or id = ${ticket_number}`,
+              });
+            }
+
+            // ✅ Success (updated by ID)
+            return res.status(201).json({
+              success: true,
+              message: "Outsource mechanic added and service ticket updated (by ID)",
+              outsource_mechanic_id: result.insertId,
+              data: { ticket_number, mechanic_name, phone, payment, payment_method, work_done, notes: notes || null },
+            });
+          });
+        } else {
+          // ✅ Success (updated by ticket_number)
+          res.status(201).json({
+            success: true,
+            message: "Outsource mechanic added and service ticket updated (by ticket_number)",
+            outsource_mechanic_id: result.insertId,
+            data: { ticket_number, mechanic_name, phone, payment, payment_method, work_done, notes: notes || null },
+          });
+        }
+      });
+    }
+  );
+});
+
 
 
 module.exports = router;

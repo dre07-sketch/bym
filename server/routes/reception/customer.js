@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db/connection');
+const db = require('../../db/connection');
 const multer = require('multer');
 
 const BASE_URL = 'http://localhost:5001';

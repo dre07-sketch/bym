@@ -175,10 +175,7 @@ const EmployeeCheckInModal: React.FC<EmployeeCheckInModalProps> = ({ isOpen, onC
       if (!response.ok) throw new Error(`Failed: ${response.statusText}`);
       const data = await response.json();
 
-      // --- FIX: Map the backend response fields to the frontend Employee interface ---
-      // The backend returns 'name', we need 'full_name' for the frontend interface.
-      // The backend returns 'image' as the filename, which matches our adjusted getImageUrl.
-      // Status is not provided by this endpoint, so we default it (might be updated on selection or check-in).
+      
       const transformedEmployees: Employee[] = data.map((emp: any) => ({
         id: String(emp.id ?? ''), // Ensure ID is a string
         full_name: emp.name ?? 'Unknown Employee', // Map 'name' to 'full_name'

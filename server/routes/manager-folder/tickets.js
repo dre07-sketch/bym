@@ -175,9 +175,8 @@ router.get('/customers', (req, res) => {
   }
 });
 
-// Get all service tickets
-// Get all service tickets
-// ===================== Service Tickets API =====================
+
+// ===================== All Tickets API =====================
 router.get('/service_tickets', (req, res) => {
   const ticketsQuery = `
     SELECT 
@@ -231,10 +230,7 @@ router.get('/service_tickets', (req, res) => {
   db.query(ticketsQuery, (err, tickets) => {
     if (err) {
       console.error('Error fetching service tickets:', err);
-      return res.status(500).json({ 
-        message: 'Database query error',
-        error: process.env.NODE_ENV === 'development' ? err.message : undefined
-      });
+      return res.status(500).json({ message: 'Database query error' });
     }
 
     if (tickets.length === 0) {
@@ -243,151 +239,179 @@ router.get('/service_tickets', (req, res) => {
 
     const ticketNumbers = tickets.map(t => t.ticket_number);
 
-    // Queries for related data
+    // Existing queries...
     const disassembledQuery = `
-      SELECT 
-        id, 
-        ticket_number, 
-        \`condition\` AS part_condition, 
-        part_name, 
-        status, 
-        notes, 
-        logged_at, 
-        reassembly_verified
+      SELECT id, ticket_number, \`condition\` AS part_condition, part_name, status, notes, logged_at, reassembly_verified
       FROM disassembled_parts
       WHERE ticket_number IN (?)
       ORDER BY logged_at DESC
     `;
 
     const logsQuery = `
-      SELECT 
-        id, 
-        ticket_number, 
-        \`date\` AS log_date, 
-        \`time\` AS log_time, 
-        status, 
-        description, 
-        created_at
+      SELECT id, ticket_number, \`date\` AS log_date, \`time\` AS log_time, status, description, created_at
       FROM progress_logs
       WHERE ticket_number IN (?)
       ORDER BY created_at DESC
     `;
 
     const inspectionsQuery = `
-      SELECT 
-        id,
-        ticket_number,
-        main_issue_resolved,
-        reassembly_verified,
-        general_condition,
-        notes,
-        inspection_date,
-        inspection_status,
-        created_at,
-        updated_at
+      SELECT id, ticket_number, main_issue_resolved, reassembly_verified, general_condition, notes, inspection_date, inspection_status, created_at, updated_at
       FROM inspections
       WHERE ticket_number IN (?)
       ORDER BY created_at DESC
     `;
 
-    // Fetch related data
+    const outsourceMechanicsQuery = `
+      SELECT id, ticket_number, mechanic_name, phone, payment, payment_method, work_done, notes, created_at
+      FROM outsource_mechanics
+      WHERE ticket_number IN (?)
+      ORDER BY created_at DESC
+    `;
+
+    const outsourceStockQuery = `
+      SELECT 
+        auto_id,
+        id,
+        ticket_number,
+        name,
+        category,
+        sku,
+        price,
+        quantity,
+        source_shop,
+        status,
+        requested_at,
+        received_at,
+        notes,
+        updated_at
+      FROM outsource_stock
+      WHERE ticket_number IN (?)
+      ORDER BY requested_at DESC
+    `;
+
+    const orderedPartsQuery = `
+      SELECT id, ticket_number, item_id, name, category, sku, price, quantity, status, ordered_at
+      FROM ordered_parts
+      WHERE ticket_number IN (?)
+      ORDER BY ordered_at DESC
+    `;
+
+    // 🔹 New: Tools
+    const toolsQuery = `
+      SELECT id, tool_id, tool_name, ticket_number, assigned_quantity, assigned_by, status, assigned_at, returned_at, updated_at
+      FROM tool_assignments
+      WHERE ticket_number IN (?)
+      ORDER BY assigned_at DESC
+    `;
+
+    // Run queries
     db.query(disassembledQuery, [ticketNumbers], (err, disassembledRows) => {
-      if (err) {
-        console.error('Error fetching disassembled parts:', err);
-        return res.status(500).json({ error: 'Failed to fetch disassembled parts' });
-      }
+      if (err) return res.status(500).json({ error: 'Failed to fetch disassembled parts' });
 
       db.query(logsQuery, [ticketNumbers], (err, logRows) => {
-        if (err) {
-          console.error('Error fetching progress logs:', err);
-          return res.status(500).json({ error: 'Failed to fetch progress logs' });
-        }
+        if (err) return res.status(500).json({ error: 'Failed to fetch progress logs' });
 
         db.query(inspectionsQuery, [ticketNumbers], (err, inspectionRows) => {
-          if (err) {
-            console.error('Error fetching inspections:', err);
-            return res.status(500).json({ error: 'Failed to fetch inspections' });
-          }
+          if (err) return res.status(500).json({ error: 'Failed to fetch inspections' });
 
-          // Maps
-          const disassembledMap = {};
-          disassembledRows.forEach(part => {
-            if (!disassembledMap[part.ticket_number]) disassembledMap[part.ticket_number] = [];
-            disassembledMap[part.ticket_number].push({
-              id: part.id,
-              part_name: part.part_name,
-              condition: part.part_condition,
-              status: part.status,
-              notes: part.notes,
-              logged_at: part.logged_at,
-              reassembly_verified: part.reassembly_verified
+          db.query(outsourceMechanicsQuery, [ticketNumbers], (err, mechanicsRows) => {
+            if (err) return res.status(500).json({ error: 'Failed to fetch outsource mechanics' });
+
+            db.query(outsourceStockQuery, [ticketNumbers], (err, stockRows) => {
+              if (err) return res.status(500).json({ error: 'Failed to fetch outsource stock' });
+
+              db.query(orderedPartsQuery, [ticketNumbers], (err, orderedRows) => {
+                if (err) return res.status(500).json({ error: 'Failed to fetch ordered parts' });
+
+                db.query(toolsQuery, [ticketNumbers], (err, toolRows) => {
+                  if (err) return res.status(500).json({ error: 'Failed to fetch tool assignments' });
+
+                  // === Maps ===
+                  const disassembledMap = {};
+                  disassembledRows.forEach(r => {
+                    if (!disassembledMap[r.ticket_number]) disassembledMap[r.ticket_number] = [];
+                    disassembledMap[r.ticket_number].push(r);
+                  });
+
+                  const logsMap = {};
+                  logRows.forEach(r => {
+                    if (!logsMap[r.ticket_number]) logsMap[r.ticket_number] = [];
+                    logsMap[r.ticket_number].push(r);
+                  });
+
+                  const inspectionsMap = {};
+                  inspectionRows.forEach(r => {
+                    if (!inspectionsMap[r.ticket_number]) inspectionsMap[r.ticket_number] = [];
+                    inspectionsMap[r.ticket_number].push(r);
+                  });
+
+                  const mechanicsMap = {};
+                  mechanicsRows.forEach(r => {
+                    if (!mechanicsMap[r.ticket_number]) mechanicsMap[r.ticket_number] = [];
+                    mechanicsMap[r.ticket_number].push(r);
+                  });
+
+                  const stockMap = {};
+                  stockRows.forEach(r => {
+                    if (!stockMap[r.ticket_number]) stockMap[r.ticket_number] = [];
+                    stockMap[r.ticket_number].push(r);
+                  });
+
+                  const orderedMap = {};
+                  orderedRows.forEach(r => {
+                    if (!orderedMap[r.ticket_number]) orderedMap[r.ticket_number] = [];
+                    orderedMap[r.ticket_number].push(r);
+                  });
+
+                  const toolsMap = {};
+                  toolRows.forEach(r => {
+                    if (!toolsMap[r.ticket_number]) toolsMap[r.ticket_number] = [];
+                    toolsMap[r.ticket_number].push(r);
+                  });
+
+                  // === Format results ===
+                  const formattedResults = tickets.map(ticket => ({
+                    id: ticket.id,
+                    ticket_number: ticket.ticket_number,
+                    customer_type: ticket.customer_type,
+                    customer_id: ticket.customer_id,
+                    customer_name: ticket.customer_name,
+                    vehicle_id: ticket.vehicle_id,
+                    vehicle_info: ticket.vehicle_info,
+                    license_plate: ticket.license_plate,
+                    title: ticket.title,
+                    description: ticket.description,
+                    priority: ticket.priority,
+                    type: ticket.type,
+                    urgency_level: ticket.urgency_level,
+                    status: ticket.status === 'in progress' ? 'in-progress' : ticket.status,
+                    appointment_id: ticket.appointment_id,
+                    created_at: ticket.created_at,
+                    updated_at: ticket.updated_at,
+                    estimated_time: ticket.completion_date,
+                    phone: ticket.phone,
+                    email: ticket.email,
+                    vehicle: {
+                      make: ticket.make,
+                      model: ticket.model,
+                      year: ticket.year,
+                      image: ticket.image,
+                    },
+                    assigned_mechanic: ticket.mechanic_assign,
+                    disassembled_parts: disassembledMap[ticket.ticket_number] || [],
+                    progress_logs: logsMap[ticket.ticket_number] || [],
+                    inspections: inspectionsMap[ticket.ticket_number] || [],
+                    outsource_mechanics: mechanicsMap[ticket.ticket_number] || [],
+                    outsource_stock: stockMap[ticket.ticket_number] || [],
+                    ordered_parts: orderedMap[ticket.ticket_number] || [],
+                    tool_assignments: toolsMap[ticket.ticket_number] || []
+                  }));
+
+                  res.json(formattedResults);
+                });
+              });
             });
           });
-
-          const logsMap = {};
-          logRows.forEach(log => {
-            if (!logsMap[log.ticket_number]) logsMap[log.ticket_number] = [];
-            logsMap[log.ticket_number].push({
-              id: log.id,
-              date: log.log_date,
-              time: log.log_time,
-              status: log.status,
-              description: log.description,
-              created_at: log.created_at
-            });
-          });
-
-          const inspectionsMap = {};
-          inspectionRows.forEach(insp => {
-            if (!inspectionsMap[insp.ticket_number]) inspectionsMap[insp.ticket_number] = [];
-            inspectionsMap[insp.ticket_number].push({
-              id: insp.id,
-              main_issue_resolved: insp.main_issue_resolved,
-              reassembly_verified: insp.reassembly_verified,
-              general_condition: insp.general_condition,
-              notes: insp.notes,
-              inspection_date: insp.inspection_date,
-              inspection_status: insp.inspection_status,
-              created_at: insp.created_at,
-              updated_at: insp.updated_at
-            });
-          });
-
-          // Format results
-          const formattedResults = tickets.map(ticket => ({
-            id: ticket.id,
-            ticket_number: ticket.ticket_number,
-            customer_type: ticket.customer_type,
-            customer_id: ticket.customer_id,
-            customer_name: ticket.customer_name,
-            vehicle_id: ticket.vehicle_id,
-            vehicle_info: ticket.vehicle_info,
-            license_plate: ticket.license_plate,
-            title: ticket.title,
-            description: ticket.description,
-            priority: ticket.priority,
-            type: ticket.type,
-            urgency_level: ticket.urgency_level,
-            status: ticket.status === 'in progress' ? 'in-progress' : ticket.status,
-            appointment_id: ticket.appointment_id,
-            created_at: ticket.created_at,
-            updated_at: ticket.updated_at,
-            estimated_time: ticket.completion_date,
-            phone: ticket.phone,
-            email: ticket.email,
-            vehicle: {
-              make: ticket.make,
-              model: ticket.model,
-              year: ticket.year,
-              image: ticket.image,
-            },
-            assigned_mechanic: ticket.mechanic_assign,
-            disassembled_parts: disassembledMap[ticket.ticket_number] || [],
-            progress_logs: logsMap[ticket.ticket_number] || [],
-            inspections: inspectionsMap[ticket.ticket_number] || []
-          }));
-
-          res.json(formattedResults);
         });
       });
     });
@@ -448,140 +472,141 @@ router.get('/service_tickets/:ticket_number', (req, res) => {
 
     const row = results[0];
 
+    // Related data queries...
     const disassembledQuery = `
-      SELECT 
-        id, 
-        ticket_number, 
-        part_name, 
-        \`condition\` AS part_condition, 
-        status, 
-        notes, 
-        logged_at, 
-        reassembly_verified
+      SELECT id, ticket_number, part_name, \`condition\` AS part_condition, status, notes, logged_at, reassembly_verified
       FROM disassembled_parts
       WHERE ticket_number = ?
       ORDER BY logged_at DESC
     `;
 
     const logsQuery = `
-      SELECT 
-        id, 
-        ticket_number, 
-        \`date\` AS log_date, 
-        \`time\` AS log_time, 
-        status, 
-        description, 
-        created_at
+      SELECT id, ticket_number, \`date\` AS log_date, \`time\` AS log_time, status, description, created_at
       FROM progress_logs
       WHERE ticket_number = ?
       ORDER BY created_at DESC
     `;
 
     const inspectionQuery = `
-      SELECT 
-        id,
-        ticket_number,
-        main_issue_resolved,
-        reassembly_verified,
-        general_condition,
-        notes,
-        inspection_date,
-        inspection_status,
-        created_at,
-        updated_at
+      SELECT id, ticket_number, main_issue_resolved, reassembly_verified, general_condition, notes, inspection_date, inspection_status, created_at, updated_at
       FROM inspections
       WHERE ticket_number = ?
       ORDER BY created_at DESC
     `;
 
+    const outsourceMechanicsQuery = `
+      SELECT id, ticket_number, mechanic_name, phone, payment, payment_method, work_done, notes, created_at
+      FROM outsource_mechanics
+      WHERE ticket_number = ?
+      ORDER BY created_at DESC
+    `;
+
+    const outsourceStockQuery = `
+      SELECT 
+        auto_id,
+        id,
+        ticket_number,
+        name,
+        category,
+        sku,
+        price,
+        quantity,
+        source_shop,
+        status,
+        requested_at,
+        received_at,
+        notes,
+        updated_at
+      FROM outsource_stock
+      WHERE ticket_number = ?
+      ORDER BY requested_at DESC
+    `;
+
+    const orderedPartsQuery = `
+      SELECT id, ticket_number, item_id, name, category, sku, price, quantity, status, ordered_at
+      FROM ordered_parts
+      WHERE ticket_number = ?
+      ORDER BY ordered_at DESC
+    `;
+
+    // 🔹 New: Tools
+    const toolsQuery = `
+      SELECT id, tool_id, tool_name, ticket_number, assigned_quantity, assigned_by, status, assigned_at, returned_at, updated_at
+      FROM tool_assignments
+      WHERE ticket_number = ?
+      ORDER BY assigned_at DESC
+    `;
+
+    // Execute queries
     db.query(disassembledQuery, [ticket_number], (err, disassembledRows) => {
-      if (err) {
-        console.error('Error fetching disassembled parts:', err);
-        return res.status(500).json({ error: 'Failed to fetch disassembled parts' });
-      }
+      if (err) return res.status(500).json({ error: 'Failed to fetch disassembled parts' });
 
       db.query(logsQuery, [ticket_number], (err, logRows) => {
-        if (err) {
-          console.error('Error fetching progress logs:', err);
-          return res.status(500).json({ error: 'Failed to fetch progress logs' });
-        }
+        if (err) return res.status(500).json({ error: 'Failed to fetch progress logs' });
 
         db.query(inspectionQuery, [ticket_number], (err, inspectionRows) => {
-          if (err) {
-            console.error('Error fetching inspections:', err);
-            return res.status(500).json({ error: 'Failed to fetch inspections' });
-          }
+          if (err) return res.status(500).json({ error: 'Failed to fetch inspections' });
 
-          const ticket = {
-            id: row.id,
-            ticket_number: row.ticket_number,
-            customer_type: row.customer_type,
-            customer_id: row.customer_id,
-            customer_name: row.customer_name,
-            vehicle_id: row.vehicle_id,
-            vehicle_info: row.vehicle_info,
-            license_plate: row.license_plate,
-            title: row.title,
-            mechanic_assign: row.mechanic_assign,
-            description: row.description,
-            priority: row.priority,
-            type: row.type,
-            urgency_level: row.urgency_level,
-            status: row.status,
-            appointment_id: row.appointment_id,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-            completion_date: row.completion_date,
-            estimated_completion_date: row.estimated_completion_date,
-            phone: row.phone,
-            email: row.email,
-            vehicle: {
-              make: row.make,
-              model: row.model,
-              year: row.year,
-              image: row.vehicle_image
-            },
-            disassembled_parts: disassembledRows.map(part => ({
-              id: part.id,
-              part_name: part.part_name,
-              condition: part.part_condition,
-              status: part.status,
-              notes: part.notes,
-              logged_at: part.logged_at,
-              reassembly_verified: part.reassembly_verified
-            })),
-            progress_logs: logRows.map(log => ({
-              id: log.id,
-              date: log.log_date,
-              time: log.log_time,
-              status: log.status,
-              description: log.description,
-              created_at: log.created_at
-            })),
-            inspections: inspectionRows.map(insp => ({
-              id: insp.id,
-              main_issue_resolved: insp.main_issue_resolved,
-              reassembly_verified: insp.reassembly_verified,
-              general_condition: insp.general_condition,
-              notes: insp.notes,
-              inspection_date: insp.inspection_date,
-              inspection_status: insp.inspection_status,
-              created_at: insp.created_at,
-              updated_at: insp.updated_at
-            }))
-          };
+          db.query(outsourceMechanicsQuery, [ticket_number], (err, mechanicsRows) => {
+            if (err) return res.status(500).json({ error: 'Failed to fetch outsource mechanics' });
 
-          res.json(ticket);
+            db.query(outsourceStockQuery, [ticket_number], (err, stockRows) => {
+              if (err) return res.status(500).json({ error: 'Failed to fetch outsource stock' });
+
+              db.query(orderedPartsQuery, [ticket_number], (err, orderedRows) => {
+                if (err) return res.status(500).json({ error: 'Failed to fetch ordered parts' });
+
+                db.query(toolsQuery, [ticket_number], (err, toolRows) => {
+                  if (err) return res.status(500).json({ error: 'Failed to fetch tool assignments' });
+
+                  const ticket = {
+                    id: row.id,
+                    ticket_number: row.ticket_number,
+                    customer_type: row.customer_type,
+                    customer_id: row.customer_id,
+                    customer_name: row.customer_name,
+                    vehicle_id: row.vehicle_id,
+                    vehicle_info: row.vehicle_info,
+                    license_plate: row.license_plate,
+                    title: row.title,
+                    mechanic_assign: row.mechanic_assign,
+                    description: row.description,
+                    priority: row.priority,
+                    type: row.type,
+                    urgency_level: row.urgency_level,
+                    status: row.status,
+                    appointment_id: row.appointment_id,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                    completion_date: row.completion_date,
+                    estimated_completion_date: row.estimated_completion_date,
+                    phone: row.phone,
+                    email: row.email,
+                    vehicle: {
+                      make: row.make,
+                      model: row.model,
+                      year: row.year,
+                      image: row.vehicle_image
+                    },
+                    disassembled_parts: disassembledRows,
+                    progress_logs: logRows,
+                    inspections: inspectionRows,
+                    outsource_mechanics: mechanicsRows,
+                    outsource_stock: stockRows,
+                    ordered_parts: orderedRows,
+                    tool_assignments: toolRows
+                  };
+
+                  res.json(ticket);
+                });
+              });
+            });
+          });
         });
       });
     });
   });
 });
-
-
-
-// Get a single service ticket by ticket_number
-
 
 // GET /api/tickets/summary
 router.get('/summary', (req, res) => {
@@ -629,154 +654,156 @@ router.get('/summary', (req, res) => {
 
     const ticketNumbers = tickets.map(t => t.ticket_number);
 
-    // ✅ Disassembled parts query
+    // ✅ Queries for related tables
     const disassembledQuery = `
-      SELECT 
-        id, 
-        ticket_number, 
-        part_name, 
-        \`condition\` AS part_condition, 
-        status, 
-        notes, 
-        logged_at, 
-        reassembly_verified
-      FROM disassembled_parts
-      WHERE ticket_number IN (?)
-      ORDER BY logged_at DESC
+      SELECT id, ticket_number, part_name, \`condition\` AS part_condition, status, notes, logged_at, reassembly_verified
+      FROM disassembled_parts WHERE ticket_number IN (?) ORDER BY logged_at DESC
     `;
 
-    // ✅ Progress logs query
     const logsQuery = `
-      SELECT 
-        id, 
-        ticket_number, 
-        date, 
-        time, 
-        status, 
-        description, 
-        created_at
-      FROM progress_logs
-      WHERE ticket_number IN (?)
-      ORDER BY created_at DESC
+      SELECT id, ticket_number, date, time, status, description, created_at
+      FROM progress_logs WHERE ticket_number IN (?) ORDER BY created_at DESC
     `;
 
-    // ✅ Inspections query
     const inspectionsQuery = `
-      SELECT 
-        id,
-        ticket_number,
-        main_issue_resolved,
-        reassembly_verified,
-        general_condition,
-        notes,
-        inspection_date,
-        inspection_status,
-        created_at,
-        updated_at
-      FROM inspections
-      WHERE ticket_number IN (?)
-      ORDER BY created_at DESC
+      SELECT id, ticket_number, main_issue_resolved, reassembly_verified, general_condition, notes, inspection_date, inspection_status, created_at, updated_at
+      FROM inspections WHERE ticket_number IN (?) ORDER BY created_at DESC
     `;
 
+    const mechanicsQuery = `
+      SELECT id, ticket_number, mechanic_name, phone, payment, payment_method, work_done, notes, created_at
+      FROM outsource_mechanics WHERE ticket_number IN (?) ORDER BY created_at DESC
+    `;
+
+    const toolsQuery = `
+      SELECT id, tool_id, tool_name, ticket_id, ticket_number, assigned_quantity, assigned_by, status, assigned_at, returned_at, updated_at
+      FROM tool_assignments WHERE ticket_number IN (?) ORDER BY assigned_at DESC
+    `;
+
+    const orderedPartsQuery = `
+      SELECT auto_id, id, ticket_number, name, category, sku, price, quantity, source_shop, status, requested_at, received_at, notes, updated_at
+      FROM ordered_parts WHERE ticket_number IN (?) ORDER BY requested_at DESC
+    `;
+
+  const outsourceStockQuery = `
+  SELECT 
+    id,
+    ticket_number,
+    part_name,
+    category,
+    quantity,
+    unit_price,
+    (quantity * unit_price) AS total_cost,
+    created_at
+  FROM outsource_stock
+  WHERE ticket_number IN (?)
+  ORDER BY created_at DESC
+`;
+
+
+    // Run queries in sequence
     db.query(disassembledQuery, [ticketNumbers], (err, disassembledRows) => {
-      if (err) {
-        console.error('Error fetching disassembled parts:', err);
-        return res.status(500).json({ error: 'Failed to fetch disassembled parts' });
-      }
+      if (err) return res.status(500).json({ error: 'Failed to fetch disassembled parts' });
 
       db.query(logsQuery, [ticketNumbers], (err, logRows) => {
-        if (err) {
-          console.error('Error fetching progress logs:', err);
-          return res.status(500).json({ error: 'Failed to fetch progress logs' });
-        }
+        if (err) return res.status(500).json({ error: 'Failed to fetch progress logs' });
 
         db.query(inspectionsQuery, [ticketNumbers], (err, inspectionRows) => {
-          if (err) {
-            console.error('Error fetching inspections:', err);
-            return res.status(500).json({ error: 'Failed to fetch inspections' });
-          }
+          if (err) return res.status(500).json({ error: 'Failed to fetch inspections' });
 
-          // Group disassembled parts
-          const disassembledMap = {};
-          disassembledRows.forEach(part => {
-            if (!disassembledMap[part.ticket_number]) {
-              disassembledMap[part.ticket_number] = [];
-            }
-            disassembledMap[part.ticket_number].push({
-              id: part.id,
-              part_name: part.part_name,
-              condition: part.part_condition,
-              status: part.status,
-              notes: part.notes,
-              logged_at: part.logged_at,
-              reassembly_verified: part.reassembly_verified
+          db.query(mechanicsQuery, [ticketNumbers], (err, mechanicRows) => {
+            if (err) return res.status(500).json({ error: 'Failed to fetch outsource mechanics' });
+
+            db.query(toolsQuery, [ticketNumbers], (err, toolRows) => {
+              if (err) return res.status(500).json({ error: 'Failed to fetch tool assignments' });
+
+              db.query(orderedPartsQuery, [ticketNumbers], (err, orderedRows) => {
+                if (err) return res.status(500).json({ error: 'Failed to fetch ordered parts' });
+
+                db.query(outsourceStockQuery, [ticketNumbers], (err, stockRows) => {
+                  if (err) return res.status(500).json({ error: 'Failed to fetch outsource stock' });
+
+                  // Group all related data
+                  const disassembledMap = {};
+                  disassembledRows.forEach(r => {
+                    if (!disassembledMap[r.ticket_number]) disassembledMap[r.ticket_number] = [];
+                    disassembledMap[r.ticket_number].push(r);
+                  });
+
+                  const logsMap = {};
+                  logRows.forEach(r => {
+                    if (!logsMap[r.ticket_number]) logsMap[r.ticket_number] = [];
+                    logsMap[r.ticket_number].push(r);
+                  });
+
+                  const inspectionsMap = {};
+                  inspectionRows.forEach(r => {
+                    if (!inspectionsMap[r.ticket_number]) inspectionsMap[r.ticket_number] = [];
+                    inspectionsMap[r.ticket_number].push(r);
+                  });
+
+                  const mechanicsMap = {};
+                  mechanicRows.forEach(r => {
+                    if (!mechanicsMap[r.ticket_number]) mechanicsMap[r.ticket_number] = [];
+                    mechanicsMap[r.ticket_number].push(r);
+                  });
+
+                  const toolsMap = {};
+                  toolRows.forEach(r => {
+                    if (!toolsMap[r.ticket_number]) toolsMap[r.ticket_number] = [];
+                    toolsMap[r.ticket_number].push(r);
+                  });
+
+                  const orderedMap = {};
+                  orderedRows.forEach(r => {
+                    if (!orderedMap[r.ticket_number]) orderedMap[r.ticket_number] = [];
+                    orderedMap[r.ticket_number].push(r);
+                  });
+
+                  const stockMap = {};
+                  stockRows.forEach(r => {
+                    if (!stockMap[r.ticket_number]) stockMap[r.ticket_number] = [];
+                    stockMap[r.ticket_number].push(r);
+                  });
+
+                  // Merge into final response
+                  const formattedResults = tickets.map(row => ({
+                    ticket_number: row.ticket_number,
+                    status: row.status,
+                    priority: row.priority,
+                    mechanic_assign: row.mechanic_assign,
+                    inspector_assign: row.inspectorName,
+                    completion_date: row.completion_date,
+                    estimated_completion_date: row.estimated_completion_date,
+                    title: row.title,
+                    description: row.description,
+                    vehicle_info: {
+                      make: row.make,
+                      model: row.model,
+                      year: row.year,
+                      licensePlate: row.vehicle_license_plate,
+                      image: row.image
+                    },
+                    disassembled_parts: disassembledMap[row.ticket_number] || [],
+                    progress_logs: logsMap[row.ticket_number] || [],
+                    inspections: inspectionsMap[row.ticket_number] || [],
+                    outsource_mechanics: mechanicsMap[row.ticket_number] || [],
+                    tool_assignments: toolsMap[row.ticket_number] || [],
+                    ordered_parts: orderedMap[row.ticket_number] || [],
+                    outsource_stock: stockMap[row.ticket_number] || []
+                  }));
+
+                  res.json(formattedResults);
+                });
+              });
             });
           });
-
-          // Group progress logs
-          const logsMap = {};
-          logRows.forEach(log => {
-            if (!logsMap[log.ticket_number]) {
-              logsMap[log.ticket_number] = [];
-            }
-            logsMap[log.ticket_number].push({
-              id: log.id,
-              date: log.date,
-              time: log.time,
-              status: log.status,
-              description: log.description,
-              created_at: log.created_at
-            });
-          });
-
-          // Group inspections
-          const inspectionsMap = {};
-          inspectionRows.forEach(insp => {
-            if (!inspectionsMap[insp.ticket_number]) {
-              inspectionsMap[insp.ticket_number] = [];
-            }
-            inspectionsMap[insp.ticket_number].push({
-              id: insp.id,
-              main_issue_resolved: insp.main_issue_resolved,
-              reassembly_verified: insp.reassembly_verified,
-              general_condition: insp.general_condition,
-              notes: insp.notes,
-              inspection_date: insp.inspection_date,
-              inspection_status: insp.inspection_status,
-              created_at: insp.created_at,
-              updated_at: insp.updated_at
-            });
-          });
-
-          // Merge everything into final response
-          const formattedResults = tickets.map(row => ({
-            ticket_number: row.ticket_number,
-            status: row.status,
-            priority: row.priority,
-            mechanic_assign: row.mechanic_assign,
-            inspector_assign: row.inspectorName,
-            completion_date: row.completion_date,
-            estimated_completion_date: row.estimated_completion_date,
-            title: row.title,
-            description: row.description,
-            vehicle_info: {
-              make: row.make,
-              model: row.model,
-              year: row.year,
-              licensePlate: row.vehicle_license_plate,
-              image: row.image
-            },
-            disassembled_parts: disassembledMap[row.ticket_number] || [],
-            progress_logs: logsMap[row.ticket_number] || [],
-            inspections: inspectionsMap[row.ticket_number] || []
-          }));
-
-          res.json(formattedResults);
         });
       });
     });
   });
 });
+
 
 
 

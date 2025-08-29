@@ -4,11 +4,11 @@ const app = express();
 const path = require('path');
 const db = require('./db/connection');
 const ticketsRoutes = require('./routes/manager-folder/tickets');
-const customerRoutes = require('./routes/customer');
-const appointmentsRoutes = require('./routes/appointments');
-const employeesRoutes = require('./routes/employees');
-const employeeattendanceRoutes = require('./routes/employee-attendance');
-const sosRoutes = require('./routes/sos')
+const customerRoutes = require('./routes/reception/customer');
+const appointmentsRoutes = require('./routes/reception/appointments');
+const employeesRoutes = require('./routes/reception/employees');
+const employeeattendanceRoutes = require('./routes/reception/employee-attendance.js');
+const sosRoutes = require('./routes/reception/sos');
 const receptionanalyticsRoutes = require('./routes/analytics/reception-analytics')
 const processRoutes = require('./routes/manager-folder/process')
 const mechanicRoutes= require('./routes/manager-folder/mechanic')
@@ -25,6 +25,7 @@ const inventoryItemRoutes = require('./routes/stock-management-system/inventory-
 const toolsRoutes = require('./routes/tools-management-system/tools'); // Assuming you have a tools management system
 const damageReportsRoutes = require('./routes/tools-management-system/damage-reports'); // Importing the damage reports routes
 const completedCarsRoutes = require('./routes/manager-folder/completed-cars'); // Importing completed cars routes
+const outsource_mechanic_paymentsRoutes = require('./routes/reception/outsource_mechanic_payments');  
 
 
 
@@ -107,7 +108,8 @@ app.use('/api/tools', toolsRoutes);
 
 app.use('/api/damage-reports', damageReportsRoutes); // Using the damage reports routes
 
-
+//----------------outsource mechanic payments----------------
+app.use('/api/outsource-mechanic-payments', outsource_mechanic_paymentsRoutes);
 
 
 // Check MySQL before starting server

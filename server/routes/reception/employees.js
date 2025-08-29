@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db/connection');
+const db = require('../../db/connection');
 const multer = require('multer');
 const path = require('path');
 const bcrypt = require('bcrypt');
@@ -119,6 +119,8 @@ router.post('/', upload.single('image'), (req, res) => {
   }
 });
 
+
+// GET all employees with details
 router.get('/getemployees', (req, res) => {
   const query = `
     SELECT 
@@ -141,29 +143,50 @@ router.get('/getemployees', (req, res) => {
 
   db.query(query, (err, results) => {
     if (err) {
-      console.error('Error fetching employees:', err);
-      return res.status(500).json({ error: 'Failed to fetch employees' });
+    console.error('❌ Error fetching employees:', err); // ← This will show in terminal
+    return res.status(500).json({ error: 'Failed to fetch employees' });
+  }
+    if (!results) {
+    console.warn('No results returned from DB');
+    return res.json([]);
+  }
+    
+
+        const formattedResults = results.map(item => {
+  // Safely handle expertise (could be null, string, or already array)
+  let expertiseArray = [];
+  if (item.expertise) {
+    if (Array.isArray(item.expertise)) {
+      expertiseArray = item.expertise;
+    } else if (typeof item.expertise === 'string') {
+      expertiseArray = item.expertise.split(',').map(s => s.trim());
     }
+  }
 
-    const formattedResults = results.map(item => ({
-      id: item.id,
-      name: item.full_name,
-      email: item.email,
-      phone: item.phone_number,
-      location: item.address,
-      joinDate: item.join_date,
-      role: item.role,
-      specialty: item.specialty,
-      expertise: item.expertise ? item.expertise.split(',') : [],
-      experience: item.experience,
-      employmentType: item.is_mechanic_permanent,
-      salary: item.salary,
-      workingHours: item.working_hours,
-      image: item.image_url ? item.image_url.split(/[\\/]/).pop() : null
-    }));
+  return {
+    id: item.id,
+    name: item.full_name,
+    email: item.email,
+    phone: item.phone_number,
+    location: item.address,
+    joinDate: item.join_date,
+    role: item.role,
+    specialty: item.specialty,
+    expertise: expertiseArray,
+    experience: item.experience,
+    employmentType: item.is_mechanic_permanent,
+    salary: item.salary,
+    workingHours: item.working_hours,
+    image: item.image_url ? `http://localhost:5001/uploads/${item.image_url}` : null
+  };
+});
 
-    res.json(formattedResults);
+        res.json(formattedResults);
+    });
   });
+
+  router.get('/test', (req, res) => {
+  res.send('Employees route works!');
 });
 
 
