@@ -644,165 +644,134 @@ router.get('/summary', (req, res) => {
 
   db.query(query, (err, tickets) => {
     if (err) {
-      console.error('Error fetching ticket summary:', err);
-      return res.status(500).json({ error: 'Failed to fetch ticket summary' });
+      console.error('Error fetching tickets:', err);
+      return res.status(500).json({ error: 'Failed to fetch tickets' });
     }
 
-    if (tickets.length === 0) {
-      return res.json([]);
-    }
+    if (!tickets || tickets.length === 0) return res.json([]);
 
     const ticketNumbers = tickets.map(t => t.ticket_number);
+    if (ticketNumbers.length === 0) return res.json([]);
 
-    // ✅ Queries for related tables
+    // Queries for related tables
     const disassembledQuery = `
       SELECT id, ticket_number, part_name, \`condition\` AS part_condition, status, notes, logged_at, reassembly_verified
       FROM disassembled_parts WHERE ticket_number IN (?) ORDER BY logged_at DESC
     `;
-
     const logsQuery = `
       SELECT id, ticket_number, date, time, status, description, created_at
       FROM progress_logs WHERE ticket_number IN (?) ORDER BY created_at DESC
     `;
-
     const inspectionsQuery = `
       SELECT id, ticket_number, main_issue_resolved, reassembly_verified, general_condition, notes, inspection_date, inspection_status, created_at, updated_at
       FROM inspections WHERE ticket_number IN (?) ORDER BY created_at DESC
     `;
-
     const mechanicsQuery = `
       SELECT id, ticket_number, mechanic_name, phone, payment, payment_method, work_done, notes, created_at
       FROM outsource_mechanics WHERE ticket_number IN (?) ORDER BY created_at DESC
     `;
-
     const toolsQuery = `
       SELECT id, tool_id, tool_name, ticket_id, ticket_number, assigned_quantity, assigned_by, status, assigned_at, returned_at, updated_at
       FROM tool_assignments WHERE ticket_number IN (?) ORDER BY assigned_at DESC
     `;
-
     const orderedPartsQuery = `
-      SELECT auto_id, id, ticket_number, name, category, sku, price, quantity, source_shop, status, requested_at, received_at, notes, updated_at
-      FROM ordered_parts WHERE ticket_number IN (?) ORDER BY requested_at DESC
+      SELECT item_id, ticket_number, name, category, sku, price, quantity, status, ordered_at
+      FROM ordered_parts WHERE ticket_number IN (?) ORDER BY ordered_at DESC
+    `;
+    const outsourceStockQuery = `
+      SELECT 
+        id,
+        ticket_number,
+        name,
+        category,
+        sku,
+        price,
+        quantity,
+        source_shop,
+        status,
+        requested_at,
+        received_at,
+        notes,
+        updated_at,
+        (quantity * price) AS total_cost
+      FROM outsource_stock 
+      WHERE ticket_number IN (?) 
+      ORDER BY requested_at DESC
     `;
 
-  const outsourceStockQuery = `
-  SELECT 
-    id,
-    ticket_number,
-    part_name,
-    category,
-    quantity,
-    unit_price,
-    (quantity * unit_price) AS total_cost,
-    created_at
-  FROM outsource_stock
-  WHERE ticket_number IN (?)
-  ORDER BY created_at DESC
-`;
-
-
-    // Run queries in sequence
-    db.query(disassembledQuery, [ticketNumbers], (err, disassembledRows) => {
-      if (err) return res.status(500).json({ error: 'Failed to fetch disassembled parts' });
-
-      db.query(logsQuery, [ticketNumbers], (err, logRows) => {
-        if (err) return res.status(500).json({ error: 'Failed to fetch progress logs' });
-
-        db.query(inspectionsQuery, [ticketNumbers], (err, inspectionRows) => {
-          if (err) return res.status(500).json({ error: 'Failed to fetch inspections' });
-
-          db.query(mechanicsQuery, [ticketNumbers], (err, mechanicRows) => {
-            if (err) return res.status(500).json({ error: 'Failed to fetch outsource mechanics' });
-
-            db.query(toolsQuery, [ticketNumbers], (err, toolRows) => {
-              if (err) return res.status(500).json({ error: 'Failed to fetch tool assignments' });
-
-              db.query(orderedPartsQuery, [ticketNumbers], (err, orderedRows) => {
-                if (err) return res.status(500).json({ error: 'Failed to fetch ordered parts' });
-
-                db.query(outsourceStockQuery, [ticketNumbers], (err, stockRows) => {
-                  if (err) return res.status(500).json({ error: 'Failed to fetch outsource stock' });
-
-                  // Group all related data
-                  const disassembledMap = {};
-                  disassembledRows.forEach(r => {
-                    if (!disassembledMap[r.ticket_number]) disassembledMap[r.ticket_number] = [];
-                    disassembledMap[r.ticket_number].push(r);
-                  });
-
-                  const logsMap = {};
-                  logRows.forEach(r => {
-                    if (!logsMap[r.ticket_number]) logsMap[r.ticket_number] = [];
-                    logsMap[r.ticket_number].push(r);
-                  });
-
-                  const inspectionsMap = {};
-                  inspectionRows.forEach(r => {
-                    if (!inspectionsMap[r.ticket_number]) inspectionsMap[r.ticket_number] = [];
-                    inspectionsMap[r.ticket_number].push(r);
-                  });
-
-                  const mechanicsMap = {};
-                  mechanicRows.forEach(r => {
-                    if (!mechanicsMap[r.ticket_number]) mechanicsMap[r.ticket_number] = [];
-                    mechanicsMap[r.ticket_number].push(r);
-                  });
-
-                  const toolsMap = {};
-                  toolRows.forEach(r => {
-                    if (!toolsMap[r.ticket_number]) toolsMap[r.ticket_number] = [];
-                    toolsMap[r.ticket_number].push(r);
-                  });
-
-                  const orderedMap = {};
-                  orderedRows.forEach(r => {
-                    if (!orderedMap[r.ticket_number]) orderedMap[r.ticket_number] = [];
-                    orderedMap[r.ticket_number].push(r);
-                  });
-
-                  const stockMap = {};
-                  stockRows.forEach(r => {
-                    if (!stockMap[r.ticket_number]) stockMap[r.ticket_number] = [];
-                    stockMap[r.ticket_number].push(r);
-                  });
-
-                  // Merge into final response
-                  const formattedResults = tickets.map(row => ({
-                    ticket_number: row.ticket_number,
-                    status: row.status,
-                    priority: row.priority,
-                    mechanic_assign: row.mechanic_assign,
-                    inspector_assign: row.inspectorName,
-                    completion_date: row.completion_date,
-                    estimated_completion_date: row.estimated_completion_date,
-                    title: row.title,
-                    description: row.description,
-                    vehicle_info: {
-                      make: row.make,
-                      model: row.model,
-                      year: row.year,
-                      licensePlate: row.vehicle_license_plate,
-                      image: row.image
-                    },
-                    disassembled_parts: disassembledMap[row.ticket_number] || [],
-                    progress_logs: logsMap[row.ticket_number] || [],
-                    inspections: inspectionsMap[row.ticket_number] || [],
-                    outsource_mechanics: mechanicsMap[row.ticket_number] || [],
-                    tool_assignments: toolsMap[row.ticket_number] || [],
-                    ordered_parts: orderedMap[row.ticket_number] || [],
-                    outsource_stock: stockMap[row.ticket_number] || []
-                  }));
-
-                  res.json(formattedResults);
-                });
-              });
-            });
-          });
+    // Helper to query safely
+    const querySafe = (sql, params) =>
+      new Promise(resolve => {
+        db.query(sql, params, (err, rows) => {
+          if (err) {
+            console.error('Error executing query:', err.sqlMessage || err);
+            return resolve([]);
+          }
+          resolve(rows || []);
         });
       });
-    });
+
+    (async () => {
+      const [
+        disassembledRows,
+        logRows,
+        inspectionRows,
+        mechanicRows,
+        toolRows,
+        orderedRows,
+        stockRows
+      ] = await Promise.all([
+        querySafe(disassembledQuery, [ticketNumbers]),
+        querySafe(logsQuery, [ticketNumbers]),
+        querySafe(inspectionsQuery, [ticketNumbers]),
+        querySafe(mechanicsQuery, [ticketNumbers]),
+        querySafe(toolsQuery, [ticketNumbers]),
+        querySafe(orderedPartsQuery, [ticketNumbers]),
+        querySafe(outsourceStockQuery, [ticketNumbers])
+      ]);
+
+      // Group by ticket_number
+      const groupByTicket = rows => {
+        const map = {};
+        rows.forEach(r => {
+          if (!map[r.ticket_number]) map[r.ticket_number] = [];
+          map[r.ticket_number].push(r);
+        });
+        return map;
+      };
+
+      const formattedResults = tickets.map(row => ({
+        ticket_number: row.ticket_number,
+        status: row.status,
+        priority: row.priority,
+        mechanic_assign: row.mechanic_assign,
+        inspector_assign: row.inspectorName,
+        completion_date: row.completion_date,
+        estimated_completion_date: row.estimated_completion_date,
+        title: row.title,
+        description: row.description,
+        vehicle_info: {
+          make: row.make,
+          model: row.model,
+          year: row.year,
+          licensePlate: row.vehicle_license_plate,
+          image: row.image
+        },
+        disassembled_parts: (groupByTicket(disassembledRows)[row.ticket_number] || []),
+        progress_logs: (groupByTicket(logRows)[row.ticket_number] || []),
+        inspections: (groupByTicket(inspectionRows)[row.ticket_number] || []),
+        outsource_mechanics: (groupByTicket(mechanicRows)[row.ticket_number] || []),
+        tool_assignments: (groupByTicket(toolRows)[row.ticket_number] || []),
+        ordered_parts: (groupByTicket(orderedRows)[row.ticket_number] || []),
+        outsource_stock: (groupByTicket(stockRows)[row.ticket_number] || [])
+      }));
+
+      res.json(formattedResults);
+    })();
   });
 });
+
+
 
 
 

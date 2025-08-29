@@ -44,6 +44,7 @@ export default function ServiceTickets() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 const [selectedMechanic, setSelectedMechanic] = useState(null);
 const [activeMechanicTab, setActiveMechanicTab] = useState(null);
+const [orderedPartsActiveTab, setOrderedPartsActiveTab] = useState('ordered'); // 'ordered' or 'outsource'
 // Safely convert payment values to numbers (moved inside the map)
 
 
@@ -1005,46 +1006,129 @@ const fetchTicketDetails = async (ticketNumber) => {
               )}
               
               {/* Ordered Parts Tab */}
-              {activeTab === 'orderedParts' && (
-                <Card className="shadow-md">
-                  <CardHeader>
-                    <CardTitle className="flex items-center text-lg">
-                      <PackagePlus className="w-4 h-4 mr-2 text-blue-600" />
-                      Ordered Parts
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="max-h-[60vh] overflow-y-auto space-y-3 p-2 bg-gray-50 rounded-lg">
-                    {showTicketDetails.ordered_parts && showTicketDetails.ordered_parts.length > 0 ? (
-                      showTicketDetails.ordered_parts.map(part => (
-                        <div key={part.id} className="p-3 bg-white rounded-lg border shadow-sm hover:shadow transition-shadow">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="font-semibold text-gray-800">{part.name}</h4>
-                              <div className="flex space-x-4 mt-1 text-sm">
-                                <span className="text-gray-600">Category: <span className="font-medium">{part.category}</span></span>
-                                <span className="text-gray-600">SKU: <span className="font-medium">{part.sku}</span></span>
-                                <span className="text-gray-600">Quantity: <span className="font-medium">{part.quantity}</span></span>
-                              </div>
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              {part.status}
-                            </Badge>
-                          </div>
-                          <div className="mt-2 text-xs text-gray-500">
-                            Ordered on: {formatDateTime(part.ordered_at)}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-8">
-                        <PackagePlus className="w-12 h-12 text-gray-400 mx-auto mb-3 opacity-70" />
-                        <p className="text-gray-500">No parts ordered yet.</p>
-                        <p className="text-sm text-gray-400 mt-2">Parts ordered for this service will appear here</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+           
+{activeTab === 'orderedParts' && (
+  <Card className="shadow-md">
+    <CardHeader>
+      <CardTitle className="flex items-center text-lg">
+        <PackagePlus className="w-4 h-4 mr-2 text-blue-600" />
+        Parts Management
+      </CardTitle>
+      
+      {/* Sub-tab navigation */}
+      <div className="flex border-b mt-4">
+        <button
+          className={`px-4 py-2 text-sm font-medium ${
+            orderedPartsActiveTab === 'ordered'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setOrderedPartsActiveTab('ordered')}
+        >
+          Ordered Parts
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium ${
+            orderedPartsActiveTab === 'outsource'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setOrderedPartsActiveTab('outsource')}
+        >
+          Outsource Stock
+        </button>
+      </div>
+    </CardHeader>
+    
+    <CardContent className="max-h-[60vh] overflow-y-auto space-y-3 p-2 bg-gray-50 rounded-lg">
+      {/* Ordered Parts Sub-tab */}
+      {orderedPartsActiveTab === 'ordered' && (
+        <>
+          {showTicketDetails.ordered_parts && showTicketDetails.ordered_parts.length > 0 ? (
+            showTicketDetails.ordered_parts.map(part => (
+              <div key={part.id} className="p-3 bg-white rounded-lg border shadow-sm hover:shadow transition-shadow">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-semibold text-gray-800">{part.name}</h4>
+                    <div className="flex space-x-4 mt-1 text-sm">
+                      <span className="text-gray-600">Category: <span className="font-medium">{part.category}</span></span>
+                      <span className="text-gray-600">SKU: <span className="font-medium">{part.sku}</span></span>
+                      <span className="text-gray-600">Quantity: <span className="font-medium">{part.quantity}</span></span>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {part.status}
+                  </Badge>
+                </div>
+                <div className="mt-2 text-xs text-gray-500">
+                  Ordered on: {formatDateTime(part.ordered_at)}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8">
+              <PackagePlus className="w-12 h-12 text-gray-400 mx-auto mb-3 opacity-70" />
+              <p className="text-gray-500">No parts ordered yet.</p>
+              <p className="text-sm text-gray-400 mt-2">Parts ordered for this service will appear here</p>
+            </div>
+          )}
+        </>
+      )}
+      
+      {/* Outsource Stock Sub-tab */}
+      {orderedPartsActiveTab === 'outsource' && (
+        <>
+          {showTicketDetails.outsource_stock && showTicketDetails.outsource_stock.length > 0 ? (
+            showTicketDetails.outsource_stock.map(stock => (
+              <div key={stock.auto_id} className="p-3 bg-white rounded-lg border shadow-sm hover:shadow transition-shadow">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-semibold text-gray-800">{stock.name}</h4>
+                    <div className="flex space-x-4 mt-1 text-sm">
+                      <span className="text-gray-600">Category: <span className="font-medium">{stock.category}</span></span>
+                      <span className="text-gray-600">SKU: <span className="font-medium">{stock.sku}</span></span>
+                      <span className="text-gray-600">Quantity: <span className="font-medium">{stock.quantity}</span></span>
+                      <span className="text-gray-600">Source: <span className="font-medium">{stock.source_shop}</span></span>
+                    </div>
+                  </div>
+                  <Badge 
+                    variant="outline" 
+                    className={`text-xs ${
+                      stock.status === 'received' 
+                        ? 'bg-green-100 text-green-800 border-green-200' 
+                        : stock.status === 'requested'
+                          ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                          : 'bg-blue-100 text-blue-800 border-blue-200'
+                    }`}
+                  >
+                    {stock.status}
+                  </Badge>
+                </div>
+                <div className="mt-2 text-xs text-gray-500">
+                  Requested: {formatDateTime(stock.requested_at)}
+                  {stock.received_at && (
+                    <span className="ml-3">Received: {formatDateTime(stock.received_at)}</span>
+                  )}
+                </div>
+                {stock.notes && (
+                  <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-100">
+                    <p className="text-sm text-gray-700"><strong>Notes:</strong> {stock.notes}</p>
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8">
+              <Package className="w-12 h-12 text-gray-400 mx-auto mb-3 opacity-70" />
+              <p className="text-gray-500">No outsource stock items yet.</p>
+              <p className="text-sm text-gray-400 mt-2">Outsourced parts for this service will appear here</p>
+            </div>
+          )}
+        </>
+      )}
+    </CardContent>
+  </Card>
+)}
               
               {/* Inspection Tab */}
               {activeTab === 'inspection' && (
