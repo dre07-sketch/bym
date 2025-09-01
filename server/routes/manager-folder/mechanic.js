@@ -96,6 +96,7 @@ router.post("/mechanics-status", (req, res) => {
   });
 });
 
+
 router.get("/:mechanicName/tickets", (req, res) => {
   const { mechanicName } = req.params;
 
@@ -144,7 +145,6 @@ router.get("/:mechanicName/tickets", (req, res) => {
       return res.json([]);
     }
 
-    // NOTE: escape reserved keywords with backticks
     const disassembledPartsQuery = `
       SELECT id, ticket_number, part_name, \`condition\`, status, notes, logged_at, reassembly_verified
       FROM disassembled_parts
@@ -152,7 +152,6 @@ router.get("/:mechanicName/tickets", (req, res) => {
       ORDER BY logged_at DESC
     `;
 
-    // Use the actual columns from your progress_logs table
     const progressLogsQuery = `
       SELECT id, ticket_number, \`date\`, \`time\`, \`status\`, \`description\`, created_at
       FROM progress_logs
@@ -160,7 +159,6 @@ router.get("/:mechanicName/tickets", (req, res) => {
       ORDER BY created_at DESC
     `;
 
-    // Matches your inspections table (includes main_issue_resolved, updated_at)
     const inspectionsQuery = `
       SELECT id, ticket_number, main_issue_resolved, reassembly_verified, general_condition,
              notes, inspection_date, inspection_status, created_at, updated_at
@@ -169,39 +167,78 @@ router.get("/:mechanicName/tickets", (req, res) => {
       ORDER BY created_at DESC
     `;
 
+    const toolAssignmentsQuery = `
+      SELECT id, ticket_number, tool_id, tool_name, assigned_quantity, assigned_by, status, assigned_at, returned_at, updated_at
+      FROM tool_assignments
+      WHERE ticket_number = ?
+      ORDER BY assigned_at DESC
+    `;
+
+   const outsourceStockQuery = `
+  SELECT 
+    id,
+    ticket_number,
+    name,
+    category,
+    sku,
+    price,
+    quantity,
+    source_shop,
+    status,
+    requested_at,
+    received_at,
+    notes,
+    updated_at
+  FROM outsource_stock
+  WHERE ticket_number = ?
+  ORDER BY requested_at DESC
+`;
+
+
+
+    const orderedPartsQuery = `
+      SELECT id, ticket_number, name, category, sku, price, quantity, source_shop, status, requested_at, received_at, notes, updated_at
+      FROM ordered_parts
+      WHERE ticket_number = ?
+      ORDER BY requested_at DESC
+    `;
+
     let completed = 0;
 
     tickets.forEach((ticket, index) => {
       const { ticket_number } = ticket;
 
-      db.query(disassembledPartsQuery, [ticket_number], (err1, disassembledParts) => {
-        if (err1) {
-          console.error("Error fetching disassembled parts:", err1);
-          tickets[index].disassembledParts = [];
-        } else {
-          tickets[index].disassembledParts = disassembledParts || [];
-        }
+      db.query(disassembledPartsQuery, [ticket_number], (err1, rows1) => {
+        tickets[index].disassembledParts = err1 ? [] : rows1 || [];
 
-        db.query(progressLogsQuery, [ticket_number], (err2, progressLogs) => {
-          if (err2) {
-            console.error("Error fetching progress logs:", err2);
-            tickets[index].progressLogs = [];
-          } else {
-            tickets[index].progressLogs = progressLogs || [];
-          }
+        db.query(progressLogsQuery, [ticket_number], (err2, rows2) => {
+          tickets[index].progressLogs = err2 ? [] : rows2 || [];
 
-          db.query(inspectionsQuery, [ticket_number], (err3, inspections) => {
-            if (err3) {
-              console.error("Error fetching inspections:", err3);
-              tickets[index].inspections = [];
-            } else {
-              tickets[index].inspections = inspections || [];
-            }
+          db.query(inspectionsQuery, [ticket_number], (err3, rows3) => {
+            tickets[index].inspections = err3 ? [] : rows3 || [];
 
-            completed += 1;
-            if (completed === tickets.length) {
-              return res.json(tickets);
-            }
+            db.query(toolAssignmentsQuery, [ticket_number], (err4, rows4) => {
+              tickets[index].toolAssignments = err4 ? [] : rows4 || [];
+
+             db.query(outsourceStockQuery, [ticket_number], (err5, rows5) => {
+  if (err5) {
+    console.error("Error fetching outsource stock:", err5);
+    tickets[index].outsourceStock = [];
+  } else {
+    console.log("Outsource stock for", ticket_number, rows5); // 👈 debug log
+    tickets[index].outsourceStock = rows5 || [];
+  }
+
+                db.query(orderedPartsQuery, [ticket_number], (err6, rows6) => {
+                  tickets[index].orderedParts = err6 ? [] : rows6 || [];
+
+                  completed += 1;
+                  if (completed === tickets.length) {
+                    return res.json(tickets);
+                  }
+                });
+              });
+            });
           });
         });
       });
@@ -210,6 +247,7 @@ router.get("/:mechanicName/tickets", (req, res) => {
 });
 
 
+// ===================== HISTORY TICKETS =====================
 router.get("/:mechanicName/tickets-history", (req, res) => {
   const { mechanicName } = req.params;
 
@@ -217,10 +255,16 @@ router.get("/:mechanicName/tickets-history", (req, res) => {
     return res.status(400).json({ message: "Mechanic name is required" });
   }
 
-  // You can add more statuses here in the future
-  const validStatuses = ["awaiting inspection"];
+  const validStatuses = [
+    "awaiting inspection",
+    "ready for inspection",
+    "inspection",
+    "successful inspection",
+    "inspection failed",
+    "awaiting bill",
+    "completed"
+  ];
 
-  // Dynamically create placeholders for the IN clause
   const statusPlaceholders = validStatuses.map(() => "?").join(", ");
 
   const ticketsQuery = `
@@ -284,7 +328,40 @@ router.get("/:mechanicName/tickets-history", (req, res) => {
       ORDER BY created_at DESC
     `;
 
-    // Helper function to fetch all related data for a single ticket
+    const orderedPartsQuery = `
+      SELECT id, ticket_number, item_id, name, category, sku, price, quantity, status, ordered_at
+      FROM ordered_parts
+      WHERE ticket_number = ?
+      ORDER BY ordered_at DESC
+    `;
+
+   const outsourceStockQuery = `
+  SELECT 
+    id,
+    ticket_number,
+    name,
+    category,
+    sku,
+    price,
+    quantity,
+    source_shop,
+    status,
+    requested_at,
+    received_at,
+    notes,
+    updated_at
+  FROM outsource_stock
+  WHERE ticket_number = ?
+  ORDER BY requested_at DESC
+`;
+    const toolAssignmentsQuery = `
+      SELECT id, tool_id, tool_name, ticket_id, ticket_number, assigned_quantity,
+             assigned_by, status, assigned_at, returned_at, updated_at
+      FROM tool_assignments
+      WHERE ticket_number = ?
+      ORDER BY assigned_at DESC
+    `;
+
     const fetchRelatedData = (ticket) => {
       return new Promise((resolve) => {
         db.query(disassembledPartsQuery, [ticket.ticket_number], (err1, disassembledParts) => {
@@ -295,14 +372,25 @@ router.get("/:mechanicName/tickets-history", (req, res) => {
 
             db.query(inspectionsQuery, [ticket.ticket_number], (err3, inspections) => {
               ticket.inspections = err3 ? [] : inspections || [];
-              resolve(ticket);
+
+              db.query(orderedPartsQuery, [ticket.ticket_number], (err4, orderedParts) => {
+                ticket.orderedParts = err4 ? [] : orderedParts || [];
+
+                db.query(outsourceStockQuery, [ticket.ticket_number], (err5, outsourceStock) => {
+                  ticket.outsourceStock = err5 ? [] : outsourceStock || [];
+
+                  db.query(toolAssignmentsQuery, [ticket.ticket_number], (err6, toolAssignments) => {
+                    ticket.toolAssignments = err6 ? [] : toolAssignments || [];
+                    resolve(ticket);
+                  });
+                });
+              });
             });
           });
         });
       });
     };
 
-    // Fetch all related data in parallel
     Promise.all(tickets.map(fetchRelatedData))
       .then((ticketsWithDetails) => res.json(ticketsWithDetails))
       .catch((error) => {

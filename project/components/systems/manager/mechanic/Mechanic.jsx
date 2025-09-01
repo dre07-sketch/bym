@@ -16,7 +16,10 @@ import {
   Timer,
   Phone,
   Mail,
-  MapPin
+  MapPin,
+  Package,
+  Truck,
+  Settings
 } from 'lucide-react';
 
 class Mechanic extends React.Component {
@@ -30,12 +33,15 @@ class Mechanic extends React.Component {
       mechanics: [],
       loading: true,
       error: null,
-      activeTab: 'Details'
+      activeTab: 'Details',
+      activeMechanicTab: 'current'
     };
   }
+
   componentDidMount() {
     this.fetchMechanics();
   }
+
   fetchMechanics = () => {
     fetch('http://localhost:5001/api/mechanic/mechanics-fetch')
       .then((res) => {
@@ -50,7 +56,6 @@ class Mechanic extends React.Component {
           specialty: mech.specialty || 'General Mechanic',
           experience: `${mech.experience || 0} years of service`,
           rating: parseFloat((4.5 + Math.random() * 0.5).toFixed(1)),
-          // Placeholder — will be replaced by real count
           completedJobs: 0,
           avatar: mech.image_url
             ? `http://localhost:5001/uploads/${encodeURIComponent(mech.image_url)}`
@@ -69,40 +74,43 @@ class Mechanic extends React.Component {
           workHistory: [],
           certifications: ['ASE Certified', 'State Licensed']
         }));
+        
         const promises = mappedMechanics.map(async (mechanic) => {
           try {
             // 1. Fetch Current Assignments: status = 'in progress', 'ready for inspection'
             const currentRes = await fetch(
-              `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name)}/tickets`
+              `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/tickets`
             );
             const currentTickets = currentRes.ok ? await currentRes.json() : [];
-            const formattedCurrent = currentTickets.map((ticket) => {
-              const firstLog = ticket.progressLogs?.[0];
-              const dailyProgress = firstLog
-                ? `${firstLog.description} (Updated: ${new Date(firstLog.created_at).toLocaleString()})`
-                : 'No updates yet.';
-              return {
-                id: ticket.id,
-                ticketNumber: ticket.ticket_number,
-                vehicle: ticket.vehicle_info,
-                customerName: ticket.customer_name,
-                status: ticket.status,
-                priority: ticket.priority,
-                issue: ticket.title,
-                description: ticket.description,
-                technician: ticket.mechanic_assign,
-                inspector: ticket.inspector_assign || 'Not Assigned',
-                disassembledParts: Array.isArray(ticket.disassembledParts) ? ticket.disassembledParts : [],
-                progressLogs: Array.isArray(ticket.progressLogs) ? ticket.progressLogs : [],
-                inspections: Array.isArray(ticket.inspections) ? ticket.inspections : [],
-                toolsUsed: [],
-                partsOrdered: [],
-                dailyProgress
-              };
-            });
-            // 2. Fetch Work History: status = 'awaiting inspection'
+            const formattedCurrent = currentTickets.map((ticket) => ({
+              id: ticket.id,
+              ticketNumber: ticket.ticket_number,
+              vehicle: ticket.vehicle_info,
+              customerName: ticket.customer_name,
+              status: ticket.status,
+              priority: ticket.priority,
+              issue: ticket.title,
+              description: ticket.description,
+              technician: ticket.mechanic_assign,
+              inspector: ticket.inspector_assign || 'Not Assigned',
+              disassembledParts: Array.isArray(ticket.disassembledParts) ? ticket.disassembledParts : [],
+              progressLogs: Array.isArray(ticket.progressLogs) ? ticket.progressLogs : [],
+              inspections: Array.isArray(ticket.inspections) ? ticket.inspections : [],
+              orderedParts: Array.isArray(ticket.orderedParts) ? ticket.orderedParts : [],
+              outsourceStock: Array.isArray(ticket.outsourceStock) ? ticket.outsourceStock : [],
+              toolAssignments: Array.isArray(ticket.toolAssignments) ? ticket.toolAssignments : [],
+              toolsUsed: [],
+              partsOrdered: [],
+              startDate: ticket.created_at,
+              estimatedCompletion: ticket.estimated_completion_date,
+              dailyProgress: ticket.progressLogs?.[0]
+                ? `${ticket.progressLogs[0].description} (Updated: ${new Date(ticket.progressLogs[0].created_at).toLocaleString()})`
+                : 'No updates yet.'
+            }));
+            
+            // 2. Fetch Work History: status = 'awaiting inspection', 'ready for inspection', etc.
             const historyRes = await fetch(
-              `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name)}/tickets-history`
+              `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/tickets-history`
             );
             const historyTickets = historyRes.ok ? await historyRes.json() : [];
             const formattedHistory = historyTickets.map((ticket) => ({
@@ -119,20 +127,24 @@ class Mechanic extends React.Component {
               disassembledParts: Array.isArray(ticket.disassembledParts) ? ticket.disassembledParts : [],
               progressLogs: Array.isArray(ticket.progressLogs) ? ticket.progressLogs : [],
               inspections: Array.isArray(ticket.inspections) ? ticket.inspections : [],
+              orderedParts: Array.isArray(ticket.orderedParts) ? ticket.orderedParts : [],
+              outsourceStock: Array.isArray(ticket.outsourceStock) ? ticket.outsourceStock : [],
+              toolAssignments: Array.isArray(ticket.toolAssignments) ? ticket.toolAssignments : [],
               toolsUsed: [],
               partsOrdered: [],
-              date: ticket.completion_date || ticket.updated_at,
-              rating: (Math.random() * 0.5 + 4.5).toFixed(1), // Simulated
+              date: ticket.completion_date || ticket.updated_at || new Date().toISOString(),
+              rating: (Math.random() * 0.5 + 4.5).toFixed(1),
               service: ticket.title,
               completionTime: `${Math.floor(Math.random() * 5) + 1} hrs`,
               customerFeedback: "Vehicle repaired successfully. Excellent service.",
               dailyProgress: 'Job completed and awaiting inspection.'
             }));
-            // 3. 🔥 Fetch Real Completed Jobs Count: status = 'awaiting bill'
+            
+            // 3. Fetch Real Completed Jobs Count: status = 'awaiting bill'
             let completedJobs = 0;
             try {
               const countRes = await fetch(
-                `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name)}/awaiting-bill-count`
+                `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/awaiting-bill-count`
               );
               if (countRes.ok) {
                 const countData = await countRes.json();
@@ -140,14 +152,14 @@ class Mechanic extends React.Component {
               }
             } catch (err) {
               console.warn(`Failed to fetch awaiting-bill-count for ${mechanic.name}`, err);
-              // Fallback: use previous placeholder logic if API fails
-              completedJobs = Math.floor(Math.random() * 50) + 10; // more realistic fake
+              completedJobs = Math.floor(Math.random() * 50) + 10;
             }
+            
             return {
               ...mechanic,
               currentAssignments: formattedCurrent,
               workHistory: formattedHistory,
-              completedJobs // ← Real count from DB
+              completedJobs
             };
           } catch (err) {
             console.warn(`Error loading data for ${mechanic.name}:`, err);
@@ -159,8 +171,10 @@ class Mechanic extends React.Component {
             };
           }
         });
+        
         Promise.all(promises)
           .then((updatedMechanics) => {
+            console.log('Updated mechanics with history:', updatedMechanics);
             this.setState({
               mechanics: updatedMechanics,
               loading: false
@@ -184,15 +198,22 @@ class Mechanic extends React.Component {
         });
       });
   };
+
   handleSearch = (e) => {
     this.setState({ searchTerm: e.target.value });
   };
+
   handleMechanicSelect = (mechanic) => {
-    this.setState({ selectedMechanic: mechanic });
+    this.setState({ 
+      selectedMechanic: mechanic,
+      activeMechanicTab: 'current'
+    });
   };
+
   handleCloseModal = () => {
     this.setState({ selectedMechanic: null });
   };
+
   getFilteredMechanics = () => {
     const { searchTerm, mechanics } = this.state;
     return mechanics.filter(
@@ -201,32 +222,41 @@ class Mechanic extends React.Component {
         mechanic.specialty.toLowerCase().includes(searchTerm.toLowerCase())
     );
   };
+
   handleJobClick = (job, type) => {
-    this.setState({ selectedTicket: job }); // Reuse ticket modal for both
+    this.setState({ 
+      selectedTicket: job,
+      activeTab: 'Details'
+    });
   };
+
   handleCloseJobModal = (e) => {
     e.stopPropagation();
     this.setState({ selectedJob: null });
   };
+
   handleCloseTicketModal = (e) => {
     e.stopPropagation();
     this.setState({ selectedTicket: null });
   };
+
   // --- MODALS ---
   renderJobModal() {
     const { selectedJob } = this.state;
     if (!selectedJob) return null;
     const isCurrentAssignment = selectedJob.type === 'current';
+    
     return (
       <div
         className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
         onClick={this.handleCloseJobModal}
       >
         <div
-          className="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden animate-scale-up"
+          className="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden flex flex-col animate-scale-up"
+          style={{ maxHeight: '90vh' }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="bg-customBlue p-4 text-white flex justify-between items-center">
+          <div className="bg-customBlue p-4 text-white flex justify-between items-center flex-shrink-0">
             <div className="flex items-center gap-2">
               {isCurrentAssignment ? <Wrench size={20} /> : <FileText size={20} />}
               <h3 className="text-xl font-semibold">
@@ -240,7 +270,7 @@ class Mechanic extends React.Component {
               <X size={20} />
             </button>
           </div>
-          <div className="p-6">
+          <div className="p-6 overflow-y-auto flex-grow">
             <div className="space-y-4">
               <div className="flex justify-between items-start">
                 <div>
@@ -252,17 +282,22 @@ class Mechanic extends React.Component {
                   <span className="text-sm font-medium text-blue-800">{selectedJob.ticketNumber}</span>
                 </div>
               </div>
+              
               {isCurrentAssignment ? (
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-600">Start Date</p>
-                      <p className="font-medium">{new Date(selectedJob.startDate).toLocaleDateString()}</p>
+                      <p className="font-medium">
+                        {selectedJob.startDate ? new Date(selectedJob.startDate).toLocaleDateString() : 'Not set'}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Estimated Completion</p>
                       <p className="font-medium">
-                        {new Date(selectedJob.estimatedCompletion).toLocaleDateString()}
+                        {selectedJob.estimatedCompletion 
+                          ? new Date(selectedJob.estimatedCompletion).toLocaleDateString() 
+                          : 'Not set'}
                       </p>
                     </div>
                   </div>
@@ -271,7 +306,9 @@ class Mechanic extends React.Component {
                 <div className="bg-gray-50 p-4 rounded-lg grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Completion Date</p>
-                    <p className="font-medium">{new Date(selectedJob.date).toLocaleDateString()}</p>
+                    <p className="font-medium">
+                      {selectedJob.date ? new Date(selectedJob.date).toLocaleDateString() : 'Not available'}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Duration</p>
@@ -289,20 +326,27 @@ class Mechanic extends React.Component {
                   </div>
                 </div>
               )}
+              
               <div>
                 <h5 className="font-medium mb-2">Service Details</h5>
-                <p className="text-gray-700">{selectedJob.details}</p>
+                <p className="text-gray-700">{selectedJob.description || 'No details available'}</p>
               </div>
+              
               <div>
                 <h5 className="font-medium mb-2">Parts Used</h5>
                 <ul className="list-disc list-inside space-y-1">
-                  {selectedJob.parts.map((part, index) => (
-                    <li key={index} className="text-gray-700">
-                      {part}
-                    </li>
-                  ))}
+                  {selectedJob.parts && selectedJob.parts.length > 0 ? (
+                    selectedJob.parts.map((part, index) => (
+                      <li key={index} className="text-gray-700">
+                        {part}
+                      </li>
+                    ))
+                  ) : (
+                    <li className="text-gray-500">No parts recorded</li>
+                  )}
                 </ul>
               </div>
+              
               {isCurrentAssignment && selectedJob.notes && (
                 <div>
                   <h5 className="font-medium mb-2">Notes</h5>
@@ -315,21 +359,24 @@ class Mechanic extends React.Component {
       </div>
     );
   }
+
   renderTicketModal() {
     const { selectedTicket } = this.state;
     if (!selectedTicket) return null;
     const activeTab = this.state.activeTab;
+    
     return (
       <div
         className="fixed inset-0 z-[70] flex items-center justify-center text-black bg-black/60 backdrop-blur-sm p-4"
         onClick={this.handleCloseTicketModal}
       >
         <div
-          className="bg-white w-full max-w-5xl rounded-xl shadow-2xl overflow-hidden animate-scale-up"
+          className="bg-white w-full max-w-5xl rounded-xl shadow-2xl overflow-hidden flex flex-col animate-scale-up"
+          style={{ maxHeight: '90vh' }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="bg-purple-800 text-white p-5 flex justify-between items-start">
+          <div className="bg-custom-gradient text-white p-5 flex justify-between items-start flex-shrink-0">
             <div>
               <h3 className="text-xl font-bold">{selectedTicket.vehicle}</h3>
               <p className="text-sm text-purple-200">Ticket #{selectedTicket.ticketNumber}</p>
@@ -341,18 +388,22 @@ class Mechanic extends React.Component {
               <X size={20} />
             </button>
           </div>
+          
           {/* Tabs */}
-          <div className="flex border-b border-gray-200 px-6 py-3">
+          <div className="flex border-b border-gray-200 px-6 py-3 flex-shrink-0 overflow-x-auto">
             {[
               { id: 'Details', label: 'Details', icon: <FileText size={14} /> },
               { id: 'Disassembled', label: 'Disassembled', icon: <PenTool size={14} /> },
               { id: 'Progress', label: 'Progress', icon: <Timer size={14} /> },
-              { id: 'Inspections', label: 'Inspections', icon: <ThumbsUp size={14} /> }
+              { id: 'Inspections', label: 'Inspections', icon: <ThumbsUp size={14} /> },
+              { id: 'OrderedParts', label: 'Ordered Parts', icon: <Package size={14} /> },
+              { id: 'OutsourceParts', label: 'Outsource Parts', icon: <Truck size={14} /> },
+              { id: 'Tools', label: 'Tools', icon: <Settings size={14} /> }
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => this.setState({ activeTab: tab.id })}
-                className={`px-4 py-2 text-sm font-medium flex items-center gap-1 border-b-2 transition-colors ${
+                className={`px-4 py-2 text-sm font-medium flex items-center gap-1 border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'text-blue-600 border-blue-600'
                     : 'text-gray-500 hover:text-gray-700 border-transparent'
@@ -363,8 +414,9 @@ class Mechanic extends React.Component {
               </button>
             ))}
           </div>
+          
           {/* Content */}
-          <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+          <div className="p-6 space-y-6 overflow-y-auto flex-grow">
             {activeTab === 'Details' && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left Column */}
@@ -428,6 +480,7 @@ class Mechanic extends React.Component {
                     <p className="text-gray-700">{selectedTicket.inspector}</p>
                   </div>
                 </div>
+                
                 {/* Right Column */}
                 <div className="lg:col-span-2 space-y-6">
                   <div className="bg-gray-50 p-4 rounded-lg">
@@ -440,37 +493,14 @@ class Mechanic extends React.Component {
                       <p className="text-gray-700 mt-1">{selectedTicket.description}</p>
                     </div>
                   </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="font-semibold mb-2">Tools Used</h4>
-                    <ul className="list-disc list-inside space-y-1">
-                      {selectedTicket.toolsUsed.length > 0 ? (
-                        selectedTicket.toolsUsed.map((tool, index) => (
-                          <li key={index} className="text-gray-700">{tool}</li>
-                        ))
-                      ) : (
-                        <li className="text-gray-500">No tools recorded</li>
-                      )}
-                    </ul>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="font-semibold mb-2">Parts Ordered</h4>
-                    <ul className="list-disc list-inside space-y-1">
-                      {selectedTicket.partsOrdered.length > 0 ? (
-                        selectedTicket.partsOrdered.map((part, index) => (
-                          <li key={index} className="text-gray-700">{part}</li>
-                        ))
-                      ) : (
-                        <li className="text-gray-500">No parts ordered</li>
-                      )}
-                    </ul>
-                  </div>
                 </div>
               </div>
             )}
+            
             {activeTab === 'Disassembled' && (
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-semibold mb-4">Disassembled Parts</h4>
-                {selectedTicket.disassembledParts.length > 0 ? (
+                {selectedTicket.disassembledParts && selectedTicket.disassembledParts.length > 0 ? (
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b">
@@ -513,7 +543,7 @@ class Mechanic extends React.Component {
                           </td>
                           <td>{part.notes || '-'}</td>
                           <td className="text-gray-500 text-xs">
-                            {new Date(part.logged_at).toLocaleString()}
+                            {part.logged_at ? new Date(part.logged_at).toLocaleString() : 'N/A'}
                           </td>
                         </tr>
                       ))}
@@ -524,18 +554,19 @@ class Mechanic extends React.Component {
                 )}
               </div>
             )}
+            
             {activeTab === 'Progress' && (
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-semibold mb-4">Progress Logs</h4>
-                {selectedTicket.progressLogs.length > 0 ? (
+                {selectedTicket.progressLogs && selectedTicket.progressLogs.length > 0 ? (
                   <div className="space-y-4">
                     {selectedTicket.progressLogs.map((log, idx) => (
                       <div key={idx} className="border-l-4 border-blue-400 pl-4 py-2 bg-white rounded shadow-sm">
                         <p className="text-sm font-medium">
-                          {new Date(log.created_at).toLocaleString()}
+                          {log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A'}
                         </p>
-                        <p><strong>Status:</strong> {log.status}</p>
-                        <p><strong>Description:</strong> {log.description}</p>
+                        <p><strong>Status:</strong> {log.status || 'N/A'}</p>
+                        <p><strong>Description:</strong> {log.description || 'No description'}</p>
                       </div>
                     ))}
                   </div>
@@ -544,20 +575,23 @@ class Mechanic extends React.Component {
                 )}
               </div>
             )}
+            
             {activeTab === 'Inspections' && (
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-semibold mb-4">Inspection Records</h4>
-                {selectedTicket.inspections.length > 0 ? (
+                {selectedTicket.inspections && selectedTicket.inspections.length > 0 ? (
                   <div className="space-y-4">
                     {selectedTicket.inspections.map((insp, idx) => (
                       <div key={idx} className="border-l-4 border-green-400 pl-4 py-2 bg-white rounded shadow-sm">
                         <p className="text-sm font-medium">
-                          {new Date(insp.inspection_date || insp.created_at).toLocaleString()}
+                          {insp.inspection_date || insp.created_at 
+                            ? new Date(insp.inspection_date || insp.created_at).toLocaleString() 
+                            : 'N/A'}
                         </p>
-                        <p><strong>Status:</strong> {insp.inspection_status}</p>
+                        <p><strong>Status:</strong> {insp.inspection_status || 'N/A'}</p>
                         <p><strong>Main Issue Resolved:</strong> {insp.main_issue_resolved ? 'Yes' : 'No'}</p>
                         <p><strong>Reassembly Verified:</strong> {insp.reassembly_verified ? 'Yes' : 'No'}</p>
-                        <p><strong>Condition:</strong> {insp.general_condition}</p>
+                        <p><strong>Condition:</strong> {insp.general_condition || 'N/A'}</p>
                         {insp.notes && <p><strong>Notes:</strong> {insp.notes}</p>}
                       </div>
                     ))}
@@ -567,11 +601,212 @@ class Mechanic extends React.Component {
                 )}
               </div>
             )}
+            
+            {activeTab === 'OrderedParts' && (
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-semibold mb-4">Ordered Parts</h4>
+                {selectedTicket.orderedParts && selectedTicket.orderedParts.length > 0 ? (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left pb-2">Name</th>
+                        <th className="text-left pb-2">Category</th>
+                        <th className="text-left pb-2">SKU</th>
+                        <th className="text-left pb-2">Price</th>
+                        <th className="text-left pb-2">Quantity</th>
+                        <th className="text-left pb-2">Status</th>
+                        <th className="text-left pb-2">Ordered At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedTicket.orderedParts.map((part, idx) => (
+                        <tr key={idx} className="border-b">
+                          <td className="py-2">{part.name}</td>
+                          <td>{part.category}</td>
+                          <td>{part.sku}</td>
+                          <td>${part.price}</td>
+                          <td>{part.quantity}</td>
+                          <td>
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              part.status === 'ordered' ? 'bg-yellow-100 text-yellow-800' :
+                              part.status === 'received' ? 'bg-green-100 text-green-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {part.status}
+                            </span>
+                          </td>
+                          <td className="text-gray-500 text-xs">
+                            {part.ordered_at ? new Date(part.ordered_at).toLocaleDateString() : 'N/A'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-gray-500">No ordered parts recorded.</p>
+                )}
+              </div>
+            )}
+            
+            {activeTab === 'OutsourceParts' && (
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-semibold mb-4">Outsource Parts</h4>
+                {selectedTicket.outsourceStock && selectedTicket.outsourceStock.length > 0 ? (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left pb-2">Tool Name</th>
+                        <th className="text-left pb-2">Assigned Quantity</th>
+                        <th className="text-left pb-2">Assigned By</th>
+                        <th className="text-left pb-2">Status</th>
+                        <th className="text-left pb-2">Assigned At</th>
+                        <th className="text-left pb-2">Returned At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedTicket.outsourceStock.map((part, idx) => (
+                        <tr key={idx} className="border-b">
+                          <td className="py-2">{part.name || part.tool_name}</td>
+                          <td>{part.quantity || part.assigned_quantity}</td>
+                          <td>{part.assigned_by || 'N/A'}</td>
+                          <td>
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              part.status === 'assigned' ? 'bg-yellow-100 text-yellow-800' :
+                              part.status === 'returned' ? 'bg-green-100 text-green-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {part.status}
+                            </span>
+                          </td>
+                          <td className="text-gray-500 text-xs">
+                            {part.requested_at || part.assigned_at 
+                              ? new Date(part.requested_at || part.assigned_at).toLocaleDateString() 
+                              : 'N/A'}
+                          </td>
+                          <td className="text-gray-500 text-xs">
+                            {part.received_at || part.returned_at 
+                              ? new Date(part.received_at || part.returned_at).toLocaleDateString() 
+                              : 'N/A'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-gray-500">No outsource parts recorded.</p>
+                )}
+              </div>
+            )}
+            
+            {activeTab === 'Tools' && (
+              <div className="space-y-6">
+                {/* Tool Assignments */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="font-semibold mb-4 flex items-center gap-2">
+                    <Wrench className="text-blue-600" size={18} />
+                    Tool Assignments
+                  </h4>
+                  {selectedTicket.toolAssignments && selectedTicket.toolAssignments.length > 0 ? (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left pb-2">Tool Name</th>
+                          <th className="text-left pb-2">Assigned Quantity</th>
+                          <th className="text-left pb-2">Assigned By</th>
+                          <th className="text-left pb-2">Status</th>
+                          <th className="text-left pb-2">Assigned At</th>
+                          <th className="text-left pb-2">Returned At</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedTicket.toolAssignments.map((tool, idx) => (
+                          <tr key={idx} className="border-b">
+                            <td className="py-2">{tool.tool_name}</td>
+                            <td>{tool.assigned_quantity}</td>
+                            <td>{tool.assigned_by}</td>
+                            <td>
+                              <span className={`px-2 py-1 rounded text-xs ${
+                                tool.status === 'assigned' ? 'bg-yellow-100 text-yellow-800' :
+                                tool.status === 'returned' ? 'bg-green-100 text-green-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {tool.status}
+                              </span>
+                            </td>
+                            <td className="text-gray-500 text-xs">
+                              {tool.assigned_at ? new Date(tool.assigned_at).toLocaleDateString() : 'N/A'}
+                            </td>
+                            <td className="text-gray-500 text-xs">
+                              {tool.returned_at ? new Date(tool.returned_at).toLocaleDateString() : 'N/A'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="text-gray-500">No tool assignments recorded.</p>
+                  )}
+                </div>
+                
+                {/* Outsource Stock */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="font-semibold mb-4 flex items-center gap-2">
+                    <Truck className="text-blue-600" size={18} />
+                    Outsource Stock
+                  </h4>
+                  {selectedTicket.outsourceStock && selectedTicket.outsourceStock.length > 0 ? (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left pb-2">Tool Name</th>
+                          <th className="text-left pb-2">Assigned Quantity</th>
+                          <th className="text-left pb-2">Assigned By</th>
+                          <th className="text-left pb-2">Status</th>
+                          <th className="text-left pb-2">Assigned At</th>
+                          <th className="text-left pb-2">Returned At</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedTicket.outsourceStock.map((tool, idx) => (
+                          <tr key={idx} className="border-b">
+                            <td className="py-2">{tool.name || tool.tool_name}</td>
+                            <td>{tool.quantity || tool.assigned_quantity}</td>
+                            <td>{tool.assigned_by || 'N/A'}</td>
+                            <td>
+                              <span className={`px-2 py-1 rounded text-xs ${
+                                tool.status === 'assigned' ? 'bg-yellow-100 text-yellow-800' :
+                                tool.status === 'returned' ? 'bg-green-100 text-green-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {tool.status}
+                              </span>
+                            </td>
+                            <td className="text-gray-500 text-xs">
+                              {tool.requested_at || tool.assigned_at 
+                                ? new Date(tool.requested_at || tool.assigned_at).toLocaleDateString() 
+                                : 'N/A'}
+                            </td>
+                            <td className="text-gray-500 text-xs">
+                              {tool.received_at || tool.returned_at 
+                                ? new Date(tool.received_at || tool.returned_at).toLocaleDateString() 
+                                : 'N/A'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="text-gray-500">No outsource stock recorded.</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
     );
   }
+
   render() {
     const { selectedMechanic, loading, error } = this.state;
     const filteredMechanics = this.getFilteredMechanics();
@@ -653,10 +888,6 @@ class Mechanic extends React.Component {
                         
                         <div className="flex items-center gap-3">
                           <div className="flex items-center">
-                            <Star className="text-yellow-400 mr-1" size={16} fill="currentColor" />
-                            <span className="text-sm font-medium text-gray-900">{mechanic.rating}</span>
-                          </div>
-                          <div className="flex items-center">
                             <Clock className="text-gray-400 mr-1" size={16} />
                             <span className="text-sm text-gray-600">{mechanic.experience}</span>
                           </div>
@@ -736,8 +967,8 @@ class Mechanic extends React.Component {
         {/* Mechanic Detail Modal */}
         {selectedMechanic && (
           <div className="fixed inset-0 z-50 text-black flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden animate-fade-up">
-              <div className="relative bg-customBlue p-6 text-white">
+            <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-fade-up" style={{ maxHeight: '90vh' }}>
+              <div className="relative bg-customBlue p-6 text-white flex-shrink-0">
                 <button
                   onClick={this.handleCloseModal}
                   className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-full transition-colors"
@@ -754,49 +985,117 @@ class Mechanic extends React.Component {
                     <h2 className="text-2xl font-bold">{selectedMechanic.name}</h2>
                     <p className="text-blue-100">{selectedMechanic.specialty}</p>
                     <div className="flex items-center mt-2">
-                      <Star className="text-yellow-300 mr-1" size={16} fill="currentColor" />
-                      <span className="font-medium">{selectedMechanic.rating}</span>
-                      <span className="mx-2">•</span>
+                   
+                    
                       <span className="text-blue-100">{selectedMechanic.experience}</span>
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+              
+              {/* Tabs for mechanic detail modal */}
+              <div className="flex border-b border-gray-200 px-6 py-3 flex-shrink-0">
+                {[
+                  { id: 'current', label: 'Current Assignments', icon: <Wrench size={14} /> },
+                  { id: 'history', label: 'Work History', icon: <Calendar size={14} /> }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => this.setState({ activeMechanicTab: tab.id })}
+                    className={`px-4 py-2 text-sm font-medium flex items-center gap-1 border-b-2 transition-colors ${
+                      this.state.activeMechanicTab === tab.id
+                        ? 'text-blue-600 border-blue-600'
+                        : 'text-gray-500 hover:text-gray-700 border-transparent'
+                    }`}
+                  >
+                    {tab.icon}
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              
+              <div className="p-6 overflow-y-auto flex-grow">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Wrench className="text-blue-600" size={20} />
-                      Current Assignments
-                    </h3>
-                    <div className="space-y-4">
-                      {selectedMechanic.currentAssignments.length > 0 ? (
-                        selectedMechanic.currentAssignments.map((assignment) => (
-                          <div
-                            key={assignment.id}
-                            className="bg-white p-3 rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              this.handleJobClick(assignment, 'current');
-                            }}
-                          >
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <h4 className="font-medium">{assignment.vehicle}</h4>
-                                <p className="text-sm text-gray-600">{assignment.issue}</p>
-                                <div className="flex items-center gap-1 mt-1">
-                                  <Ticket className="text-gray-400" size={14} />
-                                  <span className="text-xs text-gray-500">{assignment.ticketNumber}</span>
+                  {/* Current Assignments or Work History based on active tab */}
+                  {this.state.activeMechanicTab === 'current' && (
+                    <div className="col-span-full bg-gray-50 rounded-xl p-4">
+                      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <Wrench className="text-blue-600" size={20} />
+                        Current Assignments
+                      </h3>
+                      <div className="space-y-4">
+                        {selectedMechanic.currentAssignments && selectedMechanic.currentAssignments.length > 0 ? (
+                          selectedMechanic.currentAssignments.map((assignment) => (
+                            <div
+                              key={assignment.id}
+                              className="bg-white p-3 rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                this.handleJobClick(assignment, 'current');
+                              }}
+                            >
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <h4 className="font-medium">{assignment.vehicle}</h4>
+                                  <p className="text-sm text-gray-600">{assignment.issue}</p>
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <Ticket className="text-gray-400" size={14} />
+                                    <span className="text-xs text-gray-500">{assignment.ticketNumber}</span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-gray-500 text-sm">No active assignments</p>
-                      )}
+                          ))
+                        ) : (
+                          <p className="text-gray-500 text-sm">No active assignments</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  
+                  {this.state.activeMechanicTab === 'history' && (
+                    <div className="col-span-full bg-gray-50 rounded-xl p-4">
+                      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <Calendar className="text-blue-600" size={20} />
+                        Recent Work History
+                      </h3>
+                      <div className="space-y-3">
+                        {selectedMechanic.workHistory && selectedMechanic.workHistory.length > 0 ? (
+                          selectedMechanic.workHistory.map((work) => (
+                            <div
+                              key={work.id}
+                              className="bg-white p-4 rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                this.handleJobClick(work, 'history');
+                              }}
+                            >
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <p className="font-medium">{work.vehicle || 'Vehicle info not available'}</p>
+                                  <p className="text-sm text-gray-600">{work.service || 'Service not specified'}</p>
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <Ticket className="text-gray-400" size={14} />
+                                    <span className="text-xs text-gray-500">{work.ticketNumber || 'N/A'}</span>
+                                  </div>
+                                  <p className="text-sm text-gray-500 mt-1">
+                                    {work.date ? new Date(work.date).toLocaleDateString() : 'Date not available'}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Star className="text-yellow-400" size={16} fill="currentColor" />
+                                  <span className="font-medium">{work.rating || 'N/A'}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-gray-500 text-sm">No recent work history available</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="space-y-6">
                     <div className="bg-gray-50 rounded-xl p-4">
                       <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -815,47 +1114,8 @@ class Mechanic extends React.Component {
                       </div>
                     </div>
                   </div>
-                  <div className="col-span-full bg-gray-50 rounded-xl p-4">
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Calendar className="text-blue-600" size={20} />
-                      Recent Work History
-                    </h3>
-                    <div className="space-y-3">
-                      {selectedMechanic.workHistory.length > 0 ? (
-                        selectedMechanic.workHistory.map((work) => (
-                          <div
-                            key={work.id}
-                            className="bg-white p-4 rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              this.handleJobClick(work, 'history');
-                            }}
-                          >
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <p className="font-medium">{work.vehicle}</p>
-                                <p className="text-sm text-gray-600">{work.service}</p>
-                                <div className="flex items-center gap-1 mt-1">
-                                  <Ticket className="text-gray-400" size={14} />
-                                  <span className="text-xs text-gray-500">{work.ticketNumber}</span>
-                                </div>
-                                <p className="text-sm text-gray-500 mt-1">
-                                  {new Date(work.date).toLocaleDateString()}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Star className="text-yellow-400" size={16} fill="currentColor" />
-                                <span className="font-medium">{work.rating}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-gray-500 text-sm">No recent work history available</p>
-                      )}
-                    </div>
-                  </div>
                 </div>
+                
                 <div className="mt-6 grid grid-cols-2 gap-4">
                   <div className="bg-gray-50 rounded-xl p-4 text-center">
                     <ThumbsUp className="mx-auto text-blue-600 mb-2" size={24} />

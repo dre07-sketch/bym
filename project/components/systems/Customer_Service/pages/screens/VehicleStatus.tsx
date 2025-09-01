@@ -138,8 +138,8 @@ interface Vehicle {
 
 const VehicleStatus = () => {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
-  const [activeTab, setActiveTab] = useState<'details' | 'parts' | 'logs' | 'inspections' | 'bill' | 'mechanics' | 'tools' | 'ordered' | 'stock'>('details');
-  const [orderedPartsTab, setOrderedPartsTab] = useState<'ordered' | 'stock'>('ordered'); // New nested tab state
+  const [activeTab, setActiveTab] = useState<'details' | 'parts' | 'logs' | 'inspections' | 'bill' | 'tools'>('details');
+  const [orderedPartsTab, setOrderedPartsTab] = useState<'ordered' | 'stock'>('ordered');
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -148,7 +148,7 @@ const VehicleStatus = () => {
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // Status and Priority styling (unchanged)
+  // Status and Priority styling
   const statusColors = {
     pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     'in-progress': 'bg-blue-100 text-blue-800 border-blue-200',
@@ -178,7 +178,7 @@ const VehicleStatus = () => {
     paid: 'bg-green-100 text-green-800',
   };
 
-  // Helper functions (unchanged)
+  // Helper functions
   const formatDateTime = (dateStr: string, timeStr: string): string => {
     try {
       const date = new Date(dateStr);
@@ -249,7 +249,7 @@ const VehicleStatus = () => {
     );
   };
 
-  // Fetch vehicles from backend (unchanged)
+  // Fetch vehicles from backend
   const fetchVehicles = async () => {
     try {
       const response = await fetch('http://localhost:5001/api/tickets/summary');
@@ -417,7 +417,7 @@ const VehicleStatus = () => {
     fetchVehicles();
   }, []);
 
-  // Filter vehicles (unchanged)
+  // Filter vehicles
   const filteredVehicles = vehicles.filter((vehicle) => {
     const statusMatch = statusFilter === 'all' || vehicle.status === statusFilter;
     const priorityMatch = priorityFilter === 'all' || vehicle.priority === priorityFilter;
@@ -434,7 +434,7 @@ const VehicleStatus = () => {
     return statusMatch && priorityMatch && searchMatch;
   });
 
-  // Loading skeleton (unchanged)
+  // Loading skeleton
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -455,7 +455,7 @@ const VehicleStatus = () => {
     );
   }
 
-  // Error state with retry (unchanged)
+  // Error state with retry
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -478,7 +478,7 @@ const VehicleStatus = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header (unchanged) */}
+      {/* Header */}
       <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
@@ -500,7 +500,7 @@ const VehicleStatus = () => {
         </div>
       </div>
 
-      {/* Filters (unchanged) */}
+      {/* Filters */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex flex-wrap gap-4 items-center justify-between">
@@ -545,7 +545,7 @@ const VehicleStatus = () => {
         </div>
       </div>
 
-      {/* Vehicle List (unchanged) */}
+      {/* Vehicle List */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 font-semibold text-gray-700 grid grid-cols-12 gap-4">
@@ -620,163 +620,179 @@ const VehicleStatus = () => {
         </div>
       </div>
 
-      {/* Cool Detail Modal */}
+      {/* Enhanced Detail Modal - Tabs at the Top */}
       {selectedVehicle && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 overflow-y-auto backdrop-blur-sm">
-          <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl border border-gray-200 transform transition-all duration-300 scale-100 opacity-100">
-            {/* Enhanced Header */}
-            <div className="bg-custom-gradient text-white p-6 rounded-t-2xl shadow-lg">
+        <div className="fixed inset-0 bg-black bg-opacity-70 text-black flex items-center justify-center p-4 z-50 overflow-y-auto backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl border border-gray-200">
+            {/* Header - Matching the Image */}
+            <div className="bg-white p-6 rounded-t-2xl border-b border-gray-200">
               <div className="flex justify-between items-start">
                 <div className="flex items-center space-x-4">
-                  <div className="bg-white bg-opacity-20 p-3 rounded-full">
-                    <Car className="w-8 h-8 text-white" />
+                  <div className="bg-blue-100 p-3 rounded-lg">
+                    <Car className="w-8 h-8 text-blue-600" />
                   </div>
                   <div>
-                    <h2 className="text-3xl font-bold tracking-tight">
+                    <h2 className="text-2xl font-bold text-gray-800">
                       {selectedVehicle.year} {selectedVehicle.make} {selectedVehicle.model}
                     </h2>
-                    <p className="text-blue-100 text-lg">{selectedVehicle.licensePlate}</p>
+                    <p className="text-gray-600">{selectedVehicle.licensePlate}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setSelectedVehicle(null)}
-                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full transition-all duration-200 transform hover:rotate-90"
+                  className="p-2 hover:bg-gray-100 rounded-full transition-all duration-200"
                 >
-                  <X className="w-6 h-6 text-white" />
+                  <X className="w-6 h-6 text-gray-500" />
                 </button>
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left: Summary Info with Enhanced Cards */}
+            {/* Tab Navigation - At the Top */}
+            <div className="border-b border-gray-200 bg-gray-50">
+              <div className="flex">
+                {[
+                  { key: 'details', label: 'Overview', icon: FileText },
+                  { key: 'parts', label: 'Progress Logs', icon: Clock },
+                  { key: 'logs', label: 'Disassembled Parts', icon: Wrench },
+                  { key: 'inspections', label: 'Used Tools', icon: Settings },
+                  { key: 'bill', label: 'Ordered Parts', icon: ShoppingCart },
+                  { key: 'tools', label: 'Inspection', icon: PenTool },
+                ].map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setActiveTab(key as any)}
+                    className={`flex items-center space-x-2 px-4 py-3 text-sm font-medium transition-colors ${
+                      activeTab === key
+                        ? 'text-blue-600 border-b-2 border-blue-500 bg-white'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6">
+                {/* Left: Summary Info - Matching the Image */}
                 <div className="lg:col-span-1 space-y-6">
-                  <div className="bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl p-5 shadow-md hover:shadow-lg transition-shadow">
+                  {/* Customer Info Card */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
                     <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                      <div className="bg-blue-100 p-2 rounded-lg mr-3">
-                        <CheckCircle className="w-5 h-5 text-blue-600" />
-                      </div>
-                      Status
+                      <User className="w-5 h-5 mr-2 text-blue-600" />
+                      Customer Info
                     </h3>
                     <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Status</span>
-                        <span
-                          className={`text-xs px-3 py-1 rounded-full font-medium border ${statusColors[selectedVehicle.status]}`}
-                        >
-                          {selectedVehicle.status === 'in-progress'
-                            ? 'In Progress'
-                            : selectedVehicle.status === 'awaiting bill'
-                            ? 'Awaiting Bill'
-                            : selectedVehicle.status.replace('-', ' ')}
-                        </span>
+                      <div>
+                        <p className="text-sm text-gray-500">Name</p>
+                        <p className="font-medium">Alice Johnson</p>
                       </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Priority</span>
-                        <span
-                          className={`text-xs px-3 py-1 rounded-full font-medium ${priorityColors[selectedVehicle.priority]}`}
-                        >
-                          {selectedVehicle.priority.toUpperCase()}
-                        </span>
+                      <div>
+                        <p className="text-sm text-gray-500">Phone</p>
+                        <p className="font-medium">0912345678</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Email</p>
+                        <p className="font-medium">alice@example.com</p>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl p-5 shadow-md hover:shadow-lg transition-shadow">
+                  {/* Vehicle Info Card */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
                     <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                      <div className="bg-purple-100 p-2 rounded-lg mr-3">
-                        <User className="w-5 h-5 text-purple-600" />
-                      </div>
-                      Technician
+                      <Car className="w-5 h-5 mr-2 text-blue-600" />
+                      Vehicle Info
                     </h3>
-                    <p className="font-medium text-gray-800 text-lg">{selectedVehicle.technician}</p>
-                  </div>
-                  
-                  <div className="bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl p-5 shadow-md hover:shadow-lg transition-shadow">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                      <div className="bg-indigo-100 p-2 rounded-lg mr-3">
-                        <User className="w-5 h-5 text-indigo-600" />
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-sm text-gray-500">Model</p>
+                        <p className="font-medium">{selectedVehicle.year} {selectedVehicle.make} {selectedVehicle.model}</p>
                       </div>
-                      Inspector
-                    </h3>
-                    <p className="font-medium text-gray-800 text-lg">{selectedVehicle.inspector}</p>
-                  </div>
-                  
-                  <div className="bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl p-5 shadow-md hover:shadow-lg transition-shadow">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                      <div className="bg-green-100 p-2 rounded-lg mr-3">
-                        <Calendar className="w-5 h-5 text-green-600" />
+                      <div>
+                        <p className="text-sm text-gray-500">License Plate</p>
+                        <p className="font-medium">{selectedVehicle.licensePlate}</p>
                       </div>
-                      Deadlines
-                    </h3>
-                    <div className="space-y-2 text-sm text-gray-800">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Est. Completion:</span>
-                        <span className="font-medium">{formatDate(selectedVehicle.estimatedCompletion)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Final Deadline:</span>
-                        <span
-                          className={`font-medium ${
-                            new Date(selectedVehicle.finalDeadline) < new Date() &&
-                            selectedVehicle.status !== 'completed'
-                              ? 'text-red-600'
-                              : ''
-                          }`}
-                        >
-                          {formatDate(selectedVehicle.finalDeadline)}
-                        </span>
+                      <div>
+                        <p className="text-sm text-gray-500">Mileage</p>
+                        <p className="font-medium">56,741 miles</p>
                       </div>
                     </div>
+                    
+                  </div>
+                  
+                  {/* Assigned Mechanic Card */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                      <Wrench className="w-5 h-5 mr-2 text-blue-600" />
+                      Assigned Mechanic
+                    </h3>
+                    <p className="font-medium text-gray-800">{selectedVehicle.technician}</p>
+                    {selectedVehicle.outsourceMechanics.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <p className="text-sm text-gray-600 mb-1">Outsource Mechanic:</p>
+                        <p className="font-medium text-gray-800">
+                          {selectedVehicle.outsourceMechanics.map(mech => mech.mechanic_name).join(', ')}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                {/* Right: Tabs with Enhanced Design */}
+                
+                {/* Right: Tab Content */}
                 <div className="lg:col-span-2">
-                  <div className="bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-                    <div className="flex flex-wrap border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
-                      {[
-                        { key: 'details', label: 'Details', icon: FileText },
-                        { key: 'parts', label: 'Disassembled', icon: Wrench },
-                        { key: 'logs', label: 'Progress', icon: Clock },
-                        { key: 'inspections', label: 'Inspections', icon: PenTool },
-                        { key: 'bill', label: 'Bill', icon: CreditCard },
-                        { key: 'mechanics', label: 'Outsource Mechanics', icon: Users },
-                        { key: 'tools', label: 'Tool Assignments', icon: Wrench },
-                        { key: 'ordered', label: 'Ordered Parts', icon: ShoppingCart },
-                        // Removed the 'stock' tab from main tabs
-                      ].map(({ key, label, icon: Icon }) => (
-                        <button
-                          key={key}
-                          onClick={() => setActiveTab(key as any)}
-                          className={`flex items-center space-x-2 px-4 py-3 text-sm font-medium capitalize transition-all duration-200 ${
-                            activeTab === key
-                              ? 'text-blue-600 bg-white border-b-2 border-blue-600 shadow-sm'
-                              : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-                          }`}
-                        >
-                          <Icon className="w-4 h-4" />
-                          <span>{label}</span>
-                        </button>
-                      ))}
-                    </div>
+                  <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
                     <div className="p-5 text-gray-800">
-                      {/* Tab content with enhanced styling */}
+                      {/* Tab content - Matching the Image Style */}
                       {activeTab === 'details' && (
                         <div className="space-y-6">
-                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-5 rounded-xl border border-blue-100">
+                          <div className="bg-blue-50 p-5 rounded-xl border border-blue-100">
                             <p className="text-sm text-blue-700 font-medium mb-2">Issue</p>
-                            <p className="font-semibold text-gray-800 text-xl">{selectedVehicle.title}</p>
+                            <p className="font-semibold text-gray-800 text-lg">{selectedVehicle.title}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-600 font-medium mb-3">Description</p>
-                            <div className="bg-gradient-to-br from-gray-50 to-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                            <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
                               {renderDescription(selectedVehicle.description)}
                             </div>
                           </div>
                         </div>
                       )}
+                      
                       {activeTab === 'parts' && (
+                        <div className="space-y-4">
+                          <h4 className="font-semibold text-lg text-gray-800 flex items-center">
+                            <Clock className="w-5 h-5 mr-2 text-blue-600" />
+                            Progress Logs
+                          </h4>
+                          {selectedVehicle.progressLogs.length === 0 ? (
+                            <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
+                              <Clock className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                              <p className="text-gray-500">No logs recorded.</p>
+                            </div>
+                          ) : (
+                            <div className="relative">
+                              <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-blue-200"></div>
+                              <div className="space-y-6 ml-8">
+                                {selectedVehicle.progressLogs.map((log) => (
+                                  <div key={log.id} className="relative">
+                                    <div className="absolute -left-8 top-2 w-4 h-4 bg-blue-500 rounded-full border-4 border-white"></div>
+                                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                                      <div className="text-sm text-gray-500 mb-1">{formatDateTime(log.date, log.time)}</div>
+                                      <h5 className="text-base font-semibold text-gray-800">{log.status}</h5>
+                                      <p className="text-gray-600 text-sm mt-2">{log.description}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {activeTab === 'logs' && (
                         <div className="space-y-4">
                           <h4 className="font-semibold text-lg text-gray-800 flex items-center">
                             <Wrench className="w-5 h-5 mr-2 text-blue-600" />
@@ -792,7 +808,7 @@ const VehicleStatus = () => {
                               {selectedVehicle.disassembledParts.map((part) => (
                                 <div
                                   key={part.id}
-                                  className="p-4 border border-gray-200 rounded-xl bg-gradient-to-br from-white to-gray-50 shadow-sm hover:shadow-md transition-shadow"
+                                  className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm"
                                 >
                                   <div className="font-semibold text-gray-800">{part.partName}</div>
                                   <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
@@ -817,229 +833,12 @@ const VehicleStatus = () => {
                           )}
                         </div>
                       )}
-                      {activeTab === 'logs' && (
-                        <div className="space-y-4">
-                          <h4 className="font-semibold text-lg text-gray-800 flex items-center">
-                            <Clock className="w-5 h-5 mr-2 text-blue-600" />
-                            Progress Timeline
-                          </h4>
-                          {selectedVehicle.progressLogs.length === 0 ? (
-                            <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
-                              <Clock className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                              <p className="text-gray-500">No logs recorded.</p>
-                            </div>
-                          ) : (
-                            <div className="relative">
-                              <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 to-purple-400"></div>
-                              <div className="space-y-6 ml-8">
-                                {selectedVehicle.progressLogs.map((log) => (
-                                  <div key={log.id} className="relative">
-                                    <div className="absolute -left-8 top-2 w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full border-4 border-white shadow-lg"></div>
-                                    <div className="bg-gradient-to-br from-white to-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm">
-                                      <div className="text-sm text-gray-500 mb-1">{formatDateTime(log.date, log.time)}</div>
-                                      <h5 className="text-base font-semibold text-gray-800">{log.status}</h5>
-                                      <p className="text-gray-600 text-sm mt-2">{log.description}</p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      
                       {activeTab === 'inspections' && (
                         <div className="space-y-4">
                           <h4 className="font-semibold text-lg text-gray-800 flex items-center">
-                            <PenTool className="w-5 h-5 mr-2 text-blue-600" />
-                            Inspection Reports
-                          </h4>
-                          {selectedVehicle.inspections.length === 0 ? (
-                            <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
-                              <PenTool className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                              <p className="text-gray-500">No inspections conducted yet.</p>
-                            </div>
-                          ) : (
-                            <div className="space-y-4">
-                              {selectedVehicle.inspections.map((insp) => (
-                                <div
-                                  key={insp.id}
-                                  className="p-5 border border-gray-200 rounded-xl bg-gradient-to-br from-white to-gray-50 shadow-sm"
-                                >
-                                  <div className="flex justify-between items-start mb-3">
-                                    <span
-                                      className={`text-xs px-3 py-1 rounded-full font-medium ${
-                                        insp.inspection_status === 'passed'
-                                          ? 'bg-green-100 text-green-800'
-                                          : 'bg-red-100 text-red-800'
-                                      }`}
-                                    >
-                                      {insp.inspection_status.toUpperCase()}
-                                    </span>
-                                    <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
-                                      {formatDate(insp.inspection_date)}
-                                    </span>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-3 text-sm">
-                                    <div className="flex items-center">
-                                      {insp.main_issue_resolved ? (
-                                        <CheckCircle className="w-4 h-4 text-green-600 mr-2" />
-                                      ) : (
-                                        <X className="w-4 h-4 text-red-600 mr-2" />
-                                      )}
-                                      <span>Main Issue Resolved</span>
-                                    </div>
-                                    <div className="flex items-center">
-                                      {insp.reassembly_verified ? (
-                                        <CheckCircle className="w-4 h-4 text-green-600 mr-2" />
-                                      ) : (
-                                        <X className="w-4 h-4 text-red-600 mr-2" />
-                                      )}
-                                      <span>Reassembly Verified</span>
-                                    </div>
-                                  </div>
-                                  <div className="mt-3 text-sm">
-                                    <span className="font-medium">Condition:</span> {insp.general_condition}
-                                  </div>
-                                  {insp.notes && (
-                                    <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm">
-                                      <span className="font-medium text-blue-800">Notes:</span> {insp.notes}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {activeTab === 'bill' && (
-                        <div className="space-y-4">
-                          <h4 className="font-semibold text-lg text-gray-800 flex items-center">
-                            <CreditCard className="w-5 h-5 mr-2 text-blue-600" />
-                            Billing Summary
-                          </h4>
-                          {selectedVehicle.billing ? (
-                            <div className="bg-gradient-to-br from-white to-gray-50 p-5 rounded-xl border border-gray-200 shadow-sm">
-                              {selectedVehicle.billing.items.length > 0 ? (
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="border-b border-gray-200">
-                                        <th className="text-left pb-3 text-gray-700">Description</th>
-                                        <th className="text-left pb-3 text-gray-700">Qty</th>
-                                        <th className="text-left pb-3 text-gray-700">Unit Price</th>
-                                        <th className="text-right pb-3 text-gray-700">Total</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {selectedVehicle.billing.items.map((item, idx) => (
-                                        <tr key={idx} className="border-b border-gray-100 last:border-b-0">
-                                          <td className="py-3">
-                                            <div className="font-medium text-gray-800">{item.description}</div>
-                                            <div className="text-xs text-gray-500">{item.category}</div>
-                                          </td>
-                                          <td className="py-3">{item.quantity}</td>
-                                          <td className="py-3">{formatCurrency(item.unitPrice)}</td>
-                                          <td className="py-3 text-right font-medium">{formatCurrency(item.totalPrice)}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              ) : (
-                                <div className="text-center py-6 text-gray-500">
-                                  No line items recorded.
-                                </div>
-                              )}
-                              <div className="mt-6 pt-4 border-t border-gray-200">
-                                <div className="space-y-2 text-sm">
-                                  <div className="flex justify-between">
-                                    <span className="text-gray-600">Subtotal:</span>
-                                    <span className="font-medium">{formatCurrency(selectedVehicle.billing.subtotal)}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-gray-600">Tax:</span>
-                                    <span className="font-medium">{formatCurrency(selectedVehicle.billing.tax)}</span>
-                                  </div>
-                                  <div className="flex justify-between text-lg font-bold text-gray-800 pt-2 border-t border-gray-100">
-                                    <span>Total:</span>
-                                    <span>{formatCurrency(selectedVehicle.billing.total)}</span>
-                                  </div>
-                                  <div className="flex justify-between items-center mt-3">
-                                    <span className="text-gray-600">Status:</span>
-                                    <span
-                                      className={`px-3 py-1 rounded-full text-xs font-medium ${billStatusColors[selectedVehicle.billing.status]}`}
-                                    >
-                                      {selectedVehicle.billing.status.toUpperCase()}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
-                              <CreditCard className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                              <p className="text-gray-500">No billing information available.</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* New tabs with enhanced styling */}
-                      {activeTab === 'mechanics' && (
-                        <div className="space-y-4">
-                          <h4 className="font-semibold text-lg text-gray-800 flex items-center">
-                            <Users className="w-5 h-5 mr-2 text-blue-600" />
-                            Outsource Mechanics
-                          </h4>
-                          {selectedVehicle.outsourceMechanics.length === 0 ? (
-                            <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
-                              <Users className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                              <p className="text-gray-500">No outsource mechanics assigned.</p>
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              {selectedVehicle.outsourceMechanics.map((mech) => (
-                                <div key={mech.id} className="p-5 border border-gray-200 rounded-xl bg-gradient-to-br from-white to-gray-50 shadow-sm hover:shadow-md transition-shadow">
-                                  <div className="flex items-start justify-between">
-                                    <div>
-                                      <div className="font-bold text-lg text-gray-800">{mech.mechanic_name}</div>
-                                      <div className="text-sm text-gray-600 mt-1">Phone: {mech.phone}</div>
-                                    </div>
-                                    <div className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
-                                      Assigned
-                                    </div>
-                                  </div>
-                                  {mech.payment && (
-                                    <div className="mt-3 p-3 bg-green-50 rounded-lg text-sm">
-                                      <span className="font-medium text-green-800">Payment:</span> {formatCurrency(mech.payment)} {mech.payment_method && `(${mech.payment_method})`}
-                                    </div>
-                                  )}
-                                  {mech.work_done && (
-                                    <div className="mt-3">
-                                      <div className="font-medium text-gray-800 text-sm">Work Done:</div>
-                                      <div className="text-gray-700 text-sm mt-1">{mech.work_done}</div>
-                                    </div>
-                                  )}
-                                  {mech.notes && (
-                                    <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm">
-                                      <span className="font-medium text-blue-800">Notes:</span> {mech.notes}
-                                    </div>
-                                  )}
-                                  <div className="text-xs text-gray-500 mt-3">
-                                    Assigned: {formatDate(mech.created_at)}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {activeTab === 'tools' && (
-                        <div className="space-y-4">
-                          <h4 className="font-semibold text-lg text-gray-800 flex items-center">
-                            <Wrench className="w-5 h-5 mr-2 text-blue-600" />
-                            Tool Assignments
+                            <Settings className="w-5 h-5 mr-2 text-blue-600" />
+                            Used Tools
                           </h4>
                           {selectedVehicle.toolAssignments.length === 0 ? (
                             <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
@@ -1049,10 +848,10 @@ const VehicleStatus = () => {
                           ) : (
                             <div className="space-y-3">
                               {selectedVehicle.toolAssignments.map((tool) => (
-                                <div key={tool.id} className="p-5 border border-gray-200 rounded-xl bg-gradient-to-br from-white to-gray-50 shadow-sm hover:shadow-md transition-shadow">
+                                <div key={tool.id} className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm">
                                   <div className="flex items-start justify-between">
                                     <div>
-                                      <div className="font-bold text-lg text-gray-800">{tool.tool_name}</div>
+                                      <div className="font-bold text-gray-800">{tool.tool_name}</div>
                                       <div className="text-sm text-gray-600 mt-1">Assigned By: {tool.assigned_by}</div>
                                     </div>
                                     <div className={`px-2 py-1 rounded text-xs font-medium ${
@@ -1081,7 +880,7 @@ const VehicleStatus = () => {
                         </div>
                       )}
                       
-                      {activeTab === 'ordered' && (
+                      {activeTab === 'bill' && (
                         <div className="space-y-4">
                           <h4 className="font-semibold text-lg text-gray-800 flex items-center">
                             <ShoppingCart className="w-5 h-5 mr-2 text-blue-600" />
@@ -1093,7 +892,7 @@ const VehicleStatus = () => {
                             <button
                               className={`px-4 py-3 text-sm font-medium flex items-center space-x-2 transition-colors ${
                                 orderedPartsTab === 'ordered'
-                                  ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                                  ? 'text-blue-600 border-b-2 border-blue-500 bg-white'
                                   : 'text-gray-600 hover:text-gray-900'
                               }`}
                               onClick={() => setOrderedPartsTab('ordered')}
@@ -1104,7 +903,7 @@ const VehicleStatus = () => {
                             <button
                               className={`px-4 py-3 text-sm font-medium flex items-center space-x-2 transition-colors ${
                                 orderedPartsTab === 'stock'
-                                  ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                                  ? 'text-blue-600 border-b-2 border-blue-500 bg-white'
                                   : 'text-gray-600 hover:text-gray-900'
                               }`}
                               onClick={() => setOrderedPartsTab('stock')}
@@ -1126,10 +925,10 @@ const VehicleStatus = () => {
                                 ) : (
                                   <div className="space-y-3">
                                     {selectedVehicle.orderedParts.map((part) => (
-                                      <div key={part.auto_id} className="p-5 border border-gray-200 rounded-xl bg-gradient-to-br from-white to-gray-50 shadow-sm hover:shadow-md transition-shadow">
+                                      <div key={part.auto_id} className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm">
                                         <div className="flex items-start justify-between">
                                           <div>
-                                            <div className="font-bold text-lg text-gray-800">{part.name}</div>
+                                            <div className="font-bold text-gray-800">{part.name}</div>
                                             <div className="text-sm text-gray-600 mt-1">SKU: {part.sku}</div>
                                           </div>
                                           <div className={`px-2 py-1 rounded text-xs font-medium ${
@@ -1180,8 +979,8 @@ const VehicleStatus = () => {
                                 ) : (
                                   <div className="space-y-3">
                                     {selectedVehicle.outsourceStock.map((stock) => (
-                                      <div key={stock.id} className="p-5 border border-gray-200 rounded-xl bg-gradient-to-br from-white to-gray-50 shadow-sm hover:shadow-md transition-shadow">
-                                        <div className="font-bold text-lg text-gray-800">{stock.part_name}</div>
+                                      <div key={stock.id} className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm">
+                                        <div className="font-bold text-gray-800">{stock.part_name}</div>
                                         <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
                                           <div>
                                             <span className="text-gray-600">Category:</span> {stock.category}
@@ -1208,17 +1007,82 @@ const VehicleStatus = () => {
                           </div>
                         </div>
                       )}
+                      
+                      {activeTab === 'tools' && (
+                        <div className="space-y-4">
+                          <h4 className="font-semibold text-lg text-gray-800 flex items-center">
+                            <PenTool className="w-5 h-5 mr-2 text-blue-600" />
+                            Inspection Reports
+                          </h4>
+                          {selectedVehicle.inspections.length === 0 ? (
+                            <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
+                              <PenTool className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                              <p className="text-gray-500">No inspections conducted yet.</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              {selectedVehicle.inspections.map((insp) => (
+                                <div
+                                  key={insp.id}
+                                  className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm"
+                                >
+                                  <div className="flex justify-between items-start mb-3">
+                                    <span
+                                      className={`text-xs px-3 py-1 rounded-full font-medium ${
+                                        insp.inspection_status === 'passed'
+                                          ? 'bg-green-100 text-green-800'
+                                          : 'bg-red-100 text-red-800'
+                                      }`}
+                                    >
+                                      {insp.inspection_status.toUpperCase()}
+                                    </span>
+                                    <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                                      {formatDate(insp.inspection_date)}
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="flex items-center">
+                                      {insp.main_issue_resolved ? (
+                                        <CheckCircle className="w-4 h-4 text-green-600 mr-2" />
+                                      ) : (
+                                        <X className="w-4 h-4 text-red-600 mr-2" />
+                                      )}
+                                      <span>Main Issue Resolved</span>
+                                    </div>
+                                    <div className="flex items-center">
+                                      {insp.reassembly_verified ? (
+                                        <CheckCircle className="w-4 h-4 text-green-600 mr-2" />
+                                      ) : (
+                                        <X className="w-4 h-4 text-red-600 mr-2" />
+                                      )}
+                                      <span>Reassembly Verified</span>
+                                    </div>
+                                  </div>
+                                  <div className="mt-3 text-sm">
+                                    <span className="font-medium">Condition:</span> {insp.general_condition}
+                                  </div>
+                                  {insp.notes && (
+                                    <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm">
+                                      <span className="font-medium text-blue-800">Notes:</span> {insp.notes}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
             
-            {/* Enhanced Footer */}
-            <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 rounded-b-2xl flex justify-end border-t border-gray-200">
+            {/* Footer - Matching the Image */}
+            <div className="bg-gray-50 px-6 py-4 rounded-b-2xl flex justify-end border-t border-gray-200">
               <button
                 onClick={() => setSelectedVehicle(null)}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg hover:from-blue-700 hover:to-indigo-800 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
               >
                 Close
               </button>
