@@ -21,7 +21,6 @@ router.get('/in-progress', (req, res) => {
       v.license_plate,
       CONCAT(v.make, ' ', v.model, ' (', v.year, ')') AS vehicle_info,
       st.title,
-      st.mechanic_assign,
       st.inspector_assign,
       st.description,
       st.priority,
@@ -36,6 +35,8 @@ router.get('/in-progress', (req, res) => {
       st.updated_at,
       COALESCE(ic.email, cc.email) AS email,
       COALESCE(ic.phone, cc.phone) AS phone,
+      
+      -- Ordered parts
       op.id AS ordered_part_id,
       op.item_id AS ordered_item_id,
       op.name AS ordered_name,
@@ -44,7 +45,14 @@ router.get('/in-progress', (req, res) => {
       op.price AS ordered_price,
       op.quantity AS ordered_quantity,
       op.status AS ordered_status,
-      op.ordered_at AS ordered_at
+      op.ordered_at AS ordered_at,
+      
+      -- Mechanics
+      ma.id AS assignment_id,
+      ma.mechanic_id,
+      ma.mechanic_name,
+      ma.assigned_at AS mechanic_assigned_at
+
     FROM service_tickets st
     LEFT JOIN vehicles v 
       ON st.vehicle_id = v.id
@@ -54,6 +62,9 @@ router.get('/in-progress', (req, res) => {
       ON st.customer_type = 'company' AND st.customer_id = cc.customer_id
     LEFT JOIN ordered_parts op
       ON st.ticket_number = op.ticket_number
+    LEFT JOIN mechanic_assignments ma
+      ON st.ticket_number = ma.ticket_number
+    
     WHERE st.status IN (
       'in progress',
       'ready for inspection',
@@ -68,12 +79,12 @@ router.get('/in-progress', (req, res) => {
 
   db.query(query, (err, results) => {
     if (err) {
-      console.error('Error fetching inspection-related tickets:', err);
+      console.error('Error fetching in-progress tickets:', err);
       return res.status(500).json({ error: 'Database error' });
     }
 
-    // ✅ Group ordered parts under each ticket
     const ticketsMap = {};
+
     results.forEach(row => {
       if (!ticketsMap[row.ticket_number]) {
         ticketsMap[row.ticket_number] = {
@@ -89,8 +100,6 @@ router.get('/in-progress', (req, res) => {
           license_plate: row.license_plate,
           vehicle_info: row.vehicle_info,
           title: row.title,
-          mechanic_assign: row.mechanic_assign,
-          outsource_mechanic: row.outsource_mechanic,
           inspector_assign: row.inspector_assign,
           description: row.description,
           priority: row.priority,
@@ -104,10 +113,13 @@ router.get('/in-progress', (req, res) => {
           updated_at: row.updated_at,
           email: row.email,
           phone: row.phone,
-          ordered_parts: []
+          outsource_mechanic: row.outsource_mechanic,
+          ordered_parts: [],
+          mechanics: []   // 👈 add mechanics array
         };
       }
 
+      // Add ordered parts
       if (row.ordered_part_id) {
         ticketsMap[row.ticket_number].ordered_parts.push({
           id: row.ordered_part_id,
@@ -121,11 +133,22 @@ router.get('/in-progress', (req, res) => {
           ordered_at: row.ordered_at
         });
       }
+
+      // Add mechanic assignment(s)
+      if (row.assignment_id) {
+        ticketsMap[row.ticket_number].mechanics.push({
+          id: row.assignment_id,
+          mechanic_id: row.mechanic_id,
+          mechanic_name: row.mechanic_name,
+          assigned_at: row.mechanic_assigned_at
+        });
+      }
     });
 
     res.json(Object.values(ticketsMap));
   });
 });
+
 
 
 router.post('/:id/completion', (req, res) => {

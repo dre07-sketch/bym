@@ -330,7 +330,7 @@ const VehiclesInProgress = () => {
             className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6 rounded-t-2xl">
+            <div className="sticky top-0 bg-custom-gradient text-white p-6 rounded-t-2xl">
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold">Vehicle Progress Details</h2>
                 <button

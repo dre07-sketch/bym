@@ -6,6 +6,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+
+const IMAGE_BASE_URL = "http://localhost:5001";
 // Ensure upload directories exist
 const imagesDir = path.join(__dirname, '../../uploads/tools/images');
 const docsDir = path.join(__dirname, '../../uploads/tools/documents');
@@ -84,12 +86,19 @@ router.get('/tools-get', async (req, res) => {
       LEFT JOIN tool_assignments ta ON t.id = ta.tool_id AND ta.status = 'In Use'
       GROUP BY t.id
     `);
-
+    // Process tools to add image URL
+    const processed = tools.map(tool => ({
+      ...tool,
+      image_url: tool.image_url
+        ? `${IMAGE_BASE_URL}/uploads/tools/images/${encodeURIComponent(tool.image_url)}`
+        : null  // Changed from imageUrl to image_url
+    }));
     res.json({
       success: true,
-      data: tools
+      data: processed
     });
   } catch (error) {
+    console.error("❌ Error fetching tools:", error);
     res.status(500).json({ success: false, message: 'Failed to fetch tools' });
   }
 });
@@ -251,19 +260,10 @@ router.post('/return', async (req, res) => {
 // GET /api/tools/history/by-ticket-number/:ticketNumber
 // 📌 GET /api/tools/returned/:ticketNumber
 // 📌 GET /api/tools/returned/:ticketNumber
-router.get('/returned/:ticketNumber', (req, res) => {
-  const { ticketNumber } = req.params;
-
-  if (!ticketNumber || ticketNumber.trim() === '') {
-    return res.status(400).json({
-      success: false,
-      message: 'ticketNumber is required',
-    });
-  }
-
+router.get("/returned-tools", (req, res) => {
   const query = `
     SELECT 
-      ta.id AS assignment_id,
+      ta.id,
       ta.tool_id,
       ta.tool_name,
       ta.ticket_id,
@@ -273,50 +273,28 @@ router.get('/returned/:ticketNumber', (req, res) => {
       ta.status,
       ta.assigned_at,
       ta.returned_at,
+      ta.updated_at,
       st.customer_name,
-      st.vehicle_id,
-      st.vehicle_info,
-      st.license_plate,
-      st.title,
-      st.mechanic_assign AS assigned_mechanic
+      ma.mechanic_name AS mechanicName  -- ✅ fetch from mechanic_assignments
     FROM tool_assignments ta
-    INNER JOIN service_tickets st 
-      ON TRIM(UPPER(st.ticket_number)) = TRIM(UPPER(?))
-    WHERE TRIM(UPPER(ta.ticket_number)) = TRIM(UPPER(?))
-      AND UPPER(ta.status) = 'RETURNED'
-    ORDER BY 
-      ta.returned_at DESC, 
-      ta.assigned_at DESC
+    JOIN service_tickets st 
+      ON ta.ticket_number = st.ticket_number
+    LEFT JOIN mechanic_assignments ma
+      ON st.ticket_number = ma.ticket_number
+    WHERE ta.status = 'Returned'
+    ORDER BY ta.returned_at DESC
   `;
 
-  db.getConnection((err, connection) => {
+  db.query(query, (err, results) => {
     if (err) {
-      console.error('DB connection error:', err);
-      return res.status(500).json({
-        success: false,
-        message: 'Database connection failed',
-      });
+      console.error("Error fetching returned tools:", err);
+      return res.status(500).json({ error: "Failed to fetch returned tools" });
     }
-
-    connection.query(query, [ticketNumber, ticketNumber], (error, results) => {
-      connection.release();
-
-      if (error) {
-        console.error('Error fetching returned tools:', error);
-        return res.status(500).json({
-          success: false,
-          message: 'Server error while fetching returned tools',
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        count: results.length,
-        data: results,
-      });
-    });
+    res.json(results);
   });
 });
+
+
 
 
 

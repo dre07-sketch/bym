@@ -1,46 +1,44 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Eye, 
-  Edit, 
-  Trash2, 
-  Package, 
-  CheckCircle, 
-  AlertTriangle, 
-  TrendingDown, 
-  Star, 
-  ChevronDown, 
+import {
+  Plus,
+  Search,
+  Filter,
+  Eye,
+  Edit,
+  Trash2,
+  Package,
+  CheckCircle,
+  AlertTriangle,
+  TrendingDown,
+  Star,
+  ChevronDown,
   ChevronUp,
   Sparkles,
-  Zap
+  Zap,
 } from 'lucide-react';
 
-// ✅ Modal Components (adjust path if needed)
+// ✅ Modal Components
 import AddItemModal from '../pop up/Addnewitem';
 import ViewItemModal from '../pop up/ViewItemModal';
 import EditItemModal from '../pop up/EditItemModal';
 import DeleteConfirmModal from '../pop up/DeleteConfirmModal';
-
-// ✅ Replace InventoryService with direct fetch
-// We'll fetch directly instead of using a service
 
 interface InventoryItem {
   id: number;
   name: string;
   category: string;
   quantity: number;
+  quality_type?: string; // ← Now properly included
   price: number;
   location: string;
   status: 'In Stock' | 'Low Stock' | 'Out of Stock';
   minStock: number;
-  maxStock?: number;
-  imageUrl?: string;
+  maxStock?: number | null;
+  imageUrl?: string | null;
   rating?: number;
   sku: string;
-  supplier?: string;
-  description?: string;
+  supplier?: string | null;
+  description?: string | null;
   lastUpdated: string;
 }
 
@@ -72,6 +70,9 @@ const InventoryManagement: React.FC = () => {
           name: item.name,
           category: item.category,
           quantity: item.quantity,
+          // ✅ Map quality_type (from DB) — this was missing!
+          quality_type: item.quality_type || item.qualityType || 'original', // fallback
+          // Optional: also expose as qualityType for consistency
           price: typeof item.price === 'string' ? parseFloat(item.price) : item.price,
           location: item.location || '',
           status: item.quantity === 0
@@ -86,7 +87,7 @@ const InventoryManagement: React.FC = () => {
           sku: item.sku,
           supplier: item.supplier || null,
           description: item.description || null,
-          lastUpdated: item.lastUpdated
+          lastUpdated: item.lastUpdated,
         }));
         setInventoryItems(mappedItems);
       }
@@ -121,9 +122,10 @@ const InventoryManagement: React.FC = () => {
   };
 
   // Filter items
-  const filteredItems = inventoryItems.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.category.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredItems = inventoryItems.filter((item) => {
+    const matchesSearch =
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -131,17 +133,21 @@ const InventoryManagement: React.FC = () => {
   // Status counts
   const statusCounts = {
     total: inventoryItems.length,
-    inStock: inventoryItems.filter(item => item.status === 'In Stock').length,
-    lowStock: inventoryItems.filter(item => item.status === 'Low Stock').length,
-    outOfStock: inventoryItems.filter(item => item.status === 'Out of Stock').length
+    inStock: inventoryItems.filter((item) => item.status === 'In Stock').length,
+    lowStock: inventoryItems.filter((item) => item.status === 'Low Stock').length,
+    outOfStock: inventoryItems.filter((item) => item.status === 'Out of Stock').length,
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'In Stock': return 'bg-green-100 text-green-800';
-      case 'Low Stock': return 'bg-yellow-100 text-yellow-800';
-      case 'Out of Stock': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'In Stock':
+        return 'bg-green-100 text-green-800';
+      case 'Low Stock':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'Out of Stock':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -155,53 +161,49 @@ const InventoryManagement: React.FC = () => {
     <div className="p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
       {/* Header */}
       <div className="mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
-          Inventory Management
-        </h1>
-        <p className="text-gray-600 text-sm sm:text-base">
-          Manage your automotive parts inventory efficiently
-        </p>
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2">Inventory Management</h1>
+        <p className="text-gray-600 text-sm sm:text-base">Manage your automotive parts inventory efficiently</p>
       </div>
 
       {/* Status Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
         {[
-          { 
-            title: 'Total Items', 
-            value: statusCounts.total, 
-            icon: Package, 
+          {
+            title: 'Total Items',
+            value: statusCounts.total,
+            icon: Package,
             color: 'from-blue-500 to-blue-600',
             bgPattern: 'bg-gradient-to-br from-blue-500/10 to-blue-600/20',
             iconBg: 'bg-blue-100',
-            iconColor: 'text-blue-600'
+            iconColor: 'text-blue-600',
           },
-          { 
-            title: 'In Stock', 
-            value: statusCounts.inStock, 
-            icon: CheckCircle, 
+          {
+            title: 'In Stock',
+            value: statusCounts.inStock,
+            icon: CheckCircle,
             color: 'from-green-500 to-green-600',
             bgPattern: 'bg-gradient-to-br from-green-500/10 to-green-600/20',
             iconBg: 'bg-green-100',
-            iconColor: 'text-green-600'
+            iconColor: 'text-green-600',
           },
-          { 
-            title: 'Low Stock', 
-            value: statusCounts.lowStock, 
-            icon: TrendingDown, 
+          {
+            title: 'Low Stock',
+            value: statusCounts.lowStock,
+            icon: TrendingDown,
             color: 'from-yellow-500 to-yellow-600',
             bgPattern: 'bg-gradient-to-br from-yellow-500/10 to-yellow-600/20',
             iconBg: 'bg-yellow-100',
-            iconColor: 'text-yellow-600'
+            iconColor: 'text-yellow-600',
           },
-          { 
-            title: 'Out of Stock', 
-            value: statusCounts.outOfStock, 
-            icon: AlertTriangle, 
+          {
+            title: 'Out of Stock',
+            value: statusCounts.outOfStock,
+            icon: AlertTriangle,
             color: 'from-red-500 to-red-600',
             bgPattern: 'bg-gradient-to-br from-red-500/10 to-red-600/20',
             iconBg: 'bg-red-100',
-            iconColor: 'text-red-600'
-          }
+            iconColor: 'text-red-600',
+          },
         ].map((stat, index) => (
           <div
             key={index}
@@ -255,7 +257,7 @@ const InventoryManagement: React.FC = () => {
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 className="pl-9 sm:pl-10 pr-8 py-2 sm:py-3 border border-gray-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white text-sm sm:text-base min-w-[140px] sm:min-w-[160px]"
               >
-                {categories.map(category => (
+                {categories.map((category) => (
                   <option key={category} value={category}>
                     {category === 'all' ? 'All Categories' : category}
                   </option>
@@ -294,11 +296,11 @@ const InventoryManagement: React.FC = () => {
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-100 to-purple-100 rounded-lg sm:rounded-xl flex items-center justify-center">
                           {item.imageUrl ? (
-                           <img 
-  src={`http://localhost:5001${item.imageUrl}`} 
-  alt={item.name} 
-  className="w-full h-full object-cover rounded-lg sm:rounded-xl" 
-/>
+                            <img
+                              src={`http://localhost:5001${item.imageUrl}`}
+                              alt={item.name}
+                              className="w-full h-full object-cover rounded-lg sm:rounded-xl"
+                            />
                           ) : (
                             <Package className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                           )}
@@ -320,19 +322,35 @@ const InventoryManagement: React.FC = () => {
                       <span className="font-semibold text-gray-900 text-sm sm:text-base">{item.quantity}</span>
                     </td>
                     <td className="py-3 sm:py-4 px-4 sm:px-6">
-                      <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(item.status)}`}>
+                      <span
+                        className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(
+                          item.status
+                        )}`}
+                      >
                         {item.status}
                       </span>
                     </td>
                     <td className="py-3 px-4 sm:px-6">
                       <div className="flex items-center space-x-2">
-                        <button onClick={() => handleViewItem(item)} className="p-1 sm:p-2 hover:bg-blue-100 rounded-lg">
+                        <button
+                          onClick={() => handleViewItem(item)}
+                          className="p-1 sm:p-2 hover:bg-blue-100 rounded-lg"
+                          aria-label="View details"
+                        >
                           <Eye className="w-4 h-4 text-blue-600" />
                         </button>
-                        <button onClick={() => handleEditItem(item)} className="p-1 sm:p-2 hover:bg-green-100 rounded-lg">
+                        <button
+                          onClick={() => handleEditItem(item)}
+                          className="p-1 sm:p-2 hover:bg-green-100 rounded-lg"
+                          aria-label="Edit item"
+                        >
                           <Edit className="w-4 h-4 text-green-600" />
                         </button>
-                        <button onClick={() => handleDeleteItem(item)} className="p-1 sm:p-2 hover:bg-red-100 rounded-lg">
+                        <button
+                          onClick={() => handleDeleteItem(item)}
+                          className="p-1 sm:p-2 hover:bg-red-100 rounded-lg"
+                          aria-label="Delete item"
+                        >
                           <Trash2 className="w-4 h-4 text-red-600" />
                         </button>
                         <button onClick={() => toggleRowExpand(item.id.toString())}>

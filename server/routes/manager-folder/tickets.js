@@ -176,6 +176,7 @@ router.get('/customers', (req, res) => {
 });
 
 
+
 // ===================== All Tickets API =====================
 router.get('/service_tickets', (req, res) => {
   const ticketsQuery = `
@@ -189,7 +190,6 @@ router.get('/service_tickets', (req, res) => {
       st.vehicle_info,
       st.license_plate,
       st.title,
-      st.mechanic_assign,
       st.description,
       st.priority,
       st.type,
@@ -239,7 +239,7 @@ router.get('/service_tickets', (req, res) => {
 
     const ticketNumbers = tickets.map(t => t.ticket_number);
 
-    // Existing queries...
+    // Queries
     const disassembledQuery = `
       SELECT id, ticket_number, \`condition\` AS part_condition, part_name, status, notes, logged_at, reassembly_verified
       FROM disassembled_parts
@@ -296,10 +296,17 @@ router.get('/service_tickets', (req, res) => {
       ORDER BY ordered_at DESC
     `;
 
-    // 🔹 New: Tools
     const toolsQuery = `
       SELECT id, tool_id, tool_name, ticket_number, assigned_quantity, assigned_by, status, assigned_at, returned_at, updated_at
       FROM tool_assignments
+      WHERE ticket_number IN (?)
+      ORDER BY assigned_at DESC
+    `;
+
+    // 🔹 New: Mechanic Assignments
+    const mechanicAssignmentsQuery = `
+      SELECT id, ticket_number, mechanic_id, mechanic_name, assigned_at
+      FROM mechanic_assignments
       WHERE ticket_number IN (?)
       ORDER BY assigned_at DESC
     `;
@@ -326,88 +333,98 @@ router.get('/service_tickets', (req, res) => {
                 db.query(toolsQuery, [ticketNumbers], (err, toolRows) => {
                   if (err) return res.status(500).json({ error: 'Failed to fetch tool assignments' });
 
-                  // === Maps ===
-                  const disassembledMap = {};
-                  disassembledRows.forEach(r => {
-                    if (!disassembledMap[r.ticket_number]) disassembledMap[r.ticket_number] = [];
-                    disassembledMap[r.ticket_number].push(r);
+                  db.query(mechanicAssignmentsQuery, [ticketNumbers], (err, mechanicAssignRows) => {
+                    if (err) return res.status(500).json({ error: 'Failed to fetch mechanic assignments' });
+
+                    // === Maps ===
+                    const disassembledMap = {};
+                    disassembledRows.forEach(r => {
+                      if (!disassembledMap[r.ticket_number]) disassembledMap[r.ticket_number] = [];
+                      disassembledMap[r.ticket_number].push(r);
+                    });
+
+                    const logsMap = {};
+                    logRows.forEach(r => {
+                      if (!logsMap[r.ticket_number]) logsMap[r.ticket_number] = [];
+                      logsMap[r.ticket_number].push(r);
+                    });
+
+                    const inspectionsMap = {};
+                    inspectionRows.forEach(r => {
+                      if (!inspectionsMap[r.ticket_number]) inspectionsMap[r.ticket_number] = [];
+                      inspectionsMap[r.ticket_number].push(r);
+                    });
+
+                    const mechanicsMap = {};
+                    mechanicsRows.forEach(r => {
+                      if (!mechanicsMap[r.ticket_number]) mechanicsMap[r.ticket_number] = [];
+                      mechanicsMap[r.ticket_number].push(r);
+                    });
+
+                    const stockMap = {};
+                    stockRows.forEach(r => {
+                      if (!stockMap[r.ticket_number]) stockMap[r.ticket_number] = [];
+                      stockMap[r.ticket_number].push(r);
+                    });
+
+                    const orderedMap = {};
+                    orderedRows.forEach(r => {
+                      if (!orderedMap[r.ticket_number]) orderedMap[r.ticket_number] = [];
+                      orderedMap[r.ticket_number].push(r);
+                    });
+
+                    const toolsMap = {};
+                    toolRows.forEach(r => {
+                      if (!toolsMap[r.ticket_number]) toolsMap[r.ticket_number] = [];
+                      toolsMap[r.ticket_number].push(r);
+                    });
+
+                    const mechanicAssignMap = {};
+                    mechanicAssignRows.forEach(r => {
+                      if (!mechanicAssignMap[r.ticket_number]) mechanicAssignMap[r.ticket_number] = [];
+                      mechanicAssignMap[r.ticket_number].push(r);
+                    });
+
+                    // === Format results ===
+                    const formattedResults = tickets.map(ticket => ({
+                      id: ticket.id,
+                      ticket_number: ticket.ticket_number,
+                      customer_type: ticket.customer_type,
+                      customer_id: ticket.customer_id,
+                      customer_name: ticket.customer_name,
+                      vehicle_id: ticket.vehicle_id,
+                      vehicle_info: ticket.vehicle_info,
+                      license_plate: ticket.license_plate,
+                      title: ticket.title,
+                      description: ticket.description,
+                      priority: ticket.priority,
+                      type: ticket.type,
+                      urgency_level: ticket.urgency_level,
+                      status: ticket.status === 'in progress' ? 'in-progress' : ticket.status,
+                      appointment_id: ticket.appointment_id,
+                      created_at: ticket.created_at,
+                      updated_at: ticket.updated_at,
+                      estimated_time: ticket.completion_date,
+                      phone: ticket.phone,
+                      email: ticket.email,
+                      vehicle: {
+                        make: ticket.make,
+                        model: ticket.model,
+                        year: ticket.year,
+                        image: ticket.image,
+                      },
+                      mechanic_assignments: mechanicAssignMap[ticket.ticket_number] || [],
+                      disassembled_parts: disassembledMap[ticket.ticket_number] || [],
+                      progress_logs: logsMap[ticket.ticket_number] || [],
+                      inspections: inspectionsMap[ticket.ticket_number] || [],
+                      outsource_mechanics: mechanicsMap[ticket.ticket_number] || [],
+                      outsource_stock: stockMap[ticket.ticket_number] || [],
+                      ordered_parts: orderedMap[ticket.ticket_number] || [],
+                      tool_assignments: toolsMap[ticket.ticket_number] || []
+                    }));
+
+                    res.json(formattedResults);
                   });
-
-                  const logsMap = {};
-                  logRows.forEach(r => {
-                    if (!logsMap[r.ticket_number]) logsMap[r.ticket_number] = [];
-                    logsMap[r.ticket_number].push(r);
-                  });
-
-                  const inspectionsMap = {};
-                  inspectionRows.forEach(r => {
-                    if (!inspectionsMap[r.ticket_number]) inspectionsMap[r.ticket_number] = [];
-                    inspectionsMap[r.ticket_number].push(r);
-                  });
-
-                  const mechanicsMap = {};
-                  mechanicsRows.forEach(r => {
-                    if (!mechanicsMap[r.ticket_number]) mechanicsMap[r.ticket_number] = [];
-                    mechanicsMap[r.ticket_number].push(r);
-                  });
-
-                  const stockMap = {};
-                  stockRows.forEach(r => {
-                    if (!stockMap[r.ticket_number]) stockMap[r.ticket_number] = [];
-                    stockMap[r.ticket_number].push(r);
-                  });
-
-                  const orderedMap = {};
-                  orderedRows.forEach(r => {
-                    if (!orderedMap[r.ticket_number]) orderedMap[r.ticket_number] = [];
-                    orderedMap[r.ticket_number].push(r);
-                  });
-
-                  const toolsMap = {};
-                  toolRows.forEach(r => {
-                    if (!toolsMap[r.ticket_number]) toolsMap[r.ticket_number] = [];
-                    toolsMap[r.ticket_number].push(r);
-                  });
-
-                  // === Format results ===
-                  const formattedResults = tickets.map(ticket => ({
-                    id: ticket.id,
-                    ticket_number: ticket.ticket_number,
-                    customer_type: ticket.customer_type,
-                    customer_id: ticket.customer_id,
-                    customer_name: ticket.customer_name,
-                    vehicle_id: ticket.vehicle_id,
-                    vehicle_info: ticket.vehicle_info,
-                    license_plate: ticket.license_plate,
-                    title: ticket.title,
-                    description: ticket.description,
-                    priority: ticket.priority,
-                    type: ticket.type,
-                    urgency_level: ticket.urgency_level,
-                    status: ticket.status === 'in progress' ? 'in-progress' : ticket.status,
-                    appointment_id: ticket.appointment_id,
-                    created_at: ticket.created_at,
-                    updated_at: ticket.updated_at,
-                    estimated_time: ticket.completion_date,
-                    phone: ticket.phone,
-                    email: ticket.email,
-                    vehicle: {
-                      make: ticket.make,
-                      model: ticket.model,
-                      year: ticket.year,
-                      image: ticket.image,
-                    },
-                    assigned_mechanic: ticket.mechanic_assign,
-                    disassembled_parts: disassembledMap[ticket.ticket_number] || [],
-                    progress_logs: logsMap[ticket.ticket_number] || [],
-                    inspections: inspectionsMap[ticket.ticket_number] || [],
-                    outsource_mechanics: mechanicsMap[ticket.ticket_number] || [],
-                    outsource_stock: stockMap[ticket.ticket_number] || [],
-                    ordered_parts: orderedMap[ticket.ticket_number] || [],
-                    tool_assignments: toolsMap[ticket.ticket_number] || []
-                  }));
-
-                  res.json(formattedResults);
                 });
               });
             });
@@ -433,7 +450,6 @@ router.get('/service_tickets/:ticket_number', (req, res) => {
       st.vehicle_info,
       st.license_plate,
       st.title,
-      st.mechanic_assign,
       st.description,
       st.priority,
       st.type,
@@ -529,10 +545,17 @@ router.get('/service_tickets/:ticket_number', (req, res) => {
       ORDER BY ordered_at DESC
     `;
 
-    // 🔹 New: Tools
     const toolsQuery = `
       SELECT id, tool_id, tool_name, ticket_number, assigned_quantity, assigned_by, status, assigned_at, returned_at, updated_at
       FROM tool_assignments
+      WHERE ticket_number = ?
+      ORDER BY assigned_at DESC
+    `;
+
+    // 🔹 New: Mechanic Assignments
+    const mechanicAssignmentsQuery = `
+      SELECT id, ticket_number, mechanic_id, mechanic_name, assigned_at
+      FROM mechanic_assignments
       WHERE ticket_number = ?
       ORDER BY assigned_at DESC
     `;
@@ -559,45 +582,49 @@ router.get('/service_tickets/:ticket_number', (req, res) => {
                 db.query(toolsQuery, [ticket_number], (err, toolRows) => {
                   if (err) return res.status(500).json({ error: 'Failed to fetch tool assignments' });
 
-                  const ticket = {
-                    id: row.id,
-                    ticket_number: row.ticket_number,
-                    customer_type: row.customer_type,
-                    customer_id: row.customer_id,
-                    customer_name: row.customer_name,
-                    vehicle_id: row.vehicle_id,
-                    vehicle_info: row.vehicle_info,
-                    license_plate: row.license_plate,
-                    title: row.title,
-                    mechanic_assign: row.mechanic_assign,
-                    description: row.description,
-                    priority: row.priority,
-                    type: row.type,
-                    urgency_level: row.urgency_level,
-                    status: row.status,
-                    appointment_id: row.appointment_id,
-                    created_at: row.created_at,
-                    updated_at: row.updated_at,
-                    completion_date: row.completion_date,
-                    estimated_completion_date: row.estimated_completion_date,
-                    phone: row.phone,
-                    email: row.email,
-                    vehicle: {
-                      make: row.make,
-                      model: row.model,
-                      year: row.year,
-                      image: row.vehicle_image
-                    },
-                    disassembled_parts: disassembledRows,
-                    progress_logs: logRows,
-                    inspections: inspectionRows,
-                    outsource_mechanics: mechanicsRows,
-                    outsource_stock: stockRows,
-                    ordered_parts: orderedRows,
-                    tool_assignments: toolRows
-                  };
+                  db.query(mechanicAssignmentsQuery, [ticket_number], (err, mechanicAssignRows) => {
+                    if (err) return res.status(500).json({ error: 'Failed to fetch mechanic assignments' });
 
-                  res.json(ticket);
+                    const ticket = {
+                      id: row.id,
+                      ticket_number: row.ticket_number,
+                      customer_type: row.customer_type,
+                      customer_id: row.customer_id,
+                      customer_name: row.customer_name,
+                      vehicle_id: row.vehicle_id,
+                      vehicle_info: row.vehicle_info,
+                      license_plate: row.license_plate,
+                      title: row.title,
+                      description: row.description,
+                      priority: row.priority,
+                      type: row.type,
+                      urgency_level: row.urgency_level,
+                      status: row.status,
+                      appointment_id: row.appointment_id,
+                      created_at: row.created_at,
+                      updated_at: row.updated_at,
+                      completion_date: row.completion_date,
+                      estimated_completion_date: row.estimated_completion_date,
+                      phone: row.phone,
+                      email: row.email,
+                      vehicle: {
+                        make: row.make,
+                        model: row.model,
+                        year: row.year,
+                        image: row.vehicle_image
+                      },
+                      mechanic_assignments: mechanicAssignRows,
+                      disassembled_parts: disassembledRows,
+                      progress_logs: logRows,
+                      inspections: inspectionRows,
+                      outsource_mechanics: mechanicsRows,
+                      outsource_stock: stockRows,
+                      ordered_parts: orderedRows,
+                      tool_assignments: toolRows
+                    };
+
+                    res.json(ticket);
+                  });
                 });
               });
             });
@@ -617,10 +644,11 @@ router.get('/summary', (req, res) => {
       st.priority,
       st.license_plate,
       st.inspector_assign AS inspectorName,
-      st.mechanic_assign,
+      ma.mechanic_name AS mechanicName,   -- ✅ joined from mechanic_assignments
       st.completion_date,
       st.estimated_completion_date,
       st.title,
+      st.created_at,
       st.description,
       v.make,
       v.model,
@@ -629,6 +657,7 @@ router.get('/summary', (req, res) => {
       v.image
     FROM service_tickets st
     JOIN vehicles v ON st.vehicle_id = v.id
+    LEFT JOIN mechanic_assignments ma ON st.ticket_number = ma.ticket_number
     WHERE st.status IN (
       'pending',
       'in progress',
@@ -744,11 +773,12 @@ router.get('/summary', (req, res) => {
         ticket_number: row.ticket_number,
         status: row.status,
         priority: row.priority,
-        mechanic_assign: row.mechanic_assign,
+        mechanicName: row.mechanicName,     // ✅ using mechanic_assignments
         inspector_assign: row.inspectorName,
         completion_date: row.completion_date,
         estimated_completion_date: row.estimated_completion_date,
         title: row.title,
+        created_at: row.created_at,
         description: row.description,
         vehicle_info: {
           make: row.make,
@@ -770,6 +800,7 @@ router.get('/summary', (req, res) => {
     })();
   });
 });
+
 
 
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-// Define interfaces (unchanged)
+
+// Define interfaces
 interface OrderedPart {
   id: number;
   item_id: string;
@@ -11,6 +12,7 @@ interface OrderedPart {
   status: 'pending' | 'given';
   ordered_at: string;
 }
+
 interface Order {
   ticket_id: number;
   ticket_number: string;
@@ -21,13 +23,13 @@ interface Order {
   vehicle_info: string;
   license_plate: string;
   title: string;
-  mechanic_assign?: string;
+  mechanicName?: string;
   inspector_assign?: string;
   description: string;
   priority: string;
   type: 'sos' | 'regular' | 'appointment' | 'service';
   urgency_level?: string;
-  status: 'pending' | 'assigned' | 'in progress' | 'ready' | 'completed';
+  status: string; // Changed to string to accommodate all possible statuses
   appointment_id?: string;
   created_at: string;
   updated_at: string;
@@ -53,64 +55,57 @@ const OrderManagementSystem = () => {
   const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
 
   // Normalize orders data
-const normalizeOrders = (orders: Order[]) =>
-  orders.map(order => ({
-    ...order,
-    ordered_parts: order.ordered_parts.map(part => ({
-      ...part,
-      price: typeof part.price === 'number' ? part.price : Number(part.price) || 0,
-    })),
-  }));
+  const normalizeOrders = (orders: Order[]) =>
+    orders.map(order => ({
+      ...order,
+      mechanic_assign: order.mechanicName,
+      ordered_parts: order.ordered_parts.map(part => ({
+        ...part,
+        price: typeof part.price === 'number' ? part.price : Number(part.price) || 0,
+      })),
+    }));
 
   // Fetch active orders
   const fetchActiveOrders = async () => {
-  try {
-    const response = await fetch('http://localhost:5001/api/inventory/ordered-parts');
-    if (!response.ok) throw new Error('Failed to fetch active orders');
-    const data: Order[] = await response.json();
-    const normalized = normalizeOrders(data);
-
-    // Filter: Keep only orders where **at least one part is still 'pending'**
-    const filteredActiveOrders = normalized.filter(order => {
-      // If there are no parts, keep it in active (can't be complete)
-      if (order.ordered_parts.length === 0) return true;
-
-      // Otherwise: keep only if at least one part is *not* "given"
-      return order.ordered_parts.some(part => part.status === 'pending');
-    });
-
-    setOrders(filteredActiveOrders);
-    return filteredActiveOrders;
-  } catch (err) {
-    console.error('Error loading active orders:', err);
-    throw err;
-  }
-};
+    try {
+      const response = await fetch('http://localhost:5001/api/inventory/ordered-parts');
+      if (!response.ok) throw new Error('Failed to fetch active orders');
+      const data: Order[] = await response.json();
+      const normalized = normalizeOrders(data);
+      
+      // Filter: Keep only orders where at least one part is still 'pending'
+      const filteredActiveOrders = normalized.filter(order => {
+        // If there are no parts, keep it in active (can't be complete)
+        if (order.ordered_parts.length === 0) return true;
+        // Otherwise: keep only if at least one part is *not* "given"
+        return order.ordered_parts.some(part => part.status === 'pending');
+      });
+      
+      setOrders(filteredActiveOrders);
+      return filteredActiveOrders;
+    } catch (err) {
+      console.error('Error loading active orders:', err);
+      throw err;
+    }
+  };
 
   // Fetch history orders
-const fetchHistoryOrders = async () => {
-  try {
-    const response = await fetch('http://localhost:5001/api/inventory/order-history');
-    if (!response.ok) throw new Error('Failed to fetch history orders');
-    const data: Order[] = await response.json();
-    const normalized = normalizeOrders(data);
-
-    console.log('Raw history data:', data); // 🔍 CHECK THIS
-
-    const filtered = normalized.filter(order =>
-      order.ordered_parts.length > 0 &&
-      order.ordered_parts.every(part => part.status === 'given')
-    );
-
-    console.log('After filter:', filtered); // 🔍 Did it get filtered out?
-
-    setHistoryOrders(filtered);
-    return filtered;
-  } catch (err) {
-    console.error('Error loading history orders:', err);
-    throw err;
-  }
-};
+  const fetchHistoryOrders = async () => {
+    try {
+      const response = await fetch('http://localhost:5001/api/inventory/order-history');
+      if (!response.ok) throw new Error('Failed to fetch history orders');
+      const data: Order[] = await response.json();
+      const normalized = normalizeOrders(data);
+      
+      // FIXED: Remove the status filter since the backend already filters by all parts given
+      // The backend is returning orders where all parts are 'given', so we don't need to filter by status
+      setHistoryOrders(normalized);
+      return normalized;
+    } catch (err) {
+      console.error('Error loading history orders:', err);
+      throw err;
+    }
+  };
 
   // Fetch all orders on mount
   useEffect(() => {
@@ -159,9 +154,6 @@ const fetchHistoryOrders = async () => {
     setSelectedOrder(null);
   };
 
-  // Assign order to mechanic
-
-
   // Show notification
   const showNotification = (message: string) => {
     setNotification({ show: true, message });
@@ -176,6 +168,8 @@ const fetchHistoryOrders = async () => {
       case 'in progress': return 'bg-indigo-100 text-indigo-800';
       case 'ready': return 'bg-purple-100 text-purple-800';
       case 'completed': return 'bg-green-100 text-green-800';
+      case 'ready for inspection': return 'bg-purple-100 text-purple-800';
+      case 'awaiting bill': return 'bg-orange-100 text-orange-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -269,7 +263,6 @@ const fetchHistoryOrders = async () => {
     );
   }
 
-  // The rest of the component remains the same as before
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
       {/* Header */}
@@ -406,7 +399,18 @@ const fetchHistoryOrders = async () => {
                 <option value="ready">Ready</option>
               </select>
             )}
-           
+            {activeTab === 'history' && (
+              <select
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All Statuses</option>
+                <option value="ready for inspection">Ready for Inspection</option>
+                <option value="awaiting bill">Awaiting Bill</option>
+                <option value="completed">Completed</option>
+              </select>
+            )}
           </div>
         </div>
       </div>
@@ -505,6 +509,10 @@ const fetchHistoryOrders = async () => {
             <div className={`p-6 rounded-t-2xl relative ${
               selectedOrder.status === 'completed' 
                 ? 'bg-gradient-to-r from-green-600 to-emerald-700' 
+                : selectedOrder.status === 'ready for inspection'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-700'
+                : selectedOrder.status === 'awaiting bill'
+                ? 'bg-gradient-to-r from-orange-600 to-amber-700'
                 : 'bg-gradient-to-r from-indigo-600 to-purple-700'
             }`}>
               <div className="flex justify-between items-start">
@@ -678,7 +686,7 @@ const fetchHistoryOrders = async () => {
                     <div className="flex items-center">
                       <span className="text-sm font-medium text-gray-700 w-24">Mechanic:</span>
                       <span className="text-sm font-medium text-gray-900">
-                        {selectedOrder.mechanic_assign || (
+                        {selectedOrder.mechanicName || (  // Fixed: Using mechanicName instead of mechanic_assign
                           <span className="text-gray-500 italic">Not assigned</span>
                         )}
                       </span>
@@ -737,11 +745,12 @@ const fetchHistoryOrders = async () => {
                     selectedOrder.status === 'pending' ? 'bg-yellow-500' :
                     selectedOrder.status === 'assigned' ? 'bg-blue-500' :
                     selectedOrder.status === 'in progress' ? 'bg-indigo-500' :
-                    selectedOrder.status === 'ready' ? 'bg-purple-500' : 'bg-green-500'
+                    selectedOrder.status === 'ready' ? 'bg-purple-500' :
+                    selectedOrder.status === 'ready for inspection' ? 'bg-purple-500' :
+                    selectedOrder.status === 'awaiting bill' ? 'bg-orange-500' : 'bg-green-500'
                   }`}></span>
                   <span className="text-sm font-medium text-gray-700">Status: <span className="font-semibold">{selectedOrder.status}</span></span>
                 </div>
-                
               </div>
             </div>
           </div>

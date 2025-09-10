@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Eye, EyeOff, Mail, Lock, Shield, Users, Settings, Package, Wrench, CheckCircle, Sparkles, ArrowRight, Star } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, Shield, Users, Settings, Package, Wrench, CheckCircle, Sparkles, ArrowRight, Star, MessageCircle, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -29,6 +29,8 @@ const roles: Role[] = [
   { value: 'tool-manager', label: 'Tool Manager', icon: Wrench, color: 'text-orange-600', gradient: 'from-orange-500 to-red-500' },
   { value: 'part-coordinator', label: 'Part Coordinator', icon: Lock, color: 'text-red-600', gradient: 'from-red-500 to-rose-500' },
   { value: 'inspector', label: 'Inspector', icon: CheckCircle, color: 'text-indigo-600', gradient: 'from-indigo-500 to-purple-500' },
+  { value: 'communication', label: 'Communication', icon: MessageCircle, color: 'text-teal-600', gradient: 'from-teal-500 to-cyan-500' },
+  { value: 'marketing', label: 'Marketing', icon: TrendingUp, color: 'text-yellow-600', gradient: 'from-yellow-500 to-amber-500' },
 ];
 
 const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {

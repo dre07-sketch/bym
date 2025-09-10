@@ -4,7 +4,6 @@ const CompletedCars = () => {
   const [completedCars, setCompletedCars] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
   const [selectedCar, setSelectedCar] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -13,6 +12,9 @@ const CompletedCars = () => {
     ticketNumber: '',
     status: 'All statuses',
   });
+  // Add state for active tab and sub-tab
+  const [activeTab, setActiveTab] = useState('Overview');
+  const [activeSubTab, setActiveSubTab] = useState('Ordered Parts');
 
   // Format ISO date to readable string: "July 31, 2025 at 9:00 PM"
   const formatDateTime = (isoString) => {
@@ -45,14 +47,13 @@ const CompletedCars = () => {
         const response = await fetch('http://localhost:5001/api/active-tickets/completed-cars');
         if (!response.ok) throw new Error('Failed to fetch completed cars');
         const data = await response.json();
-
         const mappedData = data.map((car) => ({
           id: car.ticket_number,
           ticketNumber: car.ticket_number,
           carName: car.vehicle_info,
           licensePlate: car.license_plate,
           clientName: car.customer_name,
-          mechanicName: car.mechanicName,
+          mechanicName: car.mechanicName, // Mechanic name from API
           startDate: car.startDate,
           dueDate: car.estimatedCompletionDate,     // Estimated due date
           completedDate: car.completedDate,         // Actual completion date
@@ -67,19 +68,20 @@ const CompletedCars = () => {
         setLoading(false);
       }
     };
-
     fetchCompletedCars();
   }, []);
 
   const openModal = async (car) => {
     setSelectedCar(null);
     setIsModalOpen(true);
-
+    // Reset tabs when opening modal
+    setActiveTab('Overview');
+    setActiveSubTab('Ordered Parts');
+    
     try {
       const response = await fetch(`http://localhost:5001/api/active-tickets/completed-cars/${car.ticketNumber}`);
       if (!response.ok) throw new Error('Ticket not found');
       const detailedCar = await response.json();
-
       // Map API response to UI format
       const mappedCar = {
         id: detailedCar.ticket_number,
@@ -87,7 +89,7 @@ const CompletedCars = () => {
         carName: detailedCar.vehicle_info,
         licensePlate: detailedCar.license_plate,
         clientName: detailedCar.customer_name,
-        mechanicName: detailedCar.mechanicName,
+        mechanicName: detailedCar.mechanicName, // Mechanic name from API
         startDate: detailedCar.startDate,
         dueDate: detailedCar.estimatedDueDate || detailedCar.estimatedCompletionDate, // Estimated
         completedDate: detailedCar.actualCompletionDate || detailedCar.dueDate,       // Actual completion
@@ -107,8 +109,10 @@ const CompletedCars = () => {
           notes: part.notes,
           logged_at: part.logged_at,
         })),
+        outsourceStock: detailedCar.outsourceStock || [],
+        orderedParts: detailedCar.orderedParts || [],
+        outsourceMechanics: detailedCar.outsourceMechanics || [],
       };
-
       setSelectedCar(mappedCar);
     } catch (err) {
       console.error(err);
@@ -120,6 +124,9 @@ const CompletedCars = () => {
         activityLogs: [],
         toolsUsed: [],
         disassembledParts: [],
+        outsourceStock: [],
+        orderedParts: [],
+        outsourceMechanics: [],
       });
     }
   };
@@ -148,8 +155,6 @@ const CompletedCars = () => {
     );
   });
 
- 
-
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -157,7 +162,6 @@ const CompletedCars = () => {
       </div>
     );
   }
-
   if (error) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -165,7 +169,6 @@ const CompletedCars = () => {
       </div>
     );
   }
-
   return (
     <div className="container mx-auto px-4 py-8 overflow-y-auto max-h-[80vh]">
       {/* Header */}
@@ -181,7 +184,6 @@ const CompletedCars = () => {
           </p>
         </div>
       </div>
-
       {/* Filters */}
       <div className="mb-6">
         <button
@@ -204,7 +206,6 @@ const CompletedCars = () => {
           </svg>
           {showFilters ? 'Hide Filters' : 'Show Filters'}
         </button>
-
         {showFilters && (
           <div className="bg-white p-5 rounded-xl shadow-lg mt-3 border border-gray-200">
             <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
@@ -251,7 +252,6 @@ const CompletedCars = () => {
           </div>
         )}
       </div>
-
       {/* Cars List */}
       <div className="space-y-5">
         {filteredCars.length === 0 ? (
@@ -281,7 +281,6 @@ const CompletedCars = () => {
             >
               {/* Gradient Top Bar */}
               <div className="h-2 bg-gradient-to-r from-indigo-500 to-purple-600"></div>
-
               <div className="p-5">
                 <div className="flex flex-col md:flex-row md:justify-between md:items-start">
                   <div>
@@ -289,6 +288,8 @@ const CompletedCars = () => {
                       {car.clientName}
                     </h3>
                     <p className="text-indigo-600 font-semibold mt-1">{car.carName}</p>
+                    {/* Added mechanic name here */}
+                    <p className="text-gray-600 text-sm mt-1">Mechanic: {car.mechanicName}</p>
                   </div>
                   <div className="text-right mt-2 md:mt-0">
                     <span className="inline-block bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-medium mb-1">
@@ -297,7 +298,6 @@ const CompletedCars = () => {
                     <p className="text-sm text-gray-500">{car.licensePlate}</p>
                   </div>
                 </div>
-
                 <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
                   <div className="flex items-center">
                     <svg
@@ -365,6 +365,7 @@ const CompletedCars = () => {
                         d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.165-2.052-.48-3.016z"
                       />
                     </svg>
+                    <span title="Actual completion date">{formatDateOnly(car.completedDate)}</span>
                   </div>
                 </div>
               </div>
@@ -372,18 +373,22 @@ const CompletedCars = () => {
           ))
         )}
       </div>
-
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 animate-fadeIn">
           {selectedCar ? (
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
               {/* Header */}
-              <div className="bg-gradient-to-r from-indigo-600 to-purple-700 text-white p-7 rounded-t-3xl">
+              <div className="bg-custom-gradient text-white p-6 rounded-t-3xl">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h2 className="text-3xl font-bold">📋 {selectedCar.ticketNumber}</h2>
-                    <p className="text-indigo-100">Repair Summary for {selectedCar.carName}</p>
+                    <div className="flex items-center space-x-4">
+                      <h2 className="text-2xl font-bold">{selectedCar.ticketNumber}</h2>
+                      <span className="bg-white text-indigo-600 px-3 py-1 rounded-full text-sm font-medium">
+                        {selectedCar.status}
+                      </span>
+                    </div>
+                    <p className="text-indigo-100 mt-2">User: {selectedCar.clientName}</p>
                   </div>
                   <button
                     onClick={closeModal}
@@ -406,152 +411,282 @@ const CompletedCars = () => {
                   </button>
                 </div>
               </div>
-
+              
+              {/* Navigation Tabs */}
+              <div className="flex border-b border-gray-200 bg-gray-50">
+                {['Overview', 'Progress Logs', 'Disassembled Parts', 'Used Tools', 'Ordered Parts', ].map((tab) => (
+                  <button
+                    key={tab}
+                    className={`px-4 py-3 font-medium text-sm ${
+                      activeTab === tab
+                        ? 'text-indigo-600 border-b-2 border-indigo-600'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+              
               {/* Content */}
-              <div className="p-8 space-y-8">
-                {/* Client & Repair Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-6 rounded-2xl shadow-sm">
-                    <h3 className="font-bold text-lg text-gray-800 mb-4 flex items-center">
-                      🧍‍♂️ Client Information
-                    </h3>
-                    <div className="space-y-2 text-gray-700">
-                      <p>
-                        <span className="font-medium">Name:</span> {selectedCar.clientName}
-                      </p>
-                      <p>
-                        <span className="font-medium">License Plate:</span> {selectedCar.licensePlate}
-                      </p>
-                      <p>
-                        <span className="font-medium">Vehicle:</span> {selectedCar.carName}
-                      </p>
-                      <p>
-                        <span className="font-medium">Ticket #:</span> {selectedCar.ticketNumber}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-100 p-6 rounded-2xl shadow-sm">
-                    <h3 className="font-bold text-lg text-gray-800 mb-4 flex items-center">
-                      🛠️ Repair Details
-                    </h3>
-                    <div className="space-y-2 text-gray-700">
-                      <p>
-                        <span className="font-medium">Mechanic:</span> {selectedCar.mechanicName}
-                      </p>
-                      <p>
-                        <span className="font-medium">Start Date:</span>{' '}
-                        {formatDateOnly(selectedCar.startDate)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Estimated Due:</span>{' '}
-                        {formatDateOnly(selectedCar.dueDate)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Completed On:</span>{' '}
-                        {formatDateOnly(selectedCar.completedDate)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Status:</span>{' '}
-                        <span className="font-bold text-green-600">{selectedCar.status}</span>
-                      </p>
-                      <p>
-                        
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tools Used */}
-                <div>
-                  <h3 className="font-bold text-lg text-gray-800 mb-3">🧰 Tools Used</h3>
-                  {selectedCar.toolsUsed.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {selectedCar.toolsUsed.map((tool, index) => (
-                        <span
-                          key={index}
-                          className="bg-indigo-100 text-indigo-800 px-4 py-2 rounded-full text-sm font-medium shadow-sm"
-                        >
-                          {tool}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500 italic">No tools recorded for this repair.</p>
-                  )}
-                </div>
-
-                {/* Activity Log */}
-                <div>
-                  <h3 className="font-bold text-lg text-gray-800 mb-3">📜 Activity Log</h3>
-                  <div className="space-y-3">
-                    {selectedCar.activityLogs.length > 0 ? (
-                      selectedCar.activityLogs.map((log, index) => (
-                        <div
-                          key={index}
-                          className="border-l-4 border-indigo-500 pl-4 py-3 bg-indigo-50 rounded-r-lg"
-                        >
-                          <div className="flex justify-between">
-                            <span className="font-semibold text-gray-800">{log.activity}</span>
-                            <span className="text-xs text-indigo-600 font-medium">
-                              {formatDateTime(log.date)}
-                            </span>
-                          </div>
-                          <p className="text-gray-600 text-sm mt-1">{log.notes}</p>
+              <div className="p-6">
+                {/* Overview Tab */}
+                {activeTab === 'Overview' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-gray-50 p-5 rounded-xl">
+                        <h3 className="font-bold text-lg text-black mb-4">Client Information</h3>
+                        <div className="space-y-3 text-black">
+                          <p><span className="font-medium">Name:</span> {selectedCar.clientName}</p>
+                          <p><span className="font-medium">License Plate:</span> {selectedCar.licensePlate}</p>
+                          <p><span className="font-medium">Vehicle:</span> {selectedCar.carName}</p>
+                          <p><span className="font-medium">Ticket #:</span> {selectedCar.ticketNumber}</p>
                         </div>
-                      ))
-                    ) : (
-                      <p className="text-gray-500 italic">No activity logs available.</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Disassembled Parts */}
-                {selectedCar.disassembledParts && selectedCar.disassembledParts.length > 0 && (
-                  <div>
-                    <h3 className="font-bold text-lg text-black mb-3">🔧 Disassembled Parts</h3>
-                    <div className="space-y-3">
-                      {selectedCar.disassembledParts.map((part, index) => (
-                        <div
-                          key={index}
-                          className="border-l-4 border-amber-400 pl-4 py-3 bg-amber-50 rounded-r-lg"
-                        >
-                          <div className="flex justify-between">
-                            <span className="font-semibold text-black">{part.part_name}</span>
-                            <div className="flex space-x-2">
-                              <span
-                                className={`text-xs px-2 py-1 rounded ${
-                                  part.condition === 'Worn'
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-yellow-100 text-yellow-800'
-                                }`}
-                              >
-                                {part.condition}
-                              </span>
-                              <span
-                                className={`text-xs px-2 py-1 rounded ${
-                                  part.status === 'Removed'
-                                    ? 'bg-gray-100 text-gray-800'
-                                    : 'bg-green-100 text-green-800'
-                                }`}
-                              >
-                                {part.status}
-                              </span>
-                            </div>
-                          </div>
-                          <p className="text-gray-600 text-sm mt-1">{part.notes}</p>
-                          <p className="text-gray-500 text-xs mt-1">
-                            Logged: {formatDateTime(part.logged_at)}
-                          </p>
+                      </div>
+                      <div className="bg-gray-50 p-5 rounded-xl">
+                        <h3 className="font-bold text-lg text-black mb-4">Repair Details</h3>
+                        <div className="space-y-3 text-black">
+                          <p><span className="font-medium">Mechanic:</span> {selectedCar.mechanicName}</p>
+                          <p><span className="font-medium">Start Date:</span> {formatDateOnly(selectedCar.startDate)}</p>
+                          <p><span className="font-medium">Estimated Due:</span> {formatDateOnly(selectedCar.dueDate)}</p>
+                          <p><span className="font-medium">Completed On:</span> {formatDateOnly(selectedCar.completedDate)}</p>
+                          <p><span className="font-medium">Status:</span> <span className="font-bold text-green-600">{selectedCar.status}</span></p>
                         </div>
-                      ))}
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg text-black mb-3">Description</h3>
+                      <p className="text-black bg-gray-50 p-4 rounded-xl">{selectedCar.description || 'No description available.'}</p>
                     </div>
                   </div>
                 )}
+                
+                {/* Progress Logs Tab */}
+                {activeTab === 'Progress Logs' && (
+                  <div>
+                    <h3 className="font-bold text-lg text-black mb-3">Activity Log</h3>
+                    <div className="space-y-3">
+                      {selectedCar.activityLogs && selectedCar.activityLogs.length > 0 ? (
+                        selectedCar.activityLogs.map((log, index) => (
+                          <div
+                            key={index}
+                            className="border-l-4 border-indigo-500 pl-4 py-3 bg-indigo-50 rounded-r-lg"
+                          >
+                            <div className="flex justify-between">
+                              <span className="font-semibold text-black">{log.notes}</span>
+                              <span className="text-xs text-indigo-600 font-medium">
+                                {formatDateTime(log.date)}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-black italic">No activity logs available.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Disassembled Parts Tab */}
+                {activeTab === 'Disassembled Parts' && (
+                  <div>
+                    <h3 className="font-bold text-lg text-black mb-3">Disassembled Parts</h3>
+                    <div className="space-y-3">
+                      {selectedCar.disassembledParts && selectedCar.disassembledParts.length > 0 ? (
+                        selectedCar.disassembledParts.map((part, index) => (
+                          <div
+                            key={index}
+                            className="border-l-4 border-amber-400 pl-4 py-3 bg-amber-50 rounded-r-lg"
+                          >
+                            <div className="flex justify-between">
+                              <span className="font-semibold text-black">{part.part_name}</span>
+                              <div className="flex space-x-2">
+                                <span
+                                  className={`text-xs px-2 py-1 rounded ${
+                                    part.condition === 'Worn'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-yellow-100 text-yellow-800'
+                                  }`}
+                                >
+                                  {part.condition}
+                                </span>
+                                <span
+                                  className={`text-xs px-2 py-1 rounded ${
+                                    part.status === 'Removed'
+                                      ? 'bg-gray-100 text-gray-800'
+                                      : 'bg-green-100 text-green-800'
+                                  }`}
+                                >
+                                  {part.status}
+                                </span>
+                              </div>
+                            </div>
+                            <p className="text-black text-sm mt-1">{part.notes}</p>
+                            <p className="text-gray-500 text-xs mt-1">
+                              Logged: {formatDateTime(part.logged_at)}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-black italic">No disassembled parts recorded.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Used Tools Tab */}
+                {activeTab === 'Used Tools' && (
+                  <div>
+                    <h3 className="font-bold text-lg text-black mb-3">Tools Used</h3>
+                    {selectedCar.toolsUsed && selectedCar.toolsUsed.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedCar.toolsUsed.map((tool, index) => (
+                          <span
+                            key={index}
+                            className="bg-indigo-100 text-indigo-800 px-4 py-2 rounded-full text-sm font-medium shadow-sm"
+                          >
+                            {tool.tool_name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-black italic">No tools recorded for this repair.</p>
+                    )}
+                  </div>
+                )}
+                
+                {/* Ordered Parts Tab */}
+                {activeTab === 'Ordered Parts' && (
+                  <div>
+                    {/* Sub-tabs */}
+                    <div className="flex border-b border-gray-200 mb-4">
+                      <button
+                        className={`px-4 py-2 font-medium text-sm ${
+                          activeSubTab === 'Ordered Parts'
+                            ? 'text-indigo-600 border-b-2 border-indigo-600'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                        onClick={() => setActiveSubTab('Ordered Parts')}
+                      >
+                        Ordered Parts
+                      </button>
+                      <button
+                        className={`px-4 py-2 font-medium text-sm ${
+                          activeSubTab === 'Outsource Stock'
+                            ? 'text-indigo-600 border-b-2 border-indigo-600'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                        onClick={() => setActiveSubTab('Outsource Stock')}
+                      >
+                        Outsource Stock
+                      </button>
+                    </div>
+                    
+                    {/* Ordered Parts Sub-tab */}
+                    {activeSubTab === 'Ordered Parts' && (
+                      <div>
+                        <h3 className="font-bold text-lg text-black mb-3">Ordered Parts</h3>
+                        {selectedCar.orderedParts && selectedCar.orderedParts.length > 0 ? (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+                              <thead className="bg-gray-100">
+                                <tr>
+                                  <th className="py-2 px-4 border-b text-left text-black">Name</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">Category</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">SKU</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">Quantity</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">Price</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">Status</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">Ordered</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedCar.orderedParts.map((part, index) => (
+                                  <tr key={index} className="hover:bg-gray-50">
+                                    <td className="py-2 px-4 border-b text-black">{part.name}</td>
+                                    <td className="py-2 px-4 border-b text-black">{part.category}</td>
+                                    <td className="py-2 px-4 border-b text-black">{part.sku}</td>
+                                    <td className="py-2 px-4 border-b text-black">{part.quantity}</td>
+                                    <td className="py-2 px-4 border-b text-black">${part.price}</td>
+                                    <td className="py-2 px-4 border-b">
+                                      <span className={`px-2 py-1 rounded-full text-xs ${
+                                        part.status === 'Received' ? 'bg-green-100 text-green-800' : 
+                                        part.status === 'Ordered' ? 'bg-yellow-100 text-yellow-800' : 
+                                        'bg-gray-100 text-gray-800'
+                                      }`}>
+                                        {part.status}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-4 border-b text-black">{formatDateOnly(part.ordered_at)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-black italic">No ordered parts recorded.</p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Outsource Stock Sub-tab */}
+                    {activeSubTab === 'Outsource Stock' && (
+                      <div>
+                        <h3 className="font-bold text-lg text-black mb-3">Outsource Stock</h3>
+                        {selectedCar.outsourceStock && selectedCar.outsourceStock.length > 0 ? (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+                              <thead className="bg-gray-100">
+                                <tr>
+                                  <th className="py-2 px-4 border-b text-left text-black">Name</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">Category</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">Source</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">Quantity</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">Status</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">Requested</th>
+                                  <th className="py-2 px-4 border-b text-left text-black">Received</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedCar.outsourceStock.map((item, index) => (
+                                  <tr key={index} className="hover:bg-gray-50">
+                                    <td className="py-2 px-4 border-b text-black">{item.name}</td>
+                                    <td className="py-2 px-4 border-b text-black">{item.category}</td>
+                                    <td className="py-2 px-4 border-b text-black">{item.source_shop}</td>
+                                    <td className="py-2 px-4 border-b text-black">{item.quantity}</td>
+                                    <td className="py-2 px-4 border-b">
+                                      <span className={`px-2 py-1 rounded-full text-xs ${
+                                        item.status === 'Received' ? 'bg-green-100 text-green-800' : 
+                                        item.status === 'Requested' ? 'bg-yellow-100 text-yellow-800' : 
+                                        'bg-gray-100 text-gray-800'
+                                      }`}>
+                                        {item.status}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-4 border-b text-black">{formatDateOnly(item.requested_at)}</td>
+                                    <td className="py-2 px-4 border-b text-black">
+                                      {item.received_at ? formatDateOnly(item.received_at) : 'Pending'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-black italic">No outsource stock recorded.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Inspection Tab */}
+                
               </div>
-
+              
               {/* Footer */}
-              <div className="bg-gray-50 px-8 py-5 rounded-b-3xl text-right">
+              <div className="bg-gray-50 px-6 py-4 rounded-b-3xl text-right">
                 <button
                   onClick={closeModal}
                   className="px-6 py-2 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
@@ -562,7 +697,7 @@ const CompletedCars = () => {
             </div>
           ) : (
             <div className="bg-white p-10 rounded-3xl shadow-2xl text-center">
-              <p className="text-gray-600">Loading vehicle details...</p>
+              <p className="text-black">Loading vehicle details...</p>
             </div>
           )}
         </div>

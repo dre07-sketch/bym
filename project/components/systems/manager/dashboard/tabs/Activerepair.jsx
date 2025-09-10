@@ -28,7 +28,6 @@ import {
   Plus,
   FileCheck
 } from 'lucide-react';
-
 import OutsourceMechanicModal from './pop up/OutsourceMechanicModal';
 
 const Activerepair = () => {
@@ -86,7 +85,7 @@ const Activerepair = () => {
     category: 'Engine Parts',
     quantity: 1,
   });
-
+  
   // Handle form changes
   const handleFinalOutsourceSubmit = async () => {
     if (outsourcedParts.length === 0) {
@@ -142,36 +141,34 @@ const Activerepair = () => {
     }
   };
 
-const handleOutsourceMechanicSuccess = (data) => {
-  alert(`✅ Mechanic outsourced successfully! ID: ${data.id}`);
-  
-  // Refresh repair data to get updated outsource mechanic info
-  if (selectedRepair) {
-    fetchRepairData(selectedRepair.id).then(updatedRepair => {
-      setSelectedRepair(prev => ({
-        ...prev,
-        ...updatedRepair,
-        tools: prev.tools // Preserve tools state
-      }));
-      setRepairs(prev =>
-        prev.map(repair =>
-          repair.id === selectedRepair.id ? updatedRepair : repair
-        )
-      );
-    }).catch(err => {
-      console.error('Error refreshing repair data:', err);
-    });
-  }
-};
-
-
+  const handleOutsourceMechanicSuccess = (data) => {
+    alert(`✅ Mechanic outsourced successfully! ID: ${data.id}`);
+    
+    // Refresh repair data to get updated outsource mechanic info
+    if (selectedRepair) {
+      fetchRepairData(selectedRepair.id).then(updatedRepair => {
+        setSelectedRepair(prev => ({
+          ...prev,
+          ...updatedRepair,
+          tools: prev.tools // Preserve tools state
+        }));
+        setRepairs(prev =>
+          prev.map(repair =>
+            repair.id === selectedRepair.id ? updatedRepair : repair
+          )
+        );
+      }).catch(err => {
+        console.error('Error refreshing repair data:', err);
+      });
+    }
+  };
 
   // Remove a part from the list
   const removeOutsourcedPart = (id) => {
     setOutsourcedParts((prev) => prev.filter((part) => part.id !== id));
     alert("🗑️ Part removed");
   };
-
+  
   // Add this function to the component (before the return statement)
   const handleOutsourceFormChange = (field, value) => {
     setOutsourceForm(prev => ({
@@ -179,7 +176,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       [field]: value
     }));
   };
-
+  
   const handleOutsourceSubmit = () => {
     if (!outsourceForm.name.trim()) {
       alert("Please enter a part name");
@@ -208,7 +205,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       if (nameInput) nameInput.focus();
     }, 0);
   };
-
+  
   // Reusable component for outsourced parts tab
   const OutsourcedPartsTabContent = ({ ticketNumber }) => {
     const [data, setData] = useState([]);
@@ -290,50 +287,55 @@ const handleOutsourceMechanicSuccess = (data) => {
       </div>
     );
   };
-
+  
   // Map ticket data to repair format
   const mapTicketToRepair = (ticket) => {
-  const customerName = ticket.customer_name || 'Unknown Customer';
-  const email = ticket.email || 'N/A';
-  const phone = ticket.phone || 'N/A';
-  const vehicle = ticket.vehicle_info || 'Unknown Vehicle';
-  const licensePlate = ticket.license_plate || 'N/A';
-  const issueSeverity = ticket.urgency_level
-    ? ticket.urgency_level === 'Critical' ? 'Critical'
-    : ticket.urgency_level === 'High' ? 'Critical'
-    : ticket.urgency_level === 'Medium' ? 'Moderate'
-    : 'Minor'
-    : 'Moderate';
-
-  return {
-    id: ticket.id,
-    ticketNumber: ticket.ticket_number || `TKT-${ticket.id}`,
-    customerName,
-    licensePlate,
-    vehicle,
-    status: ticket.status || 'In Progress',
-    carStatus: issueSeverity,
-    startDate: ticket.created_at
-      ? new Date(ticket.created_at).toISOString().split('T')[0]
-      : null,
-    estimatedCompletion: ticket.estimated_completion_date
-      ? new Date(ticket.estimated_completion_date).toISOString().split('T')[0]
-      : null,
-    assignedMechanic: ticket.mechanic_assign || 'Unassigned',
-    assignedInspector: ticket.inspector_assign || null,
-    serviceType: ticket.title || ticket.type || 'General Repair',
-    contact: phone,
-    email,
-    location: 'Main Bay',
-    progress: 0,
-    notes: ticket.description || 'No additional notes provided for this repair.',
-    parts: ticket.ordered_parts || [],
-    tools: [],
-    // Add this line to include outsource_mechanic
-    outsource_mechanic: ticket.outsource_mechanic || null,
+    const customerName = ticket.customer_name || 'Unknown Customer';
+    const email = ticket.email || 'N/A';
+    const phone = ticket.phone || 'N/A';
+    const vehicle = ticket.vehicle_info || 'Unknown Vehicle';
+    const licensePlate = ticket.license_plate || 'N/A';
+    const issueSeverity = ticket.urgency_level
+      ? ticket.urgency_level === 'Critical' ? 'Critical'
+      : ticket.urgency_level === 'High' ? 'Critical'
+      : ticket.urgency_level === 'Medium' ? 'Moderate'
+      : 'Minor'
+      : 'Moderate';
+      
+    // Get the first mechanic from the mechanics array if available
+    const assignedMechanic = ticket.mechanics && ticket.mechanics.length > 0 
+      ? ticket.mechanics[0].mechanic_name 
+      : 'Unassigned';
+    
+    return {
+      id: ticket.id,
+      ticketNumber: ticket.ticket_number || `TKT-${ticket.id}`,
+      customerName,
+      licensePlate,
+      vehicle,
+      status: ticket.status || 'In Progress',
+      carStatus: issueSeverity,
+      startDate: ticket.created_at
+        ? new Date(ticket.created_at).toISOString().split('T')[0]
+        : null,
+      estimatedCompletion: ticket.estimated_completion_date
+        ? new Date(ticket.estimated_completion_date).toISOString().split('T')[0]
+        : null,
+      assignedMechanic,
+      assignedInspector: ticket.inspector_assign || null,
+      serviceType: ticket.title || ticket.type || 'General Repair',
+      contact: phone,
+      email,
+      location: 'Main Bay',
+      progress: 0,
+      notes: ticket.description || 'No additional notes provided for this repair.',
+      parts: ticket.ordered_parts || [],
+      tools: [],
+      mechanics: ticket.mechanics || [], // Store the mechanics array
+      outsource_mechanic: ticket.outsource_mechanic || null,
+    };
   };
-};
-
+  
   // Fetch single repair data
   const fetchRepairData = async (repairId) => {
     try {
@@ -346,7 +348,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       throw err;
     }
   };
-
+  
   // Refresh selected repair data when opened
   useEffect(() => {
     if (selectedRepair) {
@@ -365,7 +367,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       refreshRepair();
     }
   }, [selectedRepair]);
-
+  
   // Fetch inspectors
   useEffect(() => {
     const fetchInspectors = async () => {
@@ -391,7 +393,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       fetchInspectors();
     }
   }, [showInspectorModal, selectedRepair?.assignedInspector]);
-
+  
   // Fetch in-progress repairs
   useEffect(() => {
     const fetchRepairs = async () => {
@@ -410,7 +412,7 @@ const handleOutsourceMechanicSuccess = (data) => {
     };
     fetchRepairs();
   }, []);
-
+  
   // Fetch stockroom parts
   useEffect(() => {
     const fetchParts = async () => {
@@ -433,7 +435,7 @@ const handleOutsourceMechanicSuccess = (data) => {
     };
     fetchParts();
   }, []);
-
+  
   // New functions to fetch additional data
   const fetchProgressLogs = async (ticketNumber) => {
     setLoadingProgressLogs(true);
@@ -448,7 +450,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       setLoadingProgressLogs(false);
     }
   };
-
+  
   const fetchDisassembledParts = async (ticketNumber) => {
     setLoadingDisassembledParts(true);
     try {
@@ -462,7 +464,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       setLoadingDisassembledParts(false);
     }
   };
-
+  
   const fetchUsedTools = async (ticketNumber) => {
     setLoadingUsedTools(true);
     try {
@@ -476,7 +478,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       setLoadingUsedTools(false);
     }
   };
-
+  
   const fetchInspectionRecords = async (ticketNumber) => {
     setLoadingInspectionRecords(true);
     try {
@@ -490,7 +492,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       setLoadingInspectionRecords(false);
     }
   };
-
+  
   // Reset data when selected repair changes
   useEffect(() => {
     if (selectedRepair) {
@@ -501,32 +503,32 @@ const handleOutsourceMechanicSuccess = (data) => {
       setActiveTab('overview');
     }
   }, [selectedRepair]);
-
+  
   // Fetch data when tab is activated
   useEffect(() => {
     if (selectedRepair && activeTab === 'progressLogs' && progressLogs.length === 0) {
       fetchProgressLogs(selectedRepair.ticketNumber);
     }
   }, [selectedRepair, activeTab, progressLogs.length]);
-
+  
   useEffect(() => {
     if (selectedRepair && activeTab === 'disassembledParts' && disassembledParts.length === 0) {
       fetchDisassembledParts(selectedRepair.ticketNumber);
     }
   }, [selectedRepair, activeTab, disassembledParts.length]);
-
+  
   useEffect(() => {
     if (selectedRepair && activeTab === 'usedTools' && usedTools.length === 0) {
       fetchUsedTools(selectedRepair.ticketNumber);
     }
   }, [selectedRepair, activeTab, usedTools.length]);
-
+  
   useEffect(() => {
     if (selectedRepair && activeTab === 'inspection' && inspectionRecords.length === 0) {
       fetchInspectionRecords(selectedRepair.ticketNumber);
     }
   }, [selectedRepair, activeTab, inspectionRecords.length]);
-
+  
   // Status colors
   const getStatusColor = (status) => {
     const colors = {
@@ -540,7 +542,7 @@ const handleOutsourceMechanicSuccess = (data) => {
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
-
+  
   const getCarStatusColor = (status) => {
     const colors = {
       'Critical': 'bg-red-100 text-red-800',
@@ -549,7 +551,7 @@ const handleOutsourceMechanicSuccess = (data) => {
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
-
+  
   // Filter repairs
   const filteredRepairs = repairs.filter(repair => {
     const matchesSearch =
@@ -559,13 +561,13 @@ const handleOutsourceMechanicSuccess = (data) => {
     const matchesStatus = filterStatus === 'All' || repair.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
-
+  
   // Assign inspector
   const assignInspector = (inspector) => {
     setSelectedInspector(inspector);
     setShowConfirmInspectorModal(true);
   };
-
+  
   const handleConfirmAssignInspector = async () => {
     if (!selectedInspector || !selectedRepair) return;
     try {
@@ -607,19 +609,19 @@ const handleOutsourceMechanicSuccess = (data) => {
       alert(`Error: ${err.message}`);
     }
   };
-
+  
   // Tools
   const toggleTool = (tool) => {
     setSelectedTools(prev =>
       prev.includes(tool) ? prev.filter(t => t !== tool) : [...prev, tool]
     );
   };
-
+  
   const handleSaveTools = () => {
     setSelectedRepair(prev => ({ ...prev, tools: selectedTools }));
     setShowToolsModal(false);
   };
-
+  
   // Completion time
   const handleSaveCompletionTime = async () => {
     if (!selectedRepair || !completionTime) {
@@ -655,7 +657,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       alert(`Error: ${err.message}`);
     }
   };
-
+  
   // Finish repair
   const handleFinishRepair = () => {
     setNotificationMessage(
@@ -663,7 +665,7 @@ const handleOutsourceMechanicSuccess = (data) => {
     );
     setShowNotificationModal(true);
   };
-
+  
   const handleSendNotification = () => {
     console.log('Sending notification to:', notificationRecipient);
     console.log('Message:', notificationMessage);
@@ -677,7 +679,7 @@ const handleOutsourceMechanicSuccess = (data) => {
     ));
     setSelectedRepair(prev => ({ ...prev, status: 'Completed', progress: 100 }));
   };
-
+  
   // Parts modal logic
   const filteredParts = stockroomParts.filter(part => {
     const searchLower = searchTerm.toLowerCase();
@@ -688,7 +690,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       part.id.toString().includes(searchTerm)
     );
   });
-
+  
   const handleSelectPart = (partId, isSelected) => {
     if (isSelected) {
       setSelectedParts([...selectedParts, partId]);
@@ -702,7 +704,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       });
     }
   };
-
+  
   const handleQuantityChange = (partId, quantity) => {
     const part = stockroomParts.find(p => p.id === partId);
     const validatedQuantity = Math.max(1, Math.min(quantity, part?.inStock || 1));
@@ -711,7 +713,7 @@ const handleOutsourceMechanicSuccess = (data) => {
       [partId]: validatedQuantity
     });
   };
-
+  
   const handleOrderParts = async () => {
     if (!selectedRepair || selectedParts.length === 0) {
       alert('Please select at least one part to order.');
@@ -773,28 +775,28 @@ const handleOutsourceMechanicSuccess = (data) => {
       alert(`Error: ${err.message}`);
     }
   };
-
+  
   // Bill calculation
   const updatePart = (index, field, value) => {
     const updatedParts = [...parts];
     updatedParts[index][field] = ['price', 'quantity'].includes(field) ? parseFloat(value) || 0 : value;
     setParts(updatedParts);
   };
-
+  
   const addNewPart = () => {
     setParts([...parts, { name: '', price: 0, quantity: 1 }]);
   };
-
+  
   const updateTool = (index, field, value) => {
     const updatedTools = [...tools];
     updatedTools[index][field] = field === 'fee' ? parseFloat(value) || 0 : value;
     setTools(updatedTools);
   };
-
+  
   const addNewTool = () => {
     setTools([...tools, { name: '', fee: 0 }]);
   };
-
+  
   const billDetails = useMemo(() => {
     const partsTotal = parts.reduce((sum, part) => sum + (part.price * part.quantity), 0);
     const laborTotal = laborHours * laborRate;
@@ -806,12 +808,12 @@ const handleOutsourceMechanicSuccess = (data) => {
     const total = subtotalAfterDiscount + taxAmount;
     return { parts, labor: laborTotal, tools, subtotal, discount: discountAmount, tax: taxAmount, total };
   }, [parts, laborHours, laborRate, tools]);
-
+  
   const generateInvoice = () => {
     alert(`Invoice generated! Total: $${billDetails.total.toFixed(2)}`);
     setShowBillModal(false);
   };
-
+  
   return (
     <div className="p-6 max-w-7xl mx-auto relative">
       {/* Success Toast */}
@@ -824,13 +826,13 @@ const handleOutsourceMechanicSuccess = (data) => {
           </div>
         </div>
       )}
-
+      
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Active Repairs</h1>
         <p className="text-gray-500 mt-1">Track ongoing vehicle repairs and maintenance</p>
       </div>
-
+      
       {/* Search & Filter */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="flex-1 relative">
@@ -857,7 +859,7 @@ const handleOutsourceMechanicSuccess = (data) => {
           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
         </div>
       </div>
-
+      
       {/* Repair List */}
       <div className="space-y-4">
         {loading ? (
@@ -939,7 +941,7 @@ const handleOutsourceMechanicSuccess = (data) => {
           </div>
         )}
       </div>
-
+      
       {/* Repair Details Modal */}
       {selectedRepair && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4 py-8">
@@ -1008,7 +1010,14 @@ const handleOutsourceMechanicSuccess = (data) => {
                         <p><strong>Ticket #:</strong> {selectedRepair.ticketNumber}</p>
                         <p><strong>Type:</strong> {selectedRepair.serviceType}</p>
                         <p><strong>Location:</strong> {selectedRepair.location}</p>
-                        <p><strong>Mechanic:</strong> {selectedRepair.assignedMechanic}</p>
+                        <p>
+                          <strong>Mechanic:</strong> {selectedRepair.assignedMechanic}
+                          {selectedRepair.mechanics && selectedRepair.mechanics.length > 1 && (
+                            <span className="text-xs text-gray-500 ml-2">
+                              (+{selectedRepair.mechanics.length - 1} more)
+                            </span>
+                          )}
+                        </p>
                         {selectedRepair.outsource_mechanic && (
                           <p><strong>Outsource Mechanic:</strong> {selectedRepair.outsource_mechanic}</p>
                         )}
@@ -1032,6 +1041,32 @@ const handleOutsourceMechanicSuccess = (data) => {
                       </div>
                     </div>
                   </div>
+                  
+                  {/* Assigned Mechanics Section */}
+                  {selectedRepair.mechanics && selectedRepair.mechanics.length > 0 && (
+                    <div className="mt-6 bg-gray-50 rounded-xl p-5">
+                      <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-800 mb-3">
+                        <UserCheck size={20} className="text-blue-600" />
+                        Assigned Mechanics
+                      </h3>
+                      <div className="space-y-3">
+                        {selectedRepair.mechanics.map((mechanic, index) => (
+                          <div key={mechanic.id || index} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-800 font-bold">
+                              {mechanic.mechanic_name ? mechanic.mechanic_name.charAt(0).toUpperCase() : 'M'}
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">{mechanic.mechanic_name || 'Unknown Mechanic'}</p>
+                              <p className="text-xs text-gray-500">
+                                Assigned: {mechanic.assigned_at ? new Date(mechanic.assigned_at).toLocaleDateString() : 'Unknown date'}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="mt-6 bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl p-5 border border-amber-200 shadow-inner">
                     <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-800 mb-3">
                       <ClipboardCheck size={20} className="text-amber-600" />
@@ -1479,7 +1514,7 @@ const handleOutsourceMechanicSuccess = (data) => {
           </div>
         </div>
       )}
-
+      
       {/* Inspector Modal */}
       {showInspectorModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
@@ -1590,7 +1625,7 @@ const handleOutsourceMechanicSuccess = (data) => {
           </div>
         </div>
       )}
-
+      
       {/* Confirmation Modal */}
       {showConfirmInspectorModal && selectedInspector && (
         <div className="fixed inset-0 z-50 text-black flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -1620,7 +1655,7 @@ const handleOutsourceMechanicSuccess = (data) => {
           </div>
         </div>
       )}
-
+      
       {/* Completion Time Modal */}
       {showCompletionTimeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center text-black bg-black/50 backdrop-blur-sm">
@@ -1653,7 +1688,7 @@ const handleOutsourceMechanicSuccess = (data) => {
           </div>
         </div>
       )}
-
+      
       {/* Parts Modal */}
       {showPartsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center text-black bg-black/50 backdrop-blur-sm">
@@ -1737,7 +1772,7 @@ const handleOutsourceMechanicSuccess = (data) => {
           </div>
         </div>
       )}
-
+      
       {/* Outsource Parts Modal */}
       {showOutsourceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center text-black bg-black/50 backdrop-blur-sm">
@@ -1900,7 +1935,7 @@ const handleOutsourceMechanicSuccess = (data) => {
           </div>
         </div>
       )}
-
+      
       {/* Notification Modal */}
       {showNotificationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -1941,14 +1976,14 @@ const handleOutsourceMechanicSuccess = (data) => {
           </div>
         </div>
       )}
-
+      
       {/* Bill Modal */}
-    <OutsourceMechanicModal
-  isOpen={showOutsourceMechanicModal}
-  onClose={() => setShowOutsourceMechanicModal(false)}
-  ticketNumber={selectedRepair?.ticketNumber}
-  onSuccess={handleOutsourceMechanicSuccess}
-/>
+      <OutsourceMechanicModal
+        isOpen={showOutsourceMechanicModal}
+        onClose={() => setShowOutsourceMechanicModal(false)}
+        ticketNumber={selectedRepair?.ticketNumber}
+        onSuccess={handleOutsourceMechanicSuccess}
+      />
     </div>
   );
 };

@@ -26,8 +26,11 @@ const toolsRoutes = require('./routes/tools-management-system/tools'); // Assumi
 const damageReportsRoutes = require('./routes/tools-management-system/damage-reports'); // Importing the damage reports routes
 const completedCarsRoutes = require('./routes/manager-folder/completed-cars'); // Importing completed cars routes
 const outsource_mechanic_paymentsRoutes = require('./routes/reception/outsource_mechanic_payments');  
-
-
+const FinanceRoutes = require('./routes/reception/finance');
+const billRoutes = require('./routes/reception/bill'); // Importing bill routes
+const communicationRoutes = require('./routes/communication-center/communication-center.js'); // Importing communication routes
+const communicationstatsRoutes = require('./routes/communication-center/stats.js'); // Importing communication analytics routes
+const marketingRoutes = require('./routes/marketing-management-system/marketing-activity.js'); // Importing marketing routes
 
 
 app.use(express.json());
@@ -110,6 +113,19 @@ app.use('/api/damage-reports', damageReportsRoutes); // Using the damage reports
 
 //----------------outsource mechanic payments----------------
 app.use('/api/outsource-mechanic-payments', outsource_mechanic_paymentsRoutes);
+
+//----------------finance----------------
+app.use('/api/finance', FinanceRoutes);
+
+//----------------bill----------------
+app.use('/api/bill', billRoutes);
+
+//----------------communication center----------------
+app.use('/api/communication-center', communicationRoutes);
+app.use('/api/communication-stats', communicationstatsRoutes);
+
+//----------------marketing management system----------------
+app.use('/api/marketing', marketingRoutes);
 
 
 // Check MySQL before starting server

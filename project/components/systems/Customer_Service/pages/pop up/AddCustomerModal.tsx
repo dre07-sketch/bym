@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, User, Mail, Phone, MapPin, Car, Plus, Save, Briefcase, CheckCircle, Image as ImageIcon, Trash2 } from 'lucide-react';
 
 interface AddCustomerModalProps {
@@ -16,6 +16,12 @@ interface Vehicle {
   mileage: string | null;
   image: File | null;
   imagePreview: string | null;
+}
+
+// Type for car model data
+interface CarModel {
+  model: string;
+  serviceInterval: number;
 }
 
 const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) => {
@@ -46,14 +52,46 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
     },
   ]);
 
-  // New: Customer image state
+  // Customer image state
   const [customerImage, setCustomerImage] = useState<File | null>(null);
   const [customerImagePreview, setCustomerImagePreview] = useState<string | null>(null);
+
+  // Car models data
+  const [carModelsByMake, setCarModelsByMake] = useState<Record<string, CarModel[]>>({});
+  const [carMakes, setCarMakes] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [createdCustomerId, setCreatedCustomerId] = useState('');
+
+  // Fetch car models on mount
+  useEffect(() => {
+    const fetchCarModels = async () => {
+      try {
+        const response = await fetch('http://localhost:5001/api/customers/car-models');
+        if (!response.ok) throw new Error('Failed to load car models');
+        const data: Record<string, { model: string; serviceInterval: number }[]> = await response.json();
+        setCarModelsByMake(data);
+        setCarMakes(Object.keys(data).sort());
+      } catch (err) {
+        console.error('Error loading car models:', err);
+        setError('Could not load car models. Please try again.');
+      } finally {
+        setLoadingModels(false);
+      }
+    };
+
+    if (isOpen) {
+      fetchCarModels();
+    }
+  }, [isOpen]);
+
+  // Helper to get models for a given make
+  const getModelsForMake = (make: string): CarModel[] => {
+    return carModelsByMake[make] || [];
+  };
 
   const handleCustomerChange = (field: string, value: string) => {
     setCustomerData((prev) => ({ ...prev, [field]: value }));
@@ -186,6 +224,8 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
     setError('');
     setIsSuccess(false);
     setCreatedCustomerId('');
+    setCarModelsByMake({});
+    setCarMakes([]);
   };
 
   const handleClose = () => {
@@ -226,16 +266,14 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
       formData.append('registrationDate', customerData.registrationDate);
       formData.append('totalServices', customerData.totalServices.toString());
 
-      // --- CRITICAL: Append images in correct order ---
-      // 1. Customer image first
+      // Append images: customer first, then vehicles
       if (customerImage) {
-        formData.append('images', customerImage); // This will be req.files[0]
+        formData.append('images', customerImage);
       }
 
-      // 2. Then vehicle images (in order)
       vehicles.forEach((vehicle) => {
         if (vehicle.image) {
-          formData.append('images', vehicle.image); // These will be req.files[1], [2], ...
+          formData.append('images', vehicle.image);
         }
       });
 
@@ -284,10 +322,10 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         {/* Backdrop */}
-        <div className="fixed inset-0 transition-opacity bg-gray bg-opacity-55" onClick={onClose} />
+        <div className="fixed inset-0 transition-opacity bg-gray-900 bg-opacity-50" onClick={onClose}></div>
 
         {/* Modal */}
-        <div className="inline-block w-full text-black max-w-4xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl max-h-[90vh] overflow-y-auto">
+        <div className="inline-block w-full max-w-4xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -330,7 +368,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-8">
+            <form onSubmit={handleSubmit} className="space-y-8 text-black">
               {/* Customer Information */}
               <div className="bg-gray-50 rounded-lg p-6">
                 <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -533,181 +571,183 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
                     type="button"
                     onClick={addVehicle}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-sm flex items-center transition-colors"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || loadingModels}
                   >
                     <Plus className="w-4 h-4 mr-1" />
                     Add Vehicle
                   </button>
                 </div>
 
-                {vehicles.map((vehicle, index) => (
-                  <div key={index} className="bg-white rounded-lg p-4 mb-4 border border-blue-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <h5 className="font-medium text-gray-900">Vehicle {index + 1}</h5>
-                      {vehicles.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeVehicle(index)}
-                          className="text-red-600 hover:text-red-800 text-sm"
-                          disabled={isSubmitting}
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Make *
-                        </label>
-                        <input
-                          type="text"
-                          value={vehicle.make}
-                          onChange={(e) => handleVehicleChange(index, 'make', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="e.g., Toyota"
-                          required
-                          disabled={isSubmitting}
-                        />
+                {loadingModels ? (
+                  <p className="text-center text-black">Loading car models...</p>
+                ) : (
+                  vehicles.map((vehicle, index) => (
+                    <div key={index} className="bg-white rounded-lg p-4 mb-4 border border-blue-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h5 className="font-medium text-gray-900">Vehicle {index + 1}</h5>
+                        {vehicles.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeVehicle(index)}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                            disabled={isSubmitting}
+                          >
+                            Remove
+                          </button>
+                        )}
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Model *
-                        </label>
-                        <input
-                          type="text"
-                          value={vehicle.model}
-                          onChange={(e) => handleVehicleChange(index, 'model', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="e.g., Camry"
-                          required
-                          disabled={isSubmitting}
-                        />
-                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-black">
+                        {/* Make Dropdown */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Make *</label>
+                          <select
+                            value={vehicle.make}
+                            onChange={(e) => handleVehicleChange(index, 'make', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            required
+                            disabled={isSubmitting || carMakes.length === 0}
+                          >
+                            <option value="">Select Make</option>
+                            {carMakes.map((make) => (
+                              <option key={make} value={make}>
+                                {make}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Year
-                        </label>
-                        <input
-                          type="number"
-                          value={vehicle.year || ''}
-                          onChange={(e) => handleVehicleChange(index, 'year', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="2020"
-                          min="1900"
-                          max={new Date().getFullYear() + 1}
-                          disabled={isSubmitting}
-                        />
-                      </div>
+                        {/* Model Dropdown */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Model *</label>
+                          <select
+                            value={vehicle.model}
+                            onChange={(e) => handleVehicleChange(index, 'model', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            required
+                            disabled={isSubmitting || !getModelsForMake(vehicle.make).length}
+                          >
+                            <option value="">{vehicle.make ? 'Select Model' : 'Select Make First'}</option>
+                            {getModelsForMake(vehicle.make).map((modelObj) => (
+                              <option key={modelObj.model} value={modelObj.model}>
+                                {modelObj.model} ({modelObj.serviceInterval} km)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          License Plate
-                        </label>
-                        <input
-                          type="text"
-                          value={vehicle.licensePlate || ''}
-                          onChange={(e) => handleVehicleChange(index, 'licensePlate', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="ABC-123"
-                          disabled={isSubmitting}
-                        />
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
+                          <input
+                            type="number"
+                            value={vehicle.year || ''}
+                            onChange={(e) => handleVehicleChange(index, 'year', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="2020"
+                            min="1900"
+                            max={new Date().getFullYear() + 1}
+                            disabled={isSubmitting}
+                          />
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Color
-                        </label>
-                        <input
-                          type="text"
-                          value={vehicle.color || ''}
-                          onChange={(e) => handleVehicleChange(index, 'color', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Silver"
-                          disabled={isSubmitting}
-                        />
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">License Plate</label>
+                          <input
+                            type="text"
+                            value={vehicle.licensePlate || ''}
+                            onChange={(e) => handleVehicleChange(index, 'licensePlate', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="ABC-123"
+                            disabled={isSubmitting}
+                          />
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Current Mileage
-                        </label>
-                        <input
-                          type="number"
-                          value={vehicle.mileage || ''}
-                          onChange={(e) => handleVehicleChange(index, 'mileage', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="50000"
-                          min="0"
-                          disabled={isSubmitting}
-                        />
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
+                          <input
+                            type="text"
+                            value={vehicle.color || ''}
+                            onChange={(e) => handleVehicleChange(index, 'color', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Silver"
+                            disabled={isSubmitting}
+                          />
+                        </div>
 
-                      <div className="md:col-span-3">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          VIN (Vehicle Identification Number)
-                        </label>
-                        <input
-                          type="text"
-                          value={vehicle.vin || ''}
-                          onChange={(e) => handleVehicleChange(index, 'vin', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="1HGBH41JXMN109186"
-                          maxLength={17}
-                          disabled={isSubmitting}
-                        />
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Current Mileage</label>
+                          <input
+                            type="number"
+                            value={vehicle.mileage || ''}
+                            onChange={(e) => handleVehicleChange(index, 'mileage', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="50000"
+                            min="0"
+                            disabled={isSubmitting}
+                          />
+                        </div>
 
-                      <div className="md:col-span-3">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Vehicle Image
-                        </label>
-                        <div className="flex items-center space-x-4">
-                          {vehicle.imagePreview ? (
-                            <div className="relative">
-                              <img
-                                src={vehicle.imagePreview}
-                                alt="Vehicle preview"
-                                className="h-24 w-24 object-cover rounded-lg"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => removeImage(index)}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                                disabled={isSubmitting}
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
+                        <div className="md:col-span-3">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            VIN (Vehicle Identification Number)
+                          </label>
+                          <input
+                            type="text"
+                            value={vehicle.vin || ''}
+                            onChange={(e) => handleVehicleChange(index, 'vin', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="1HGBH41JXMN109186"
+                            maxLength={17}
+                            disabled={isSubmitting}
+                          />
+                        </div>
+
+                        <div className="md:col-span-3">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Image</label>
+                          <div className="flex items-center space-x-4">
+                            {vehicle.imagePreview ? (
+                              <div className="relative">
+                                <img
+                                  src={vehicle.imagePreview}
+                                  alt="Vehicle preview"
+                                  className="h-24 w-24 object-cover rounded-lg"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeImage(index)}
+                                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                                  disabled={isSubmitting}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="h-24 w-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                                <ImageIcon className="w-8 h-8 text-gray-400" />
+                              </div>
+                            )}
+                            <div>
+                              <label className="cursor-pointer">
+                                <span className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm flex items-center transition-colors">
+                                  <Plus className="w-4 h-4 mr-1" />
+                                  {vehicle.imagePreview ? 'Change Image' : 'Upload Image'}
+                                </span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => handleImageUpload(index, e)}
+                                  className="hidden"
+                                  disabled={isSubmitting}
+                                />
+                              </label>
+                              <p className="text-xs text-gray-500 mt-1">JPG, PNG (Max 5MB)</p>
                             </div>
-                          ) : (
-                            <div className="h-24 w-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
-                              <ImageIcon className="w-8 h-8 text-gray-400" />
-                            </div>
-                          )}
-                          <div>
-                            <label className="cursor-pointer">
-                              <span className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm flex items-center transition-colors">
-                                <Plus className="w-4 h-4 mr-1" />
-                                {vehicle.imagePreview ? 'Change Image' : 'Upload Image'}
-                              </span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => handleImageUpload(index, e)}
-                                className="hidden"
-                                disabled={isSubmitting}
-                              />
-                            </label>
-                            <p className="text-xs text-gray-500 mt-1">JPG, PNG (Max 5MB)</p>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
 
               {/* Submit Buttons */}

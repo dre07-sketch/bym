@@ -29,19 +29,28 @@ const MyInspections = () => {
   const [showModal, setShowModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showPassFailModal, setShowPassFailModal] = useState(false);
-
   const [filterLicense, setFilterLicense] = useState('');
   const [filterMechanic, setFilterMechanic] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterTicket, setFilterTicket] = useState('');
-
   const [inspectionForm, setInspectionForm] = useState({
     mainIssueResolved: '', // 'Resolved' | 'Not Resolved'
     reassemblyVerified: '', // 'Yes' | 'No'
     generalCondition: '', // 'Good' | 'Needs Attention'
     notes: '',
     completionDate: '',
-    uploadedFiles: []
+    uploadedFiles: [],
+    // New fields from API
+    check_oil_leaks: false,
+    check_engine_air_filter_oil_coolant_level: false,
+    check_brake_fluid_levels: false,
+    check_gluten_fluid_levels: false,
+    check_battery_timing_belt: false,
+    check_tire: false,
+    check_tire_pressure_rotation: false,
+    check_lights_wiper_horn: false,
+    check_door_locks_central_locks: false,
+    check_customer_work_order_reception_book: false
   });
 
   // Fetch inspections from API
@@ -51,7 +60,6 @@ const MyInspections = () => {
         setLoading(true);
         const url = new URL('http://localhost:5001/api/inspection-endpoint/fetch-inspection', window.location.origin);
         if (statusFilter !== 'all') url.searchParams.append('status', statusFilter);
-
         const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to fetch inspections');
         
@@ -63,7 +71,6 @@ const MyInspections = () => {
         setLoading(false);
       }
     };
-
     fetchInspections();
   }, [statusFilter]);
 
@@ -74,12 +81,10 @@ const MyInspections = () => {
       inspection.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inspection.licensePlate?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inspection.issueDescription?.toLowerCase().includes(searchTerm.toLowerCase());
-
     const matchesLicense = inspection.licensePlate?.toLowerCase().includes(filterLicense.toLowerCase());
     const matchesTicket = inspection.ticketNumber?.toLowerCase().includes(filterTicket.toLowerCase());
     const matchesStatus = filterStatus === '' || inspection.status === filterStatus;
     const matchesPriority = priorityFilter === 'all' || inspection.priority === priorityFilter;
-
     return matchesSearch && matchesLicense && matchesTicket && matchesStatus && matchesPriority;
   });
 
@@ -91,19 +96,29 @@ const MyInspections = () => {
       generalCondition: inspection.generalCondition || '',
       notes: inspection.notes || '',
       completionDate: inspection.finishedDate || '',
-      uploadedFiles: []
+      uploadedFiles: [],
+      // Initialize new fields
+      check_oil_leaks: inspection.check_oil_leaks || false,
+      check_engine_air_filter_oil_coolant_level: inspection.check_engine_air_filter_oil_coolant_level || false,
+      check_brake_fluid_levels: inspection.check_brake_fluid_levels || false,
+      check_gluten_fluid_levels: inspection.check_gluten_fluid_levels || false,
+      check_battery_timing_belt: inspection.check_battery_timing_belt || false,
+      check_tire: inspection.check_tire || false,
+      check_tire_pressure_rotation: inspection.check_tire_pressure_rotation || false,
+      check_lights_wiper_horn: inspection.check_lights_wiper_horn || false,
+      check_door_locks_central_locks: inspection.check_door_locks_central_locks || false,
+      check_customer_work_order_reception_book: inspection.check_customer_work_order_reception_book || false
     });
     setShowModal(true);
   };
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-
     if (!inspectionForm.mainIssueResolved || !inspectionForm.reassemblyVerified || !inspectionForm.generalCondition) {
       alert('Please fill in all required fields: issue resolved, reassembly, and general condition.');
       return;
     }
-
+    
     const payload = {
       ticketNumber: selectedInspection.ticketNumber,
       mainIssueResolved: inspectionForm.mainIssueResolved,
@@ -111,6 +126,17 @@ const MyInspections = () => {
       generalCondition: inspectionForm.generalCondition,
       notes: inspectionForm.notes,
       inspectionDate: inspectionForm.completionDate,
+      // Include new fields
+      check_oil_leaks: inspectionForm.check_oil_leaks,
+      check_engine_air_filter_oil_coolant_level: inspectionForm.check_engine_air_filter_oil_coolant_level,
+      check_brake_fluid_levels: inspectionForm.check_brake_fluid_levels,
+      check_gluten_fluid_levels: inspectionForm.check_gluten_fluid_levels,
+      check_battery_timing_belt: inspectionForm.check_battery_timing_belt,
+      check_tire: inspectionForm.check_tire,
+      check_tire_pressure_rotation: inspectionForm.check_tire_pressure_rotation,
+      check_lights_wiper_horn: inspectionForm.check_lights_wiper_horn,
+      check_door_locks_central_locks: inspectionForm.check_door_locks_central_locks,
+      check_customer_work_order_reception_book: inspectionForm.check_customer_work_order_reception_book
     };
 
     try {
@@ -119,13 +145,10 @@ const MyInspections = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       const result = await response.json();
-
       if (!response.ok) {
         throw new Error(result.message || 'Failed to save inspection');
       }
-
       // ✅ Move to Pass/Fail decision
       setShowPassFailModal(true);
     } catch (err) {
@@ -133,6 +156,19 @@ const MyInspections = () => {
       alert(`Error: ${err.message}`);
     }
   };
+
+  // Helper function to render checkbox fields
+  const renderCheckboxField = (field, label) => (
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={inspectionForm[field]}
+        onChange={(e) => setInspectionForm({ ...inspectionForm, [field]: e.target.checked })}
+        className="w-4 h-4 text-blue-600 rounded"
+      />
+      <span className="text-sm">{label}</span>
+    </label>
+  );
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -208,7 +244,7 @@ const MyInspections = () => {
           </div>
         </div>
       </div>
-
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Search and Filters */}
         <div className="mb-6">
@@ -219,7 +255,6 @@ const MyInspections = () => {
             <Filter className="w-4 h-4" />
             <span>Filters</span>
           </button>
-
           {showFilters && (
             <div className="mt-4 p-4 bg-white rounded-xl shadow-sm border">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -262,7 +297,7 @@ const MyInspections = () => {
             </div>
           )}
         </div>
-
+        
         {/* Inspections List */}
         <div className="space-y-3">
           {filteredInspections.length === 0 ? (
@@ -291,7 +326,6 @@ const MyInspections = () => {
                       </div>
                     </div>
                   </div>
-
                   <div className="flex gap-1.5">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(inspection.priority)}`}>
                       {inspection.priority?.charAt(0).toUpperCase() + inspection.priority?.slice(1) || 'Medium'}
@@ -302,7 +336,6 @@ const MyInspections = () => {
                     </span>
                   </div>
                 </div>
-
                 <div className="mt-3 flex items-center justify-between text-sm">
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-1.5">
@@ -314,7 +347,6 @@ const MyInspections = () => {
                       <span className="text-gray-700">{inspection.mechanicName}</span>
                     </div>
                   </div>
-
                   <div className="flex items-center gap-1 text-blue-600">
                     <Calendar className="w-4 h-4" />
                     <span>
@@ -329,7 +361,7 @@ const MyInspections = () => {
           )}
         </div>
       </div>
-
+      
       {/* Inspection Modal */}
       {showModal && selectedInspection && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 text-black">
@@ -356,7 +388,7 @@ const MyInspections = () => {
                 </button>
               </div>
             </div>
-
+            
             <div className="p-5 space-y-5">
               {/* Vehicle and Client Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -370,7 +402,6 @@ const MyInspections = () => {
                     <p><span className="text-gray-500">Model:</span> {selectedInspection.vehicleModel}</p>
                   </div>
                 </div>
-
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                     <User className="w-4 h-4 text-blue-600" />
@@ -382,7 +413,7 @@ const MyInspections = () => {
                   </div>
                 </div>
               </div>
-
+              
               {/* Issue Description */}
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <h3 className="font-medium text-red-900 mb-2 flex items-center gap-2">
@@ -391,7 +422,7 @@ const MyInspections = () => {
                 </h3>
                 <p className="text-sm text-red-800">{selectedInspection.issueDescription}</p>
               </div>
-
+              
               {/* Dates */}
               <div className="flex flex-wrap gap-3 text-sm">
                 <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg">
@@ -405,7 +436,7 @@ const MyInspections = () => {
                   </div>
                 )}
               </div>
-
+              
               {/* Parts List */}
               {selectedInspection.parts && selectedInspection.parts.length > 0 && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -418,7 +449,6 @@ const MyInspections = () => {
                       const partStatus = part.status?.trim();
                       let displayStatus = 'Pending';
                       let statusColor = 'bg-gray-100 text-gray-800';
-
                       if (partStatus === 'returned') {
                         displayStatus = 'Returned';
                         statusColor = 'bg-green-100 text-green-800';
@@ -435,7 +465,6 @@ const MyInspections = () => {
                         displayStatus = 'Not Started';
                         statusColor = 'bg-orange-100 text-orange-800';
                       }
-
                       return (
                         <div
                           key={idx}
@@ -447,7 +476,6 @@ const MyInspections = () => {
                               <p className="text-xs text-gray-600 mt-1">Note: {part.notes}</p>
                             )}
                           </div>
-
                           <span
                             className={`mt-2 sm:mt-0 px-2.5 py-1 rounded-full text-xs font-medium ${statusColor}`}
                           >
@@ -459,14 +487,14 @@ const MyInspections = () => {
                   </div>
                 </div>
               )}
-
+              
               {/* Inspection Form */}
               <form onSubmit={handleFormSubmit} className="space-y-4 border-t pt-4">
                 <h3 className="font-bold text-gray-900 flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-blue-600" />
                   Final Inspection Checklist
                 </h3>
-
+                
                 {/* Main Issue Resolved */}
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">Main Issue Resolved</h4>
@@ -493,7 +521,7 @@ const MyInspections = () => {
                     </label>
                   </div>
                 </div>
-
+                
                 {/* Reassembly Verified */}
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">All Parts Reassembled?</h4>
@@ -520,7 +548,7 @@ const MyInspections = () => {
                     </label>
                   </div>
                 </div>
-
+                
                 {/* General Condition */}
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">General Condition</h4>
@@ -547,7 +575,24 @@ const MyInspections = () => {
                     </label>
                   </div>
                 </div>
-
+                
+                {/* New Additional Checks Section */}
+                <div className="border-t pt-4">
+                  <h4 className="font-medium text-gray-900 mb-3">Additional Inspection Checks</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {renderCheckboxField('check_oil_leaks', 'Check Oil Leaks')}
+                    {renderCheckboxField('check_engine_air_filter_oil_coolant_level', 'Check Engine/Air Filter/Oil/Coolant Level')}
+                    {renderCheckboxField('check_brake_fluid_levels', 'Check Brake Fluid Levels')}
+                    {renderCheckboxField('check_gluten_fluid_levels', 'Check Gluten Fluid Levels')}
+                    {renderCheckboxField('check_battery_timing_belt', 'Check Battery & Timing Belt')}
+                    {renderCheckboxField('check_tire', 'Check Tire Condition')}
+                    {renderCheckboxField('check_tire_pressure_rotation', 'Check Tire Pressure & Rotation')}
+                    {renderCheckboxField('check_lights_wiper_horn', 'Check Lights, Wiper & Horn')}
+                    {renderCheckboxField('check_door_locks_central_locks', 'Check Door Locks & Central Locks')}
+                    {renderCheckboxField('check_customer_work_order_reception_book', 'Check Customer Work Order & Reception Book')}
+                  </div>
+                </div>
+                
                 {/* Notes */}
                 <div>
                   <label className="block font-medium text-gray-900 mb-2">Notes</label>
@@ -559,7 +604,7 @@ const MyInspections = () => {
                     placeholder="Additional inspection notes..."
                   />
                 </div>
-
+                
                 {/* Completion Date */}
                 <div>
                   <label className="block font-medium text-gray-900 mb-2">Completion Date</label>
@@ -570,7 +615,7 @@ const MyInspections = () => {
                     className="w-full p-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
-
+                
                 {/* Submit Buttons */}
                 <div className="flex justify-end gap-3 pt-4">
                   <button
@@ -593,7 +638,7 @@ const MyInspections = () => {
           </div>
         </div>
       )}
-
+      
       {/* Pass/Fail Modal */}
       {showPassFailModal && selectedInspection && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -602,7 +647,6 @@ const MyInspections = () => {
             <p className="text-gray-600 mb-6">
               Has the vehicle passed the final inspection?
             </p>
-
             <div className="flex gap-3">
               {/* PASS Button */}
               <button
@@ -616,13 +660,10 @@ const MyInspections = () => {
                         inspectionStatus: 'pass'
                       })
                     });
-
                     const data = await response.json();
-
                     if (!response.ok) {
                       throw new Error(data.message || 'Failed to update inspection status');
                     }
-
                     // Update UI: inspection passed → awaiting-bill
                     setInspections(prev =>
                       prev.map(insp =>
@@ -631,7 +672,6 @@ const MyInspections = () => {
                           : insp
                       )
                     );
-
                     alert('Inspection passed! Ticket status updated to "awaiting-bill".');
                     setShowPassFailModal(false);
                     setShowModal(false);
@@ -646,7 +686,7 @@ const MyInspections = () => {
                 <CheckCircle className="w-5 h-5" />
                 Pass
               </button>
-
+              
               {/* FAIL Button */}
               <button
                 onClick={async () => {
@@ -659,13 +699,10 @@ const MyInspections = () => {
                         inspectionStatus: 'fail'
                       })
                     });
-
                     const data = await response.json();
-
                     if (!response.ok) {
                       throw new Error(data.message || 'Failed to update inspection status');
                     }
-
                     // Update UI: inspection failed → inspection-failed
                     setInspections(prev =>
                       prev.map(insp =>
@@ -674,7 +711,6 @@ const MyInspections = () => {
                           : insp
                       )
                     );
-
                     alert('Inspection failed. Ticket status updated.');
                     setShowPassFailModal(false);
                     setShowModal(false);

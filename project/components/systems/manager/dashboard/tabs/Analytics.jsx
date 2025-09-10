@@ -175,16 +175,18 @@ const Analytics = () => {
 
   // Helper to get color by status
   const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
-      case 'new': return '#3b82f6'; // blue
-      case 'in progress':
-      case 'in-progress': return '#f59e0b'; // amber
-      case 'completed': return '#10b981'; // green
-      case 'cancelled': return '#ef4444'; // red
-      case 'pending': return '#8b5cf6'; // purple
-      default: return '#9ca3af'; // gray
-    }
-  };
+  switch (status.toLowerCase()) {
+    case 'pending': return '#8b5cf6'; // purple
+    case 'in progress': return '#f59e0b'; // amber
+    case 'ready for inspection': return '#3b82f6'; // blue
+    case 'inspection': return '#06b6d4'; // cyan
+    case 'successful inspection': return '#10b981'; // green
+    case 'inspection failed': return '#ef4444'; // red
+    case 'awaiting bill': return '#f97316'; // orange
+    case 'completed': return '#059669'; // dark green
+    default: return '#9ca3af'; // gray
+  }
+};
 
   // Chart Data
   const repairTrendsData = {

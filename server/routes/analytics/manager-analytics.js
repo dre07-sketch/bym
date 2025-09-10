@@ -68,7 +68,7 @@ router.get('/pending', (req, res) => {
       vehicle_info,
       license_plate,
       title,
-      mechanic_assign,
+      
       description,
       priority,
       type,

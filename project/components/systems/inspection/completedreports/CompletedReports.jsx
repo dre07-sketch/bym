@@ -18,7 +18,12 @@ import {
   FolderOpen,
   Clock,
   AlertCircle,
-  Check
+  Check,
+  Shield,
+  Droplet,
+  Zap,
+  Settings,
+  Circle
 } from 'lucide-react';
 
 const CompletedReports = () => {
@@ -28,7 +33,6 @@ const CompletedReports = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showParts, setShowParts] = useState(false);
-
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
@@ -37,20 +41,53 @@ const CompletedReports = () => {
   const [filterLicense, setFilterLicense] = useState('');
   const [filterTicket, setFilterTicket] = useState('');
   const [filterStatus, setFilterStatus] = useState(''); // '' = all, including 'completed' & 'awaiting bill'
-
+  
+  // Checklist icons mapping
+  const checklistIcons = {
+    oilLeaks: Droplet,
+    engineAirFilterOilCoolant: Settings,
+    brakeFluidLevels: Shield,
+    glutenFluidLevels: Droplet,
+    batteryTimingBelt: Zap,
+    tire: Circle,
+    tirePressureRotation: Circle,
+    lightsWiperHorn: Zap,
+    doorLocksCentralLocks: Shield,
+    customerWorkOrderReceptionBook: FileText
+  };
+  
+  // Checklist labels mapping
+  const checklistLabels = {
+    oilLeaks: 'Oil Leaks',
+    engineAirFilterOilCoolant: 'Engine/Air Filter/Oil/Coolant',
+    brakeFluidLevels: 'Brake Fluid Levels',
+    glutenFluidLevels: 'Gluten Fluid Levels',
+    batteryTimingBelt: 'Battery & Timing Belt',
+    tire: 'Tire Condition',
+    tirePressureRotation: 'Tire Pressure & Rotation',
+    lightsWiperHorn: 'Lights, Wiper & Horn',
+    doorLocksCentralLocks: 'Door Locks & Central Locks',
+    customerWorkOrderReceptionBook: 'Customer Work Order & Reception Book'
+  };
+  
+  // Normalize checklist value to boolean - Updated to handle "Yes" and "No" strings
+  const normalizeChecklistValue = (value) => {
+    if (value === true || value === 1 || value === 'yes' || value === 'YES' || value === 'Yes') return true;
+    if (value === false || value === 0 || value === 'no' || value === 'NO' || value === 'No') return false;
+    return null; // For unknown values
+  };
+  
   // Debounced search
   useEffect(() => {
     const handler = setTimeout(() => {
       // You can add logic here if needed (e.g., analytics)
     }, 500);
-
     return () => clearTimeout(handler);
   }, [searchTerm, filterLicense, filterTicket, priorityFilter, dateFilter, filterStatus]);
-
+  
   // Fetch reports
   useEffect(() => {
     const controller = new AbortController();
-
     const fetchReports = async () => {
       try {
         const response = await fetch('http://localhost:5001/api/inspection-endpoint/completed-with-parts', {
@@ -68,45 +105,39 @@ const CompletedReports = () => {
         setLoading(false);
       }
     };
-
     fetchReports();
-
     return () => controller.abort();
   }, []);
-
+  
   // Format date safely
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleDateString('en-US');
   };
-
+  
   // Filter reports
   const filteredReports = reports.filter(report => {
     const matchesSearch = 
-      report.mechanicName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (report.mechanics && report.mechanics.some(mechanic => 
+        mechanic.toLowerCase().includes(searchTerm.toLowerCase())
+      )) ||
       report.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       report.licensePlate?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       report.issueDescription?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       report.ticketNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       false;
-
     const matchesLicense = !filterLicense || 
       report.licensePlate?.toLowerCase().includes(filterLicense.toLowerCase());
-
     const matchesTicket = !filterTicket || 
       report.ticketNumber?.toLowerCase().includes(filterTicket.toLowerCase());
-
     const matchesStatus = !filterStatus || report.status === filterStatus;
-
     const matchesPriority = priorityFilter === 'all' || report.priority === priorityFilter;
-
     let matchesDate = true;
     if (dateFilter !== 'all' && report.finishedDate) {
       const reportDate = new Date(report.finishedDate);
       const today = new Date();
       const daysDiff = Math.floor((today - reportDate) / (1000 * 60 * 60 * 24));
-
       switch (dateFilter) {
         case 'week':  matchesDate = daysDiff <= 7; break;
         case 'month': matchesDate = daysDiff <= 30; break;
@@ -114,10 +145,9 @@ const CompletedReports = () => {
         default: matchesDate = true;
       }
     }
-
     return matchesSearch && matchesLicense && matchesTicket && matchesStatus && matchesPriority && matchesDate;
   });
-
+  
   // Priority color
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -127,14 +157,14 @@ const CompletedReports = () => {
       default: return 'bg-gray-100 text-gray-900 border-gray-200';
     }
   };
-
+  
   // Handle report click
   const handleReportClick = (report) => {
     setSelectedReport(report);
     setShowModal(true);
     setShowParts(false);
   };
-
+  
   // Prevent background scroll
   useEffect(() => {
     if (showModal) {
@@ -146,7 +176,7 @@ const CompletedReports = () => {
       document.body.style.overflow = 'unset';
     };
   }, [showModal]);
-
+  
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -157,7 +187,7 @@ const CompletedReports = () => {
       </div>
     );
   }
-
+  
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-red-50">
@@ -169,7 +199,7 @@ const CompletedReports = () => {
       </div>
     );
   }
-
+  
   return (
     <div className="min-h-screen max-h-screen overflow-y-auto bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       {/* Header */}
@@ -183,7 +213,7 @@ const CompletedReports = () => {
           </div>
         </div>
       </div>
-
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Filters Toggle */}
         <div className="mb-6">
@@ -194,7 +224,6 @@ const CompletedReports = () => {
             <Filter className="w-4 h-4" />
             <span>Filters</span>
           </button>
-
           {showFilters && (
             <div className="mt-4 p-4 bg-white rounded-xl shadow-sm border space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -232,7 +261,6 @@ const CompletedReports = () => {
                   </select>
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
@@ -260,7 +288,6 @@ const CompletedReports = () => {
                   </select>
                 </div>
               </div>
-
               {/* Clear Filters */}
               {(searchTerm || filterLicense || filterTicket || priorityFilter !== 'all' || dateFilter !== 'all' || filterStatus) && (
                 <div>
@@ -282,7 +309,7 @@ const CompletedReports = () => {
             </div>
           )}
         </div>
-
+        
         {/* Reports List */}
         <div className="space-y-3">
           {filteredReports.length > 0 ? (
@@ -312,12 +339,10 @@ const CompletedReports = () => {
                       </div>
                     </div>
                   </div>
-
                   <div className="flex flex-col items-end gap-1">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(report.priority)}`}>
                       {report.priority?.toUpperCase()}
                     </span>
-
                     {report.status === 'completed' ? (
                       <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 flex items-center gap-1">
                         <CheckCircle className="w-3 h-3" />
@@ -331,7 +356,6 @@ const CompletedReports = () => {
                     )}
                   </div>
                 </div>
-
                 <div className="mt-3 flex items-center justify-between text-sm">
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-1.5">
@@ -340,10 +364,13 @@ const CompletedReports = () => {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Wrench className="w-4 h-4 text-gray-400" />
-                      <span className="text-gray-700">{report.mechanicName}</span>
+                      <span className="text-gray-700">
+                        {report.mechanics && report.mechanics.length > 0 
+                          ? report.mechanics.join(', ') 
+                          : 'Not assigned'}
+                      </span>
                     </div>
                   </div>
-
                   <div className="flex items-center gap-1 text-purple-600">
                     <Calendar className="w-4 h-4" />
                     <span>{formatDate(report.assignedDate)}</span>
@@ -375,7 +402,7 @@ const CompletedReports = () => {
           )}
         </div>
       </div>
-
+      
       {/* Report Details Modal */}
       {showModal && selectedReport && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 text-black">
@@ -412,7 +439,7 @@ const CompletedReports = () => {
                 </button>
               </div>
             </div>
-
+            
             <div className="p-5 space-y-5">
               {/* Vehicle and Client Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -427,7 +454,6 @@ const CompletedReports = () => {
                     <p><span className="text-gray-500">Model:</span> {selectedReport.vehicleModel}</p>
                   </div>
                 </div>
-
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                     <User className="w-4 h-4 text-purple-600" />
@@ -435,11 +461,15 @@ const CompletedReports = () => {
                   </h3>
                   <div className="space-y-2 text-sm">
                     <p><span className="text-gray-500">Client:</span> {selectedReport.clientName}</p>
-                    <p><span className="text-gray-500">Mechanic:</span> {selectedReport.mechanicName}</p>
+                    <p><span className="text-gray-500">Mechanic(s):</span> 
+                      {selectedReport.mechanics && selectedReport.mechanics.length > 0 
+                        ? selectedReport.mechanics.join(', ') 
+                        : 'Not assigned'}
+                    </p>
                   </div>
                 </div>
               </div>
-
+              
               {/* Issue Description */}
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <h3 className="font-medium text-red-900 mb-2 flex items-center gap-2">
@@ -448,7 +478,7 @@ const CompletedReports = () => {
                 </h3>
                 <p className="text-sm text-red-800">{selectedReport.issueDescription}</p>
               </div>
-
+              
               {/* Dates */}
               <div className="flex flex-wrap gap-3 text-sm">
                 <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg">
@@ -460,14 +490,13 @@ const CompletedReports = () => {
                   <span>Completed: {formatDate(selectedReport.finishedDate)}</span>
                 </div>
               </div>
-
+              
               {/* Inspection Results */}
               <div className="border border-purple-100 rounded-lg p-4 bg-purple-50">
                 <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-purple-600" />
                   Inspection Results
                 </h3>
-
                 <div className="mb-4">
                   <div className="flex items-center justify-between">
                     <h4 className="font-medium text-gray-900">Main Issue Resolved</h4>
@@ -476,7 +505,6 @@ const CompletedReports = () => {
                     </span>
                   </div>
                 </div>
-
                 <div className="mb-4">
                   <div 
                     className="flex items-center justify-between cursor-pointer"
@@ -490,7 +518,6 @@ const CompletedReports = () => {
                       <ChevronDown className={`w-4 h-4 transition-transform ${showParts ? 'rotate-180' : ''}`} />
                     </div>
                   </div>
-
                   {showParts && Array.isArray(selectedReport.replacedParts) && selectedReport.replacedParts.length > 0 ? (
                     <div className="mt-3 space-y-2 pl-2 border-l-2 border-gray-200">
                       {selectedReport.replacedParts.map((part, index) => (
@@ -514,7 +541,6 @@ const CompletedReports = () => {
                     <p className="text-gray-500 text-sm mt-2 pl-2">No parts recorded for this inspection.</p>
                   )}
                 </div>
-
                 <div className="mb-4">
                   <div className="flex items-center justify-between">
                     <h4 className="font-medium text-gray-900">General Condition</h4>
@@ -523,9 +549,8 @@ const CompletedReports = () => {
                     </span>
                   </div>
                 </div>
-
                 {selectedReport.notes && (
-                  <div>
+                  <div className="mb-4">
                     <label className="block font-medium text-gray-900 mb-2">Inspector Notes</label>
                     <div className="bg-white rounded-md p-3 text-sm border border-gray-200">
                       {selectedReport.notes}
@@ -533,7 +558,57 @@ const CompletedReports = () => {
                   </div>
                 )}
               </div>
-
+              
+              {/* New Inspection Checklist Section */}
+              <div className="border border-blue-100 rounded-lg p-4 bg-blue-50">
+                <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <CheckSquare className="w-5 h-5 text-blue-600" />
+                  Inspection Checklist
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {Object.entries(selectedReport.checklist || {}).map(([key, value]) => {
+                    const IconComponent = checklistIcons[key] || CheckSquare;
+                    // Normalize the value to handle different representations of yes/no
+                    const normalizedValue = normalizeChecklistValue(value);
+                    
+                    return (
+                      <div 
+                        key={key} 
+                        className={`flex items-center gap-3 p-3 rounded-lg ${
+                          normalizedValue === true 
+                            ? 'bg-green-50 border border-green-200' 
+                            : normalizedValue === false 
+                              ? 'bg-red-50 border border-red-200'
+                              : 'bg-gray-50 border border-gray-200'
+                        }`}
+                      >
+                        <div className={`p-2 rounded-full ${
+                          normalizedValue === true 
+                            ? 'bg-green-100 text-green-600' 
+                            : normalizedValue === false 
+                              ? 'bg-red-100 text-red-600'
+                              : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          <IconComponent className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{checklistLabels[key] || key}</p>
+                        </div>
+                        <div>
+                          {normalizedValue === true ? (
+                            <Check className="w-5 h-5 text-green-600" />
+                          ) : normalizedValue === false ? (
+                            <X className="w-5 h-5 text-red-600" />
+                          ) : (
+                            <span className="text-gray-500 text-sm">N/A</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              
               {/* Close Button */}
               <div className="flex justify-end pt-4">
                 <button

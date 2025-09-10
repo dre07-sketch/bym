@@ -40,6 +40,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [showCustomServiceInput, setShowCustomServiceInput] = useState(false);
 
   const filteredCustomers = customers.filter((customer) => {
     const searchLower = searchQuery.toLowerCase();
@@ -169,7 +170,6 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitStatus('submitting');
-
     try {
       const response = await fetch('http://localhost:5001/api/appointments', {
         method: 'POST',
@@ -178,11 +178,9 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
         },
         body: JSON.stringify(formData)
       });
-
       if (!response.ok) {
         throw new Error('Failed to create appointment');
       }
-
       setSubmitStatus('success');
       resetForm();
       setTimeout(() => {
@@ -212,6 +210,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
     setSelectedCustomer(null);
     setSelectedVehicle(null);
     setCustomerType('individual');
+    setShowCustomServiceInput(false);
   };
 
   const handleClose = () => {
@@ -237,7 +236,6 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
             <X className="w-6 h-6" />
           </button>
         </div>
-
         {/* Form */}
         <form className="p-6 space-y-6" onSubmit={handleSubmit}>
           {/* Customer Type Selection */}
@@ -270,7 +268,6 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
               </label>
             </div>
           </div>
-
           {/* Customer Information */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -291,7 +288,6 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
               <Users className="absolute right-3 top-2.5 w-5 h-5 text-gray-400" />
             </div>
           </div>
-
           {/* Vehicle Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -328,7 +324,6 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
               />
             </div>
           </div>
-
           {/* Appointment Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -358,27 +353,58 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
               />
             </div>
           </div>
-
           {/* Service Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Service Type
               </label>
-              <select
-                name="serviceType"
-                value={formData.serviceType}
-                onChange={(e) => handleInputChange('serviceType', e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">Select service type</option>
-                {serviceTypes.map((service) => (
-                  <option key={service} value={service}>
-                    {service}
-                  </option>
-                ))}
-              </select>
+              {!showCustomServiceInput ? (
+                <select
+                  name="serviceType"
+                  value={formData.serviceType}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === 'Other') {
+                      setShowCustomServiceInput(true);
+                      setFormData(prev => ({ ...prev, serviceType: '' }));
+                    } else {
+                      setFormData(prev => ({ ...prev, serviceType: value }));
+                    }
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                >
+                  <option value="">Select service type</option>
+                  {serviceTypes.map((service) => (
+                    <option key={service} value={service}>
+                      {service}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    name="serviceType"
+                    value={formData.serviceType}
+                    onChange={(e) => setFormData(prev => ({ ...prev, serviceType: e.target.value }))}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter custom service type"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCustomServiceInput(false);
+                      setFormData(prev => ({ ...prev, serviceType: '' }));
+                    }}
+                    className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
+                  >
+                    List
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -396,10 +422,8 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
               />
             </div>
           </div>
-
           {/* Mechanic and Bay */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Service Bay
@@ -419,7 +443,6 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
               </select>
             </div>
           </div>
-
           {/* Notes */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -433,7 +456,6 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
               placeholder="Enter any additional notes..."
             />
           </div>
-
           {/* Submission Status */}
           {submitStatus === 'success' && (
             <div className="p-4 bg-green-100 text-green-800 rounded-lg">
@@ -445,7 +467,6 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
               Error creating appointment. Please try again.
             </div>
           )}
-
           {/* Action Buttons */}
           <div className="flex gap-4 pt-6 border-t border-gray-200">
             <button
@@ -466,7 +487,6 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
           </div>
         </form>
       </div>
-
       {/* Customer Selection Modal */}
       {showCustomerModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60">
@@ -545,7 +565,6 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
           </div>
         </div>
       )}
-
       {/* Vehicle Selection Modal */}
       {showVehicleModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60 text-black">

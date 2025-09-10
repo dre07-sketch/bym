@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   UserCheck,
   Clock,
@@ -9,12 +9,9 @@ import {
   Wrench,
   Calendar,
   Search,
-  Filter,
-  Eye,
+  X,
   RotateCcw,
   Package,
-  X,
-  Plus,
   FileText,
 } from 'lucide-react';
 
@@ -30,6 +27,13 @@ interface ServiceTicket {
   assigned_mechanic: string | null;
   status: string;
   vehicle_info: string | null;
+  mechanic_assignments?: Array<{
+    id: number;
+    ticket_number: string;
+    mechanic_id: number;
+    mechanic_name: string;
+    assigned_at: string;
+  }>;
 }
 
 interface Tool {
@@ -110,8 +114,9 @@ const AssignmentReturn: React.FC = () => {
       if (!res.ok) throw new Error('Failed to fetch tickets');
       const data: ServiceTicket[] = await res.json();
       const inProgress = data.filter((t) =>
-        ['in-progress', 'In Progress', 'in progress', 'assigned', 'pending']
-          .includes(t.status.trim().toLowerCase())
+        ['in-progress', 'in progress', 'assigned', 'pending'].includes(
+          t.status.trim().toLowerCase()
+        )
       );
       setTickets(inProgress);
     } catch (err) {
@@ -136,7 +141,13 @@ const AssignmentReturn: React.FC = () => {
       const res = await fetch('http://localhost:5001/api/tools/assigned');
       if (!res.ok) throw new Error('Failed to fetch assignments');
       const data = await res.json();
-      const assignments: AssignedTool[] = data.data || [];
+      const assignments: AssignedTool[] =
+        Array.isArray(data.data)
+          ? data.data.map((a: any) => ({
+              ...a,
+              status: a.status?.trim().toLowerCase() === 'returned' ? 'Returned' : 'In Use',
+            }))
+          : [];
       setAssignedList(assignments);
     } catch (err) {
       console.error('Error fetching assignments:', err);
@@ -156,12 +167,12 @@ const AssignmentReturn: React.FC = () => {
 
   // === OPEN MODAL ===
   const openModal = (ticket: ServiceTicket) => {
-    console.log('Opening modal for ticket:', ticket);
     setSelectedTicket(ticket);
     setIsModalOpen(true);
     setAssignedTools([]);
     setReturnHistory([]);
     setDebugInfo('');
+    setActiveTab('active');
   };
 
   const closeModal = () => {
@@ -219,7 +230,7 @@ const AssignmentReturn: React.FC = () => {
             toolID: tool.id,
             ticketID: selectedTicket.id,
             quantity: qty,
-            assignedBy: selectedTicket.assigned_mechanic || 'Unknown',
+            assignedBy: selectedTicket.mechanic_assignments?.[0]?.mechanic_name || 'Unknown Mechanic',
           }),
         });
         if (!res.ok) {
@@ -231,8 +242,8 @@ const AssignmentReturn: React.FC = () => {
       setAssignedTools([]);
       fetchAssignments();
       fetchTickets();
-      if (activeTab === 'history' && selectedTicket) {
-        fetchReturnHistory(selectedTicket.ticket_number);
+      if (activeTab === 'history') {
+        await fetchReturnHistory(selectedTicket.ticket_number);
       }
     } catch (err: any) {
       console.error('Assignment error:', err);
@@ -257,7 +268,7 @@ const AssignmentReturn: React.FC = () => {
         fetchAssignments();
         fetchTickets();
         if (activeTab === 'history' && selectedTicket) {
-          fetchReturnHistory(selectedTicket.ticket_number);
+          await fetchReturnHistory(selectedTicket.ticket_number);
         }
       } else {
         alert(`❌ ${result.message}`);
@@ -269,54 +280,46 @@ const AssignmentReturn: React.FC = () => {
   };
 
   // === FETCH RETURN HISTORY FOR TICKET ===
-  const fetchReturnHistory = async (ticketNumber: string) => {
+  const fetchReturnHistory = useCallback(async (ticketNumber: string) => {
     setLoadingHistory(true);
-    setDebugInfo(`Fetching history for ticket: ${ticketNumber}`);
-    
+    setDebugInfo(`Fetching return history for ticket: ${ticketNumber}`);
     try {
-      // Trim the ticket number to remove any extra spaces
       const trimmedTicketNumber = ticketNumber.trim();
       const url = `http://localhost:5001/api/tools/returned/${encodeURIComponent(trimmedTicketNumber)}`;
-      setDebugInfo(prev => prev + `\nRequest URL: ${url}`);
+      setDebugInfo((prev) => prev + `\n➡️ Request URL: ${url}`);
       
       const res = await fetch(url);
-      setDebugInfo(prev => prev + `\nResponse status: ${res.status} ${res.statusText}`);
+      setDebugInfo((prev) => prev + `\n📡 Response status: ${res.status} ${res.statusText}`);
       
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
       }
       
-      const text = await res.text();
-      setDebugInfo(prev => prev + `\nRaw response: ${text}`);
+      const data = await res.json();
+      setDebugInfo((prev) => prev + `\n✅ Parsed data: ${JSON.stringify(data, null, 2)}`);
       
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (parseError) {
-        throw new Error('Invalid JSON received from server');
-      }
-      
-      setDebugInfo(prev => prev + `\nParsed data: ${JSON.stringify(data, null, 2)}`);
-      
+      // Check if the response has the expected structure
       if (data.success && Array.isArray(data.data)) {
+        console.log('Setting return history:', data.data);
         setReturnHistory(data.data);
-        setDebugInfo(prev => prev + `\nSet return history with ${data.data.length} items`);
+        setDebugInfo((prev) => prev + `\n📈 Loaded ${data.data.length} returned items`);
       } else {
-        console.warn('No return history found or invalid format:', data);
+        console.warn('No valid return history data:', data);
         setReturnHistory([]);
-        setDebugInfo(prev => prev + `\nNo valid data found. Response: ${JSON.stringify(data)}`);
+        setDebugInfo((prev) => prev + `\n🟨 No return history found: ${JSON.stringify(data)}`);
       }
     } catch (err: any) {
       console.error('Failed to fetch return history:', err);
-      setDebugInfo(prev => prev + `\nError: ${err.message}`);
-      alert(`❌ Error: ${err.message}`);
+      setDebugInfo((prev) => prev + `\n❌ Error: ${err.message}`);
+      alert(`Failed to load return history: ${err.message}`);
       setReturnHistory([]);
     } finally {
       setLoadingHistory(false);
     }
-  };
+  }, []);
 
-  // Get assigned tools for selected ticket
+  // Get currently assigned (in-use) tools
   const getAssignedToolsForTicket = () => {
     return assignedList.filter(
       (a) => a.ticket_id === selectedTicket?.id && a.status === 'In Use'
@@ -341,17 +344,12 @@ const AssignmentReturn: React.FC = () => {
         return assigned.length > 0 && assigned.some((a) => a.status === 'Returned');
       });
 
-  // === EFFECTS ===
+  // Effects
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        await Promise.all([
-          fetchTickets(),
-          fetchTools(),
-          fetchAssignments(),
-          fetchToolStats(),
-        ]);
+        await Promise.all([fetchTickets(), fetchTools(), fetchAssignments(), fetchToolStats()]);
       } catch (err) {
         console.error(err);
       } finally {
@@ -359,33 +357,28 @@ const AssignmentReturn: React.FC = () => {
       }
     };
     load();
-    
     const interval = setInterval(() => {
       fetchTickets();
       fetchTools();
       fetchAssignments();
       fetchToolStats();
     }, 30000);
-    
     return () => clearInterval(interval);
   }, []);
 
-  // Effect to handle tab changes and fetch return history
+  // Handle tab change and fetch history
   useEffect(() => {
-    console.log('Tab effect triggered:', { activeTab, isModalOpen, selectedTicket });
     if (isModalOpen && selectedTicket) {
       if (activeTab === 'history') {
-        console.log('Switching to history tab, fetching data for:', selectedTicket.ticket_number);
         fetchReturnHistory(selectedTicket.ticket_number);
       } else {
-        console.log('Switching to active tab, clearing history');
         setReturnHistory([]);
-        setDebugInfo('');
+        setDebugInfo(prev => prev + `\n🗑️ Cleared return history on tab switch to 'Active'`);
       }
     }
-  }, [activeTab, isModalOpen, selectedTicket]);
+  }, [activeTab, isModalOpen, selectedTicket, fetchReturnHistory]);
 
-  // === Derived Stats ===
+  // Derived stats
   const activeAssignments = assignedList.filter((a) => a.status === 'In Use');
   const returnedAssignments = assignedList.filter((a) => a.status === 'Returned');
 
@@ -469,16 +462,6 @@ const AssignmentReturn: React.FC = () => {
         >
           Active Tickets
         </button>
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            activeTab === 'history'
-              ? 'bg-white text-green-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-800'
-          }`}
-        >
-          Return History
-        </button>
       </div>
 
       {/* Search Tools (only visible in Assign tab) */}
@@ -543,7 +526,11 @@ const AssignmentReturn: React.FC = () => {
                         <div className="flex items-center space-x-2 text-gray-600 mb-1">
                           <User className="w-4 h-4" />
                           <span>
-                            <strong>Mechanic:</strong> {ticket.assigned_mechanic || 'Unassigned'}
+                            <strong>Mechanic:</strong> {
+                              ticket.mechanic_assignments && ticket.mechanic_assignments.length > 0
+                                ? ticket.mechanic_assignments.map(m => m.mechanic_name).join(', ')
+                                : 'Unassigned'
+                            }
                           </span>
                         </div>
                         <div className="flex items-center space-x-2 text-gray-600 mb-1">
@@ -652,7 +639,6 @@ const AssignmentReturn: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Selected Tools to Assign */}
                 {assignedTools.length > 0 && (
                   <div className="mb-6">
                     <h3 className="text-lg font-semibold text-gray-800 mb-3">To Assign</h3>
@@ -702,7 +688,6 @@ const AssignmentReturn: React.FC = () => {
                   </div>
                 )}
 
-                {/* Confirm Assignment */}
                 {assignedTools.length > 0 && (
                   <div className="mb-6">
                     <button
@@ -715,7 +700,6 @@ const AssignmentReturn: React.FC = () => {
                   </div>
                 )}
 
-                {/* Currently Assigned Tools */}
                 {getAssignedToolsForTicket().length > 0 && (
                   <div className="mb-6">
                     <h3 className="text-lg font-semibold text-gray-800 mb-3">Currently Assigned</h3>
@@ -744,71 +728,6 @@ const AssignmentReturn: React.FC = () => {
                   </div>
                 )}
               </>
-            )}
-
-            {/* Return History Tab */}
-            {activeTab === 'history' && (
-              <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">Return History</h3>
-                
-                {/* Debug Info Panel */}
-                <div className="mb-4 p-3 bg-gray-100 rounded-lg text-sm font-mono">
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="font-semibold">Debug Information</h4>
-                    <button 
-                      onClick={() => setDebugInfo('')}
-                      className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <pre className="whitespace-pre-wrap break-words max-h-40 overflow-y-auto">{debugInfo || 'No debug info yet'}</pre>
-                </div>
-                
-                {loadingHistory ? (
-                  <div className="flex justify-center py-4">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                  </div>
-                ) : returnHistory.length > 0 ? (
-                  <div className="space-y-4">
-                    {returnHistory.map((tool) => (
-                      <div
-                        key={tool.assignment_id}
-                        className="p-4 bg-gray-50 rounded-lg border border-gray-200"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <CheckCircle className="w-4 h-4 text-green-600" />
-                              <strong className="text-gray-800">{tool.tool_name}</strong>
-                            </div>
-                            <div className="text-sm text-gray-600 mt-1">
-                              <span>Quantity: {tool.assigned_quantity}</span> |{' '}
-                              <span>By: {tool.assigned_by || 'Unknown'}</span>
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              Returned:{' '}
-                              {tool.returned_at
-                                ? new Date(tool.returned_at).toLocaleString()
-                                : 'Not recorded'}
-                            </div>
-                          </div>
-                          <div className="ml-4 text-right">
-                            <span className="inline-block px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">
-                              Returned
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-gray-500">
-                    <AlertTriangle className="w-6 h-6 mx-auto mb-2 opacity-50" />
-                    <p>No tools have been returned for this ticket.</p>
-                  </div>
-                )}
-              </div>
             )}
 
             <div className="flex justify-end pt-6 border-t">

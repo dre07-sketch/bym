@@ -12,6 +12,7 @@ import {
   MessageSquare,
   BarChart3,
   Settings,
+  DollarSign,
 } from 'lucide-react';
 
 import SidebarHeader from '../../layout/SidebarHeader';
@@ -24,6 +25,7 @@ import Employees from './pages/screens/employee_directory';
 import VehicleStatus from './pages/screens/VehicleStatus';
 import Reports from '../Stock manager/pages/screens/Reports';
 import Feedback from './pages/screens/Feedback';
+import FinancePage from './pages/screens/FinancePage';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -42,7 +44,7 @@ const Render_CS: React.FC<DashboardProps> = ({ onLogout, userRole }) => {
     { id: 'employees', label: 'Employee Management', icon: UserCheck },
     { id: 'vehicle-status', label: 'Vehicle Status', icon: Car },
     // { id: 'vin-search', label: 'VIN Search', icon: Search },
-    { id: 'communication', label: 'Communication', icon: Phone },
+    { id: 'finance', label: 'Finance', icon: DollarSign },
     { id: 'feedback', label: 'Feedback', icon: MessageSquare },
     // { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
     
@@ -92,7 +94,7 @@ const Render_CS: React.FC<DashboardProps> = ({ onLogout, userRole }) => {
       case 'employees': return <Employees />;
       case 'vehicle-status': return <VehicleStatus />;
       // case 'vin-search': return <SOSManagement />;
-      case 'communication': return <SOSManagement />;
+      case 'finance': return <FinancePage />;
       case 'feedback': return <Feedback />;
       // case 'reports': return <Reports />;
       

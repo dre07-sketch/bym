@@ -29,22 +29,25 @@ router.get('/items', async (req, res) => {
   try {
     const sql = `
       SELECT 
-  item_id AS id,
-  name,
-  category,
-  sku,
-  price,
-  quantity,
-  min_stock_level AS minStock,
-  supplier,
-  location,
-  description,
-  image_url AS imageUrl,
-  updated_at AS lastUpdated
-FROM inventory_items
-ORDER BY updated_at DESC  
+        item_id AS id,
+        name,
+        category,
+        sku,
+        price,
+        quantity,
+        min_stock_level AS minStock,
+        supplier,
+        location,
+        description,
+        image_url AS imageUrl,
+        quality_type,       -- ✅ Added quality_type
+        updated_at AS lastUpdated
+      FROM inventory_items
+      ORDER BY updated_at DESC
     `;
+
     const [rows] = await db.promise().execute(sql);
+
     const itemsWithStatus = rows.map(item => {
       let status = 'In Stock';
       if (item.quantity === 0) {
@@ -52,12 +55,17 @@ ORDER BY updated_at DESC
       } else if (item.quantity <= item.minStock) {
         status = 'Low Stock';
       }
-      return { ...item, status };
+      return { 
+        ...item,
+        status
+      };
     });
+
     res.status(200).json({
       success: true,
       data: itemsWithStatus
     });
+
   } catch (error) {
     console.error('Error fetching items:', error);
     res.status(500).json({
@@ -291,7 +299,7 @@ router.get('/reports/supplier-performance', async (req, res) => {
 });
 
 // POST /api/inventory/items
-router.post('/items', upload.single('image'), async (req, res) => {
+router.post('/items', upload.single('image'), (req, res) => {
   const {
     name,
     sku,
@@ -300,64 +308,92 @@ router.post('/items', upload.single('image'), async (req, res) => {
     minStock,
     supplier,
     location,
-    description
+    description,
+    category,
+    qualityType
   } = req.body;
-  const category = req.body.category?.trim();
+
+  console.log('Received body:', req.body); // Debug
 
   // Validate required fields
-  if (!name || !sku || !category || unitPrice === undefined || minStock === undefined) {
+  if (!name || !sku || !category || !qualityType || unitPrice === undefined || minStock === undefined) {
     return res.status(400).json({
       success: false,
-      message: 'Missing required fields: name, sku, category, unitPrice, or minStock'
+      message: 'Missing required fields'
     });
   }
 
-  const validCategories = ['Engine Parts', 'Brake System', 'Electrical', 'Filters', 'Fluids', 'Tools'];
+  // Validate category
+  const validCategories = ['Engine Parts', 'Brake System', 'Electrical', 'Filters', 'Fluids', 'Tools','others'];
   if (!validCategories.includes(category)) {
+    return res.status(400).json({ success: false, message: 'Invalid category' });
+  }
+
+  // Validate qualityType
+  const validQualityTypes = ['original', 'local', 'high-copy'];
+  if (!validQualityTypes.includes(qualityType)) {
     return res.status(400).json({
       success: false,
-      message: 'Invalid category'
+      message: `Invalid quality type: "${qualityType}". Must be one of: ${validQualityTypes.join(', ')}`
     });
   }
 
-  // Parse and validate numbers
+  // Parse numbers
   const price = parseFloat(unitPrice);
   const qty = quantity === '' || isNaN(parseInt(quantity)) ? 0 : parseInt(quantity);
   const min = parseInt(minStock);
+
   if (isNaN(price)) return res.status(400).json({ success: false, message: 'Invalid price' });
-  if (isNaN(min) || min < 0) return res.status(400).json({ success: false, message: 'Invalid minimum stock level' });
+  if (isNaN(min) || min < 0) return res.status(400).json({ success: false, message: 'Invalid minimum stock' });
   if (qty < 0) return res.status(400).json({ success: false, message: 'Quantity cannot be negative' });
 
   const imageUrl = req.file ? `/uploads/inventory/${req.file.filename}` : null;
 
-  // Generate next STK number
-const [rows] = await db.promise().execute(
-  "SELECT MAX(CAST(SUBSTRING(item_id, 4) AS UNSIGNED)) AS max_id FROM inventory_items"
-);
-const nextNum = (rows[0].max_id || 0) + 1;
-const item_id = `STK${String(nextNum).padStart(3, '0')}`;
+  // Generate next STK number using raw SQL with callback
+  const maxIdSql = "SELECT MAX(CAST(SUBSTRING(item_id, 4) AS UNSIGNED)) AS max_id FROM inventory_items";
 
-const sql = `
-  INSERT INTO inventory_items 
-  (item_id, name, category, sku, price, quantity, min_stock_level, supplier, location, description, image_url)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`;
-const values = [
-  item_id,
-  name.trim(),
-  category,
-  sku.trim(),
-  price,
-  qty,
-  min,
-  supplier || null,
-  location || null,
-  description || null,
-  imageUrl
-];
+  db.query(maxIdSql, (err, results) => {
+    if (err) {
+      console.error('DB Error (max_id):', err);
+      return res.status(500).json({ success: false, message: 'Database error' });
+    }
 
-  db.promise().execute(sql, values)
-    .then(([result]) => {
+    const max_id = results[0].max_id;
+    const nextNum = (max_id === null ? 0 : max_id) + 1;
+    const item_id = `STK${String(nextNum).padStart(3, '0')}`;
+
+    // Insert new item
+    const insertSql = `
+      INSERT INTO inventory_items 
+      (item_id, name, category, sku, price, quantity, min_stock_level, supplier, location, description, image_url, quality_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+      item_id,
+      name.trim(),
+      category,
+      sku.trim(),
+      price,
+      qty,
+      min,
+      supplier || null,
+      location || null,
+      description || null,
+      imageUrl,
+      qualityType
+    ];
+
+    db.query(insertSql, values, (err, result) => {
+      if (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+          return res.status(409).json({ success: false, message: 'SKU already exists' });
+        }
+        console.error('Insert Error:', err);
+        return res.status(500).json({ success: false, message: 'Server error' });
+      }
+
+      // Success response
       let status = 'In Stock';
       if (qty === 0) status = 'Out of Stock';
       else if (qty <= min) status = 'Low Stock';
@@ -367,6 +403,7 @@ const values = [
         message: 'Item added successfully',
         item: {
           id: result.insertId,
+          item_id,
           name,
           category,
           sku,
@@ -377,19 +414,15 @@ const values = [
           location: location || null,
           description: description || null,
           imageUrl,
+          qualityType,
           status,
           lastUpdated: new Date().toISOString()
         }
       });
-    })
-    .catch(error => {
-      if (error.code === 'ER_DUP_ENTRY') {
-        return res.status(409).json({ success: false, message: 'SKU already exists' });
-      }
-      console.error('DB Error:', error);
-      res.status(500).json({ success: false, message: 'Server error' });
     });
+  });
 });
+
 
 // POST /api/inventory/stock-in
 router.post('/stock-in', async (req, res) => {
@@ -470,18 +503,17 @@ router.post('/stock-in', async (req, res) => {
 // PUT /api/inventory/items/:id
 router.put('/items/:id', upload.single('image'), async (req, res) => {
   const { id } = req.params;
-  if (!id || isNaN(parseInt(id))) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid item ID'
-    });
+
+  if (!id) {
+    return res.status(400).json({ success: false, message: 'Invalid item ID' });
   }
-  const itemId = parseInt(id);
+  const itemId = id; // Keep as string, e.g., STK020
 
   const {
     name,
     sku,
     category,
+    qualityType,
     unitPrice,
     quantity,
     minStock,
@@ -491,53 +523,59 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
   } = req.body;
 
   // Validate required fields
-  if (!name || !sku || !category || unitPrice === undefined || minStock === undefined) {
+  if (!name || !sku || !category || !qualityType || unitPrice === undefined || minStock === undefined) {
     return res.status(400).json({
       success: false,
-      message: 'Missing required fields: name, sku, category, unitPrice, or minStock'
+      message: 'Missing required fields: name, sku, category, qualityType, unitPrice, or minStock'
     });
   }
 
+  // Validate category
   const validCategories = ['Engine Parts', 'Brake System', 'Electrical', 'Filters', 'Fluids', 'Tools'];
   if (!validCategories.includes(category)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid category'
-    });
+    return res.status(400).json({ success: false, message: 'Invalid category' });
+  }
+
+  // Validate qualityType
+  const validQualityTypes = ['original', 'local', 'high-copy'];
+  if (!validQualityTypes.includes(qualityType)) {
+    return res.status(400).json({ success: false, message: 'Invalid quality type' });
   }
 
   // Parse numbers
   const price = parseFloat(unitPrice);
   const qty = quantity === '' || isNaN(parseInt(quantity)) ? 0 : parseInt(quantity);
   const min = parseInt(minStock);
+
   if (isNaN(price)) return res.status(400).json({ success: false, message: 'Invalid price' });
   if (isNaN(min) || min < 0) return res.status(400).json({ success: false, message: 'Invalid minimum stock level' });
   if (qty < 0) return res.status(400).json({ success: false, message: 'Quantity cannot be negative' });
 
   try {
+    // Fetch existing item
     const [[existingItem]] = await db.promise().execute(
-      'SELECT image_url FROM inventory_items WHERE id = ?', [itemId]
+      'SELECT image_url FROM inventory_items WHERE item_id = ?',
+      [itemId]
     );
+
     if (!existingItem) {
-      return res.status(404).json({
-        success: false,
-        message: 'Item not found'
-      });
+      return res.status(404).json({ success: false, message: 'Item not found' });
     }
 
-    const imageUrl = req.file
-      ? `/uploads/inventory/${req.file.filename}`
-      : existingItem.image_url;
+    // Determine image URL
+    const imageUrl = req.file ? `/uploads/inventory/${req.file.filename}` : existingItem.image_url;
 
+    // Update item
     const sql = `
       UPDATE inventory_items SET
-        name = ?, category = ?, sku = ?, price = ?, quantity = ?,
+        name = ?, category = ?, quality_type = ?, sku = ?, price = ?, quantity = ?,
         min_stock_level = ?, supplier = ?, location = ?, description = ?, image_url = ?
-      WHERE id = ?
+      WHERE item_id = ?
     `;
     const values = [
       name.trim(),
       category,
+      qualityType,
       sku.trim(),
       price,
       qty,
@@ -551,6 +589,7 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
 
     await db.promise().execute(sql, values);
 
+    // Determine stock status
     let status = 'In Stock';
     if (qty === 0) status = 'Out of Stock';
     else if (qty <= min) status = 'Low Stock';
@@ -559,9 +598,10 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
       success: true,
       message: 'Item updated successfully',
       item: {
-        id: itemId,
+        itemId,
         name,
         category,
+        qualityType,
         sku,
         unitPrice: price,
         quantity: qty,
@@ -574,14 +614,13 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
         lastUpdated: new Date().toISOString()
       }
     });
+
   } catch (error) {
     console.error('Error updating item:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
+
 
 // DELETE /api/inventory/items/:id
 router.delete('/items/:id', async (req, res) => {
@@ -1274,7 +1313,7 @@ router.get('/ordered-parts/:ticketNumber', (req, res) => {
 });
 
 // GET /ordered-parts - Get all tickets with their ordered parts
-router.get('/ordered-parts', async (req, res) => {
+router.get('/ordered-parts', (req, res) => {
   const query = `
     SELECT 
       st.id AS ticket_id,
@@ -1286,7 +1325,7 @@ router.get('/ordered-parts', async (req, res) => {
       st.vehicle_info,
       st.license_plate,
       st.title,
-      st.mechanic_assign,
+      ma.mechanic_name AS mechanicName,  -- ✅ get from mechanic_assignments
       st.inspector_assign,
       st.description,
       st.priority,
@@ -1308,7 +1347,10 @@ router.get('/ordered-parts', async (req, res) => {
       op.status AS part_status,
       op.ordered_at
     FROM service_tickets st
-    LEFT JOIN ordered_parts op ON st.ticket_number = op.ticket_number
+    LEFT JOIN ordered_parts op 
+      ON st.ticket_number = op.ticket_number
+    LEFT JOIN mechanic_assignments ma
+      ON st.ticket_number = ma.ticket_number
     ORDER BY st.created_at DESC
   `;
 
@@ -1335,7 +1377,7 @@ router.get('/ordered-parts', async (req, res) => {
           vehicle_info: row.vehicle_info,
           license_plate: row.license_plate,
           title: row.title,
-          mechanic_assign: row.mechanic_assign,
+          mechanicName: row.mechanicName,   // ✅ updated
           inspector_assign: row.inspector_assign,
           description: row.description,
           priority: row.priority,
@@ -1371,6 +1413,7 @@ router.get('/ordered-parts', async (req, res) => {
   });
 });
 
+
 router.put('/ordered-parts/:id/status', (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -1402,7 +1445,7 @@ router.get('/order-history', (req, res) => {
       st.vehicle_info,
       st.license_plate,
       st.title,
-      st.mechanic_assign,
+      ma.mechanic_name AS mechanicName,  -- ✅ from mechanic_assignments
       st.inspector_assign,
       st.description,
       st.priority,
@@ -1424,7 +1467,10 @@ router.get('/order-history', (req, res) => {
       op.status AS part_status,
       op.ordered_at
     FROM service_tickets st
-    LEFT JOIN ordered_parts op ON st.ticket_number = op.ticket_number
+    LEFT JOIN ordered_parts op 
+      ON st.ticket_number = op.ticket_number
+    LEFT JOIN mechanic_assignments ma
+      ON st.ticket_number = ma.ticket_number
     WHERE st.ticket_number IN (
       SELECT ticket_number
       FROM ordered_parts
@@ -1437,14 +1483,17 @@ router.get('/order-history', (req, res) => {
 
   db.query(query, (err, results) => {
     if (err) return res.status(500).json({ error: err.message });
-    
+
     // Transform flat results into grouped orders
     const grouped = results.reduce((acc, row) => {
       const { ordered_part_id, ...orderData } = row;
 
       let order = acc.find(o => o.ticket_id === row.ticket_id);
       if (!order) {
-        order = { ...orderData, ordered_parts: [] };
+        order = {
+          ...orderData,
+          ordered_parts: []
+        };
         acc.push(order);
       }
 
@@ -1468,6 +1517,7 @@ router.get('/order-history', (req, res) => {
     res.json(grouped);
   });
 });
+
 
 
 

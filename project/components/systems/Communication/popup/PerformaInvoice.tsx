@@ -1,0 +1,997 @@
+'use client';
+import React, { useState, useRef } from 'react';
+import { Printer, Download, FileText, Plus, X, Building2, User, CheckCircle } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+
+interface InvoiceItem {
+  id: string;
+  description: string;
+  size: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+  
+}
+
+interface SuccessToastProps {
+  show: boolean;
+  message: string;
+  onClose: () => void;
+}
+
+const PerformaInvoice = () => {
+  const printRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [isEditing, setIsEditing] = useState(true);
+  const [showPreview, setShowPreview] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [savedInvoiceNumber, setSavedInvoiceNumber] = useState('');
+  
+  const [formData, setFormData] = useState({
+    invoiceInfo: {
+      proformaNumber: `PF-${Date.now()}`,
+      date: new Date().toISOString().split('T')[0],
+      validUntil: '',
+      paymentTerms: '',
+      deliveryTime: '',
+    },
+    companyInfo: {
+      name: 'BYM TRADING PLC',
+      address: 'Addis Ababa, ETHIOPIA',
+      logo: "photo_1_2025-06-05_14-37-50.jpg",
+      phone: '0911-47-54-43',
+      vatNumber: '1000',
+    },
+    customerInfo: {
+      name: '',
+    },
+    items: [] as InvoiceItem[],
+    totals: {
+      subtotal: 0,
+      vatRate: 15,
+      vatAmount: 0,
+      total: 0,
+    },
+  });
+
+  const handleInputChange = (
+    section: 'companyInfo' | 'customerInfo' | 'invoiceInfo',
+    field: string,
+    value: string
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value,
+      },
+    }));
+  };
+
+  const addItem = () => {
+    const newItem: InvoiceItem = {
+      id: Date.now().toString(),
+      description: '',
+      size: '',
+      quantity: 1,
+      unitPrice: 0,
+      amount: 0,
+    };
+    setFormData((prev) => ({
+      ...prev,
+      items: [...prev.items, newItem],
+    }));
+  };
+
+  const updateItem = (id: string, field: string, value: string | number) => {
+    setFormData((prev) => {
+      const updatedItems = prev.items.map((item) => {
+        if (item.id === id) {
+          const updatedItem = { ...item, [field]: value };
+          if (field === 'quantity' || field === 'unitPrice') {
+            const qty = typeof updatedItem.quantity === 'number' ? updatedItem.quantity : 1;
+            const price = typeof updatedItem.unitPrice === 'number' ? updatedItem.unitPrice : 0;
+            updatedItem.amount = parseFloat((qty * price).toFixed(2));
+          }
+          return updatedItem;
+        }
+        return item;
+      });
+      const subtotal = parseFloat(updatedItems.reduce((sum, item) => sum + item.amount, 0).toFixed(2));
+      const vatAmount = parseFloat((subtotal * (prev.totals.vatRate / 100)).toFixed(2));
+      const total = subtotal + vatAmount;
+      return {
+        ...prev,
+        items: updatedItems,
+        totals: {
+          ...prev.totals,
+          subtotal,
+          vatAmount,
+          total,
+        },
+      };
+    });
+  };
+
+  const removeItem = (id: string) => {
+    setFormData((prev) => {
+      const updatedItems = prev.items.filter((item) => item.id !== id);
+      const subtotal = parseFloat(updatedItems.reduce((sum, item) => sum + item.amount, 0).toFixed(2));
+      const vatAmount = parseFloat((subtotal * (prev.totals.vatRate / 100)).toFixed(2));
+      const total = subtotal + vatAmount;
+      return {
+        ...prev,
+        items: updatedItems,
+        totals: {
+          ...prev.totals,
+          subtotal,
+          vatAmount,
+          total,
+        },
+      };
+    });
+  };
+
+  const handlePrint = () => {
+    if (!printRef.current) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    const printContent = printRef.current.outerHTML;
+    const styles = `<style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: 'Georgia', 'Times New Roman', serif; margin: 0; padding: 20px; background: white; color: black; }
+      table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+      th, td { padding: 12px; border: 1px solid black; text-align: left; }
+      th { background-color: white; font-weight: 600; }
+      .text-right { text-align: right; }
+      .text-center { text-align: center; }
+      .font-bold { font-weight: bold; }
+      .company-header { background: white; color: black; padding: 30px; border: 1px solid black; margin-bottom: 30px; }
+      @media print { body { -webkit-print-color-adjust: exact; } * { -webkit-print-color-adjust: exact; } }
+    </style>`;
+    printWindow.document.write(`<html><head><title>Proforma Invoice</title>${styles}</head><body>${printContent}</body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
+  };
+
+  const handleDownload = async () => {
+    if (!printRef.current || isGenerating) return;
+    setIsGenerating(true);
+    try {
+      const canvas = await html2canvas(printRef.current, {
+        scale: 5,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        allowTaint: true,
+      });
+      const imgData = canvas.toDataURL('/Crop image project.png', 1.0);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`proforma-invoice-${formData.invoiceInfo.proformaNumber}.pdf`);
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handlePreviewPrint = () => {
+    if (!previewRef.current) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    const printContent = previewRef.current.outerHTML;
+    const styles = `<style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: 'Georgia', 'Times New Roman', serif; margin: 0; padding: 20px; background: white; color: black; }
+      table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+      th, td { padding: 12px; border: 1px solid black; text-align: left; }
+      th { background-color: white; font-weight: 600; }
+      .text-right { text-align: right; }
+      .text-center { text-align: center; }
+      .font-bold { font-weight: bold; }
+      .company-header { background: white; color: black; padding: 30px; border: 1px solid black; margin-bottom: 30px; }
+      @media print { body { -webkit-print-color-adjust: exact; } * { -webkit-print-color-adjust: exact; } }
+    </style>`;
+    printWindow.document.write(`<html><head><title>Preview</title>${styles}</head><body>${printContent}</body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
+  };
+
+  const handlePreviewDownload = async () => {
+    if (!previewRef.current || isGenerating) return;
+    setIsGenerating(true);
+    try {
+      const canvas = await html2canvas(previewRef.current, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        allowTaint: true,
+      });
+      const imgData = canvas.toDataURL('/Crop image project.png', 1.0);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`proforma-invoice-${formData.invoiceInfo.proformaNumber}.pdf`);
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleSave = () => {
+    if (!formData.customerInfo.name.trim()) {
+      alert('Customer Name is required.');
+      return;
+    }
+    if (formData.items.length === 0) {
+      alert('Please add at least one item.');
+      return;
+    }
+    setShowPreview(true);
+  };
+
+  const finalizeInvoice = async () => {
+    if (!formData.customerInfo.name.trim()) {
+      alert('Customer Name is required.');
+      return;
+    }
+    if (formData.items.length === 0) {
+      alert('Please add at least one item.');
+      return;
+    }
+    const payload = {
+      proforma_number: formData.invoiceInfo.proformaNumber,
+      proforma_date: formData.invoiceInfo.date,
+      notes: formData.invoiceInfo.validUntil ? `Valid until: ${formData.invoiceInfo.validUntil}` : null,
+      status: 'Final',
+      items: formData.items.map(item => ({
+        description: item.description || 'Item',
+        size: item.size || null,
+        quantity: item.quantity || 1,
+        unit_price: item.unitPrice || 0
+      }))
+    };
+    try {
+      setIsGenerating(true); // Disable buttons during save
+      const response = await fetch('http://localhost:5001/api/communication-center/proformas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+      const result = await response.json();
+      // ✅ Close preview
+      setShowPreview(false);
+      // ✅ Save invoice number
+      setSavedInvoiceNumber(payload.proforma_number);
+      // ✅ Show success toast
+      setToastMessage(`Proforma ${payload.proforma_number} saved successfully!`);
+      setShowToast(true);
+    } catch (error) {
+      console.error('Save error:', error);
+      let errorMessage = 'An unknown error occurred';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as { message: string }).message;
+      }
+      alert(`❌ Save failed: ${errorMessage}`);
+    } finally {
+      // ✅ Critical: Always reset isGenerating
+      setIsGenerating(false);
+    }
+  };
+
+  const cancelPreview = () => {
+    setShowPreview(false);
+  };
+
+  const cancelAction = () => {
+    // Optional: reset form or navigate away
+    setIsEditing(false);
+  };
+
+  // ✅ SuccessToast Component
+  const SuccessToast: React.FC<SuccessToastProps> = ({ show, message, onClose }) => {
+    React.useEffect(() => {
+      if (show) {
+        const timer = setTimeout(() => {
+          onClose();
+        }, 5000);
+        return () => clearTimeout(timer);
+      }
+    }, [show, onClose]);
+    if (!show) return null;
+    return (
+      <div className="fixed bottom-6 right-6 z-50 animate-fade-in-up pointer-events-auto">
+        <div className="bg-white shadow-2xl rounded-2xl p-4 min-w-80 border border-black flex items-center space-x-3 transform transition-all duration-300">
+          <div className="flex-shrink-0 bg-white border-2 border-black w-10 h-10 rounded-xl flex items-center justify-center">
+            <CheckCircle className="w-6 h-6 text-black" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-black">{message}</p>
+            <p className="text-xs text-black">Click to dismiss</p>
+          </div>
+          <button onClick={onClose} className="text-black hover:text-gray-700">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-white py-8 px-4">
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-black">
+          {/* Print View (Hidden) - Beautiful Design */}
+         <div ref={printRef} className="hidden">
+  <div className="p-8 bg-white max-w-4xl mx-auto">
+    {/* Company Header */}
+    <div className="text-center mb-6">
+      <div className="flex justify-center mb-2">
+        <div className="w-16 h-16 border-2 border-black rounded-full flex items-center justify-center">
+          <img src="photo_1_2025-06-05_14-37-50.jpg" alt="Company Logo" className="w-12 h-12 object-contain" />
+        </div>
+      </div>
+      <h1 className="text-3xl font-bold text-black mb-1">BYM TRADING PLC</h1>
+      <p className="text-black mb-1">Addis Ababa, ETHIOPIA</p>
+      <p className="text-black">Phone: 0911-47-54-43</p>
+    </div>
+    
+    {/* Proforma Invoice Title */}
+    <div className="border-t-2 border-b-2 border-black py-3 mb-6">
+      <h2 className="text-2xl font-bold text-center text-black">PROFORMA INVOICE</h2>
+    </div>
+    
+    {/* Invoice Details */}
+    <div className="grid grid-cols-3 gap-4 mb-6">
+      <div>
+        <p className="text-sm text-black">Proforma #</p>
+        <p className="font-semibold text-black">{formData.invoiceInfo.proformaNumber}</p>
+      </div>
+      <div>
+        <p className="text-sm text-black">Date</p>
+        <p className="text-black">{formData.invoiceInfo.date}</p>
+      </div>
+      <div>
+        <p className="text-sm text-black">Valid Until</p>
+        <p className="text-black">{formData.invoiceInfo.validUntil || 'N/A'}</p>
+      </div>
+    </div>
+    
+    {/* Customer Info */}
+    <div className="mb-6">
+      <p className="text-sm text-black mb-1">To:</p>
+      <p className="font-semibold text-black">{formData.customerInfo.name}</p>
+    </div>
+    
+    {/* Items Table */}
+    <div className="overflow-x-auto mb-6">
+      <table className="w-full border-collapse border border-black">
+        <thead>
+          <tr className="border-b border-black">
+            <th className="border border-black px-4 py-2 text-left text-black">Description</th>
+            <th className="border border-black px-4 py-2 text-left text-black">Size</th>
+            <th className="border border-black px-4 py-2 text-center text-black">Quantity</th>
+            <th className="border border-black px-4 py-2 text-right text-black">Unit Price</th>
+            <th className="border border-black px-4 py-2 text-right text-black">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {formData.items.map((item) => (
+            <tr key={item.id}>
+              <td className="border border-black px-4 py-2 text-black">{item.description}</td>
+              <td className="border border-black px-4 py-2 text-black">{item.size}</td>
+              <td className="border border-black px-4 py-2 text-center text-black">{item.quantity}</td>
+              <td className="border border-black px-4 py-2 text-right text-black">{item.unitPrice}</td>
+              <td className="border border-black px-4 py-2 text-right text-black">{item.amount}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    
+    {/* Totals */}
+    <div className="flex justify-end mb-6">
+      <div className="w-64 border border-black rounded-lg p-4">
+        <div className="flex justify-between mb-1">
+          <span className="text-black">Subtotal:</span>
+          <span className="text-black">{formData.totals.subtotal}</span>
+        </div>
+        <div className="flex justify-between mb-1">
+          <span className="text-black">VAT ({formData.totals.vatRate}%):</span>
+          <span className="text-black">{formData.totals.vatAmount}</span>
+        </div>
+        <div className="flex justify-between font-bold border-t border-black pt-1">
+          <span className="text-black">Total:</span>
+          <span className="text-black">{formData.totals.total}</span>
+        </div>
+      </div>
+    </div>
+    
+    {/* Bottom Section */}
+    <div className="border-t border-black pt-4">
+     
+      <div className="text-center mb-4">
+        <p className="text-lg font-bold text-black">የመኪናዎ ደህንነት ማእከል</p>
+        <p className="text-lg font-bold text-black">THE CAR SAFETY CENTER</p>
+      </div>
+      
+      {/* Terms and Conditions */}
+      <div className="mb-6">
+        <div className="mb-3">
+          <p className="text-sm text-black mb-1">1. The offer provided is valid for ___________ days of the date submitted</p>
+          <p className="text-sm text-black mb-1">1. የተሰጠው ቅጥር በተሰጠበት ቀን ከዚያ በኋላ ________ ቀናት ውስጥ ይገባል</p>
+        </div>
+        <div className="mb-3">
+          <p className="text-sm text-black mb-1">2. Payment mode is due ____________ in advance</p>
+          <p className="text-sm text-black mb-1">2. የክፍያ ዘዴ በመጀመሪያ ____________ ይከፈላል</p>
+        </div>
+        <div className="mb-3">
+          <p className="text-sm text-black mb-1">3. Delivery time ___________</p>
+          <p className="text-sm text-black mb-1">3. የማስረከቢያ ጊዜ ___________</p>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-6 mb-6">
+        <div>
+          <p className="text-sm font-semibold mb-2 text-black">Payment Method:</p>
+          <div className="flex items-center mb-1">
+            <div className="w-4 h-4 border border-black mr-2"></div>
+            <span className="text-sm text-black">Cash / በገንዘብ</span>
+          </div>
+          <div className="flex items-center mb-1">
+            <div className="w-4 h-4 border border-black mr-2"></div>
+            <span className="text-sm text-black">Bank Transfer / ባንክ ትራንስፈር</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 border border-black mr-2"></div>
+            <span className="text-sm text-black">Check / ቼክ</span>
+          </div>
+        </div>
+        <div>
+          <p className="text-sm font-semibold mb-2 text-black">Delivery Status:</p>
+          <div className="flex items-center mb-1">
+            <div className="w-4 h-4 border border-black mr-2"></div>
+            <span className="text-sm text-black">Partial Delivery / የከፊል ማስረከቢያ</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 border border-black mr-2"></div>
+            <span className="text-sm text-black">Full Delivery / ሙሉ ማስረከቢያ</span>
+          </div>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-6 mb-6">
+        <div>
+          <p className="text-sm font-semibold mb-2 text-black">Customer Confirmation:</p>
+          <div className="flex items-center mb-1">
+            <div className="w-4 h-4 border border-black mr-2"></div>
+            <span className="text-sm text-black">I have read and agree to the terms</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 border border-black mr-2"></div>
+            <span className="text-sm text-black">I accept the delivery schedule</span>
+          </div>
+        </div>
+        <div>
+          <p className="text-sm font-semibold mb-2 text-black">Additional Notes:</p>
+          <div className="flex items-center mb-1">
+            <div className="w-4 h-4 border border-black mr-2"></div>
+            <span className="text-sm text-black">Insurance Required / ዋስትና ያስፈልጋል</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 border border-black mr-2"></div>
+            <span className="text-sm text-black">Special Instructions / ልዩ መመሪያዎች</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    {/* Signature Section */}
+    <div className="flex justify-end mt-6">
+      <div className="text-right">
+        <p className="text-sm text-black mb-1">Signature / ፊርማ:</p>
+        <div className="w-48 h-12 border-b border-black"></div>
+        <p className="text-sm text-black mt-2">Date / ቀን: _______________</p>
+      </div>
+    </div>
+  </div>
+</div>
+          
+          {/* Editing Mode */}
+          {isEditing ? (
+            <div className="p-12 space-y-12">
+              <div className="flex items-center justify-between">
+                <h2 className="text-3xl font-bold text-black">Create Proforma Invoice</h2>
+                <button
+                  onClick={cancelAction}
+                  className="p-2 text-black hover:text-gray-700 hover:bg-gray-100 rounded-full transition border border-black"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              {/* Company Info */}
+              <div className="border-2 border-black rounded-3xl p-8">
+                <div className="flex items-center space-x-3 mb-8">
+                  <div className="p-3 border-2 border-black rounded-2xl">
+                    <img src="photo_1_2025-06-05_14-37-50.jpg" alt="Company Logo" className="w-32 h-auto" />;
+                  </div>
+                  <h2 className="text-2xl font-bold text-black">Company Information</h2>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-black mb-3">Company Name</label>
+                    <input
+                      type="text"
+                      value={formData.companyInfo.name}
+                      onChange={(e) => handleInputChange('companyInfo', 'name', e.target.value)}
+                      className="w-full px-6 py-4 border-2 border-black rounded-2xl bg-white text-black focus:ring-4 focus:ring-black focus:border-black transition-all duration-300 text-lg font-medium"
+                      placeholder="Enter company name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-black mb-3">Address</label>
+                    <textarea
+                      value={formData.companyInfo.address}
+                      onChange={(e) => handleInputChange('companyInfo', 'address', e.target.value)}
+                      className="w-full px-6 py-4 border-2 border-black rounded-2xl bg-white text-black focus:ring-4 focus:ring-black focus:border-black transition-all duration-300 text-lg resize-none"
+                      rows={3}
+                      placeholder="Enter company address"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-black mb-3">Phone Number</label>
+                    <input
+                      type="tel"
+                      value={formData.companyInfo.phone}
+                      onChange={(e) => handleInputChange('companyInfo', 'phone', e.target.value)}
+                      className="w-full px-6 py-4 border-2 border-black rounded-2xl bg-white text-black focus:ring-4 focus:ring-black focus:border-black transition-all duration-300 text-lg"
+                      placeholder="Enter phone number"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-black mb-3">VAT Number</label>
+                    <input
+                      type="text"
+                      value={formData.companyInfo.vatNumber}
+                      onChange={(e) => handleInputChange('companyInfo', 'vatNumber', e.target.value)}
+                      className="w-full px-6 py-4 border-2 border-black rounded-2xl bg-white text-black focus:ring-4 focus:ring-black focus:border-black transition-all duration-300 text-lg"
+                      placeholder="Enter VAT number"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Invoice & Customer Info */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-black mb-3">Proforma Number</label>
+                  <input
+                    type="text"
+                    value={formData.invoiceInfo.proformaNumber}
+                    disabled
+                    className="w-full px-6 py-4 border-2 border-black rounded-2xl bg-white text-black cursor-not-allowed"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-black mb-3">Date</label>
+                  <input
+                    type="date"
+                    value={formData.invoiceInfo.date}
+                    onChange={(e) => handleInputChange('invoiceInfo', 'date', e.target.value)}
+                    className="w-full px-6 py-4 border-2 border-black rounded-2xl bg-white text-black focus:ring-4 focus:ring-black focus:border-black"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-black mb-3">Valid Until</label>
+                  <input
+                    type="date"
+                    value={formData.invoiceInfo.validUntil}
+                    onChange={(e) => handleInputChange('invoiceInfo', 'validUntil', e.target.value)}
+                    className="w-full px-6 py-4 border-2 border-black rounded-2xl bg-white text-black focus:ring-4 focus:ring-black focus:border-black"
+                  />
+                </div>
+              </div>
+              
+              {/* Additional Fields */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                <label className="block text-sm font-semibold text-black mb-3">
+                   Payment Terms
+                    </label>
+                     <select
+                  value={formData.invoiceInfo.paymentTerms}
+                onChange={(e) =>
+                     handleInputChange("invoiceInfo", "paymentTerms", e.target.value)
+                                                             }
+                           className="w-full px-6 py-4 border-2 border-black rounded-2xl bg-white text-black focus:ring-4 focus:ring-black focus:border-black"
+                                >
+                                  <option value="">Select payment method</option>
+                           <option value="cash">Cash</option>
+                            <option value="transfer">Bank Transfer</option>
+                            <option value="check">Check</option>
+                        </select>
+                    </div>
+            </div>
+              
+              {/* Customer Info */}
+              <div className="border-2 border-black rounded-3xl p-8">
+                <div className="flex items-center space-x-3 mb-8">
+                  <div className="p-3 border-2 border-black rounded-2xl">
+                    <User className="w-6 h-6 text-black" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-black">Customer Information</h2>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-black mb-3">
+                    Customer Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.customerInfo.name}
+                    onChange={(e) => handleInputChange('customerInfo', 'name', e.target.value)}
+                    className="w-full px-6 py-4 border-2 border-black rounded-2xl bg-white text-black focus:ring-4 focus:ring-black focus:border-black transition-all duration-300 text-lg font-medium"
+                    placeholder="Enter customer name"
+                  />
+                </div>
+              </div>
+              
+              {/* Items Table */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-black">Items</h3>
+                  <button
+                    onClick={addItem}
+                    className="border-2 border-black hover:bg-black hover:text-white text-black shadow-lg transform hover:-translate-y-0.5 transition-all duration-300 px-6 py-3 rounded-xl flex items-center space-x-2"
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span>Add Item</span>
+                  </button>
+                </div>
+                {formData.items.length === 0 ? (
+                  <div className="text-center py-16 bg-white rounded-3xl border-2 border-dashed border-black">
+                    <div className="p-4 border-2 border-black rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
+                      <FileText className="w-12 h-12 text-black" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-black mb-3">No items added yet</h3>
+                    <p className="text-lg text-black mb-8">Start building your invoice by adding items or services</p>
+                    <button
+                      onClick={addItem}
+                      className="border-2 border-black hover:bg-black hover:text-white text-black px-6 py-3 rounded-xl"
+                    >
+                      <Plus className="w-5 h-5 inline mr-2" />
+                      Add Your First Item
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border-2 border-black shadow-lg">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="border-b-2 border-black">
+                          <tr>
+                            <th className="px-6 py-5 text-left text-sm font-bold uppercase tracking-wider border-r border-black text-black">#</th>
+                            <th className="px-6 py-5 text-left text-sm font-bold uppercase tracking-wider min-w-[200px] border-r border-black text-black">Description</th>
+                            <th className="px-6 py-5 text-left text-sm font-bold uppercase tracking-wider border-r border-black text-black">Size</th>
+                            <th className="px-6 py-5 text-left text-sm font-bold uppercase tracking-wider border-r border-black text-black">Qty</th>
+                            <th className="px-6 py-5 text-left text-sm font-bold uppercase tracking-wider border-r border-black text-black">Unit Price</th>
+                            <th className="px-6 py-5 text-left text-sm font-bold uppercase tracking-wider border-r border-black text-black">Amount</th>
+                            <th className="px-6 py-5 text-black"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-black">
+                          {formData.items.map((item) => (
+                            <tr key={item.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-6 font-bold text-black border-r border-black">{formData.items.indexOf(item) + 1}</td>
+                              <td className="px-6 py-6 border-r border-black">
+                                <input
+                                  type="text"
+                                  value={item.description}
+                                  onChange={(e) => updateItem(item.id, 'description', e.target.value)}
+                                  className="w-full px-4 py-3 border-2 border-black rounded-xl text-black focus:ring-2 focus:ring-black focus:border-black transition-all duration-300"
+                                  placeholder="Item description"
+                                />
+                              </td>
+                              <td className="px-6 py-6 border-r border-black">
+                                <input
+                                  type="text"
+                                  value={item.size}
+                                  onChange={(e) => updateItem(item.id, 'size', e.target.value)}
+                                  className="w-full px-4 py-3 border-2 border-black rounded-xl text-black focus:ring-2 focus:ring-black focus:border-black transition-all duration-300"
+                                  placeholder="Size"
+                                />
+                              </td>
+                              <td className="px-6 py-6 border-r border-black">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 1)}
+                                  className="w-full px-4 py-3 border-2 border-black rounded-xl text-black focus:ring-2 focus:ring-black focus:border-black transition-all duration-300 text-center"
+                                />
+                              </td>
+                              <td className="px-6 py-6 border-r border-black">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.unitPrice}
+                                  onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-4 py-3 border-2 border-black rounded-xl text-black focus:ring-2 focus:ring-black focus:border-black transition-all duration-300 text-right"
+                                />
+                              </td>
+                              <td className="px-6 py-6 text-right font-bold text-black border-r border-black">${item.amount.toFixed(2)}</td>
+                              <td className="px-6 py-6 text-center">
+                                <button
+                                  onClick={() => removeItem(item.id)}
+                                  className="p-3 text-black hover:text-red-700 hover:bg-red-50 rounded-xl transition-all duration-300 border border-black"
+                                >
+                                  <X className="w-5 h-5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Totals */}
+              <div className="border-2 border-black rounded-2xl p-6">
+                <div className="flex justify-end">
+                  <div className="w-full max-w-sm space-y-3">
+                    <div className="flex justify-between text-lg">
+                      <span className="text-black">Subtotal:</span>
+                      <span className="font-bold text-black">{formData.totals.subtotal}</span>
+                    </div>
+                    <div className="flex justify-between text-lg">
+                      <span className="text-black">VAT ({formData.totals.vatRate}%):</span>
+                      <span className="font-bold text-black">{formData.totals.vatAmount}</span>
+                    </div>
+                    <div className="flex justify-between text-2xl font-bold border-t-2 border-black pt-3">
+                      <span className="text-black">Total:</span>
+                      <span className="text-black">{formData.totals.total}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Save Button */}
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSave}
+                  className="border-2 border-black hover:bg-black hover:text-white text-black px-8 py-4 rounded-xl text-lg font-semibold shadow-lg transform hover:-translate-y-0.5 transition-all duration-300"
+                >
+                  Save & Finalize
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>Preview or Finalized View</div>
+          )}
+          
+          {/* Preview Modal - Beautiful Design */}
+          {showPreview && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between p-6 border-b border-black">
+                  <h2 className="text-2xl font-bold text-black">Invoice Preview</h2>
+                  <button
+                    onClick={cancelPreview}
+                    className="p-2 text-black hover:text-gray-700 hover:bg-gray-100 rounded-full transition border border-black"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-8" ref={previewRef}>
+                  <div className="bg-white p-8 rounded-xl shadow-lg max-w-4xl mx-auto">
+                    {/* Company Header - Beautiful Design */}
+                    <div className="text-center mb-8">
+                      <div className="flex justify-center mb-4">
+                       <div className="w-32 h-32 border-2 border-black rounded-full flex items-center justify-center overflow-hidden">
+                        <img
+                          src="photo_1_2025-06-05_14-37-50.jpg"
+                          alt="Company Logo"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+
+                      </div>
+                      <h1 className="text-3xl font-bold text-black mb-2">BYM TRADING PLC</h1>
+                      <p className="text-black mb-1">Addis Ababa, ETHIOPIA</p>
+                      <p className="text-black">Phone: 0911-47-54-43</p>
+                    </div>
+                    
+                    {/* Proforma Invoice Title */}
+                    <div className="border-t-2 border-b-2 border-black py-4 mb-8">
+                      <h2 className="text-2xl font-bold text-center text-black">PROFORMA INVOICE</h2>
+                    </div>
+                    
+                    {/* Invoice Details */}
+                    <div className="grid grid-cols-3 gap-4 mb-8">
+                      <div>
+                        <p className="text-sm text-black">Proforma #</p>
+                        <p className="font-semibold text-black">{formData.invoiceInfo.proformaNumber}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-black">Date</p>
+                        <p className="text-black">{formData.invoiceInfo.date}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-black">Valid Until</p>
+                        <p className="text-black">{formData.invoiceInfo.validUntil || 'N/A'}</p>
+                      </div>
+                    </div>
+                    
+                    {/* Customer Info */}
+                    <div className="mb-8">
+                      <p className="text-sm text-black mb-1">To:</p>
+                      <p className="font-semibold text-black">{formData.customerInfo.name}</p>
+                    </div>
+                    
+                    {/* Items Table */}
+                    <div className="overflow-x-auto mb-8">
+                      <table className="w-full border-collapse border border-black">
+                        <thead>
+                          <tr className="border-b border-black">
+                            <th className="border border-black px-4 py-2 text-left text-black">Description</th>
+                            <th className="border border-black px-4 py-2 text-left text-black">Size</th>
+                            <th className="border border-black px-4 py-2 text-center text-black">Quantity</th>
+                            <th className="border border-black px-4 py-2 text-right text-black">Unit Price</th>
+                            <th className="border border-black px-4 py-2 text-right text-black">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {formData.items.map((item) => (
+                            <tr key={item.id}>
+                              <td className="border border-black px-4 py-2 text-black">{item.description}</td>
+                              <td className="border border-black px-4 py-2 text-black">{item.size}</td>
+                              <td className="border border-black px-4 py-2 text-center text-black">{item.quantity}</td>
+                              <td className="border border-black px-4 py-2 text-right text-black">{item.unitPrice}</td>
+                              <td className="border border-black px-4 py-2 text-right text-black">{item.amount}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    {/* Totals */}
+                    <div className="flex justify-end mb-8">
+                      <div className="w-64 border border-black rounded-lg p-4">
+                        <div className="flex justify-between mb-1">
+                          <span className="text-black">Subtotal:</span>
+                          <span className="text-black">{formData.totals.subtotal}</span>
+                        </div>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-black">VAT ({formData.totals.vatRate}%):</span>
+                          <span className="text-black">{formData.totals.vatAmount}</span>
+                        </div>
+                        <div className="flex justify-between font-bold border-t border-black pt-1">
+                          <span className="text-black">Total:</span>
+                          <span className="text-black">{formData.totals.total}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Bottom Section */}
+                    <div className="border-t border-black pt-6">
+                      
+                      
+                      
+                      
+                      {/* Footer with dashes and signature */}
+                      <div className="border-t border-black pt-4">
+                        <div className="mb-6">
+                          <div className="mb-3">
+                            <p className="text-sm text-black mb-1">1. The offer provided is valid for ___________ days of the date submitted</p>
+                            <p className="text-sm text-black mb-1">. ዋጋው የሚያገለግለው ለ________ ቀን ብቻ ነው</p>
+                          </div>
+                          <div className="mb-3">
+                            <p className="text-sm text-black mb-1">2. Payment mode is due ____________ in advance</p>
+                            <p className="text-sm text-black mb-1">. የአከፋፈል ሁኔታ ____________ ቅድሚያ ነው</p>
+                          </div>
+                          <div className="mb-3">
+                            <p className="text-sm text-black mb-1">3. Delivery time ___________</p>
+                            <p className="text-sm text-black mb-1">. የማስረከቢያ ጊዜ ___________</p>
+                          </div>
+                        </div>
+                        
+                        
+                      </div>
+                      
+                      <div className="flex justify-end mt-8">
+                        <div className="text-right">
+                          <p className="text-sm text-black mb-1">Signature / ፊርማ:</p>
+                          <div className="w-48 h-12 border-b border-black"></div>
+                          <p className="text-sm text-black mt-2">Date / ቀን: _______________</p>
+                        </div>
+                      </div>
+                      <div className="text-center mb-6">
+                        <p className="text-lg font-bold text-black">የመኪናዎ ደህንነት ማእከል</p>
+                        <p className="text-lg font-bold text-black">THE CAR SAFETY CENTER</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-4 p-6 bg-white border-t border-black">
+                  <button
+                    onClick={handlePreviewPrint}
+                    className="px-6 py-3 border border-black rounded-xl hover:bg-gray-100 transition text-black"
+                  >
+                    Print
+                  </button>
+                  <button
+                    onClick={handlePreviewDownload}
+                    disabled={isGenerating}
+                    className="px-8 py-3 border-2 border-black hover:bg-black hover:text-white text-black rounded-xl flex items-center space-x-2 disabled:opacity-70"
+                  >
+                    <Download className="w-5 h-5" />
+                    <span>{isGenerating ? 'Generating...' : 'Download PDF'}</span>
+                  </button>
+                  <button
+                    onClick={finalizeInvoice}
+                    disabled={isGenerating}
+                    className="px-8 py-3 border-2 border-black hover:bg-black hover:text-white text-black rounded-xl font-bold disabled:opacity-70"
+                  >
+                    {isGenerating ? 'Saving...' : 'Confirm & Save'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* ✅ Success Toast */}
+          <SuccessToast
+            show={showToast}
+            message={toastMessage}
+            onClose={() => setShowToast(false)}
+          />
+          
+          {/* Print & PDF Styles */}
+          <style dangerouslySetInnerHTML={{
+            __html: `
+              .no-print { display: none !important; }
+              @media print {
+                body { -webkit-print-color-adjust: exact; }
+                .no-print { display: none !important; }
+                * { -webkit-print-color-adjust: exact; }
+              }
+              @keyframes fadeInUp {
+                from { opacity: 0; transform: translateY(20px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+              .animate-fade-in-up { animation: fadeInUp 0.4s ease-out forwards; }
+            `
+          }} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default PerformaInvoice;

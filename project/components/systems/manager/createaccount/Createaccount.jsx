@@ -40,13 +40,10 @@ const CreateAccount = () => {
   ];
 
   const specialties = [
-    'General Maintenance',
-    'Engine Specialist',
-    'Transmission Specialist',
-    'Electrical Systems',
-    'Brake Systems',
-    'Suspension Specialist',
-    'Diagnostics'
+    'Mechanic',
+    'Electrician',
+    'Auto paint technician',
+    'Auto body technician',
   ];
 
   const inspectionSpecialties = [

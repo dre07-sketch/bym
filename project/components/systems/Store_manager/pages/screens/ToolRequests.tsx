@@ -1,5 +1,4 @@
 'use client';
-
 import React, { useEffect, useState } from 'react';
 import {
   Package,
@@ -23,7 +22,7 @@ interface Tool {
   tool_name: string;
   brand: string;
   quantity: number;
-  image_url?: string;
+  imageUrl?: string; // Changed from image_url to imageUrl
   status: string;
   condition?: string;
 }
@@ -44,6 +43,13 @@ interface ServiceTicket {
   status: string;
   vehicle: Vehicle | null;
   vehicle_info: string | null;
+  mechanic_assignments?: Array<{
+    id: number;
+    ticket_number: string;
+    mechanic_id: number;
+    mechanic_name: string;
+    assigned_at: string;
+  }>;
 }
 
 interface AssignedTool {
@@ -96,13 +102,10 @@ const ToolRequests = () => {
       const res = await fetch('http://localhost:5001/api/tools/stats');
       if (!res.ok) throw new Error('Failed to fetch dashboard stats');
       const result = await res.json();
-
       if (!result.success) {
         throw new Error(result.message || 'API error');
       }
-
       const { totalQuantity, toolsInUse, availableTools, damagedTools } = result.data;
-
       setToolStats({
         totalTools: result.data.totalTools,
         toolsInUse,
@@ -143,6 +146,7 @@ const ToolRequests = () => {
       setTools((data.data || []).map((tool: any) => ({
         ...tool,
         tool_name: tool.tool_name || tool.name || 'Unnamed Tool',
+        imageUrl: tool.imageUrl || null, // Updated to match API response
       })));
     } catch (err) {
       console.error('Error fetching tools:', err);
@@ -177,19 +181,15 @@ const ToolRequests = () => {
       alert('Invalid return data');
       return;
     }
-
     const confirm = window.confirm(`Return ${quantity} of this tool?`);
     if (!confirm) return;
-
     try {
       const res = await fetch('http://localhost:5001/api/tools/return', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignmentId, toolID: toolId, quantity }),
       });
-
       const result = await res.json();
-
       if (result.success) {
         alert('✅ Tool returned successfully!');
         fetchStats();
@@ -213,7 +213,6 @@ const ToolRequests = () => {
 
   const addToAssignment = (tool: Tool) => {
     if (tool.quantity <= 0) return;
-
     setAssignedTools(prev => {
       const existing = prev.find(a => a.tool.id === tool.id);
       if (existing) {
@@ -246,7 +245,6 @@ const ToolRequests = () => {
   const confirmAssignment = async () => {
     if (!selectedTicket || assignedTools.length === 0) return;
     setAssigning(true);
-
     try {
       for (const { tool, qty } of assignedTools) {
         const res = await fetch('http://localhost:5001/api/tools/assign', {
@@ -256,16 +254,14 @@ const ToolRequests = () => {
             toolID: tool.id,
             ticketID: selectedTicket.id,
             quantity: qty,
-            assignedBy: selectedTicket.assigned_mechanic || 'Unknown',
+            assignedBy: selectedTicket.mechanic_assignments?.[0]?.mechanic_name || 'Unknown',
           }),
         });
-
         if (!res.ok) {
           const errorData = await res.json();
           throw new Error(errorData.message || 'Failed to assign tool');
         }
       }
-
       alert('✅ Tools assigned successfully!');
       closeModal();
       fetchStats();
@@ -364,7 +360,6 @@ const ToolRequests = () => {
             <Package className="w-8 h-8 text-blue-200" />
           </div>
         </div>
-
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-xl">
           <div className="flex items-center justify-between">
             <div>
@@ -374,7 +369,6 @@ const ToolRequests = () => {
             <CheckCircle className="w-8 h-8 text-green-200" />
           </div>
         </div>
-
         <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white rounded-2xl p-6 shadow-xl">
           <div className="flex items-center justify-between">
             <div>
@@ -384,7 +378,6 @@ const ToolRequests = () => {
             <Wrench className="w-8 h-8 text-yellow-200 animate-spin" />
           </div>
         </div>
-
         <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-2xl p-6 shadow-xl">
           <div className="flex items-center justify-between">
             <div>
@@ -431,13 +424,16 @@ const ToolRequests = () => {
                         In Progress
                       </span>
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <div className="flex items-center space-x-2 text-gray-600 mb-1">
                           <User className="w-4 h-4" />
                           <span>
-                            <strong>Mechanic:</strong> {ticket.assigned_mechanic || 'Unassigned'}
+                            <strong>Mechanic:</strong> {
+                              ticket.mechanic_assignments && ticket.mechanic_assignments.length > 0
+                                ? ticket.mechanic_assignments.map(m => m.mechanic_name).join(', ')
+                                : 'Unassigned'
+                            }
                           </span>
                         </div>
                         <div className="flex items-center space-x-2 text-gray-600 mb-1">
@@ -446,26 +442,25 @@ const ToolRequests = () => {
                             <strong>Customer:</strong> {ticket.customer_name}
                           </span>
                         </div>
-                       <div className="flex items-center space-x-2 text-gray-600 mb-1">
-  <Wrench className="w-4 h-4" />
-  <span>
-    <strong>Vehicle:</strong>{' '}
-    {ticket.vehicle?.make && ticket.vehicle?.model && ticket.vehicle?.year ? (
-      <>
-        {ticket.vehicle.year} {ticket.vehicle.make} {ticket.vehicle.model}
-      </>
-    ) : (
-      <em>No structured vehicle data</em>
-    )}
-    {ticket.vehicle_info && (
-      <span className="ml-2 text-sm text-gray-500">
-        ({ticket.vehicle_info})
-      </span>
-    )}
-  </span>
-</div>
+                        <div className="flex items-center space-x-2 text-gray-600 mb-1">
+                          <Wrench className="w-4 h-4" />
+                          <span>
+                            <strong>Vehicle:</strong>{' '}
+                            {ticket.vehicle?.make && ticket.vehicle?.model && ticket.vehicle?.year ? (
+                              <>
+                                {ticket.vehicle.year} {ticket.vehicle.make} {ticket.vehicle.model}
+                              </>
+                            ) : (
+                              <em>No structured vehicle data</em>
+                            )}
+                            {ticket.vehicle_info && (
+                              <span className="ml-2 text-sm text-gray-500">
+                                ({ticket.vehicle_info})
+                              </span>
+                            )}
+                          </span>
+                        </div>
                       </div>
-
                       <div>
                         <p className="font-medium text-gray-800 mb-1">Assigned Tools:</p>
                         <div className="flex flex-wrap gap-1 mb-2">
@@ -490,7 +485,6 @@ const ToolRequests = () => {
                       </div>
                     </div>
                   </div>
-
                   <div className="flex flex-col space-y-2">
                     <button
                       onClick={() => openToolSelector(ticket)}
@@ -567,15 +561,14 @@ const ToolRequests = () => {
                     className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition cursor-pointer"
                     onClick={() => addToAssignment(tool)}
                   >
-                    {tool.image_url && (
+                    {tool.imageUrl && (  // Updated to use imageUrl
                       <img
-                        src={tool.image_url}
+                        src={tool.imageUrl}
                         alt={tool.tool_name}
                         className="w-full h-32 object-cover rounded mb-2"
                       />
                     )}
                     <p className="font-medium text-black">{tool.tool_name}</p>
-                   
                     <p className={`text-sm font-medium ${tool.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {tool.quantity} Available
                     </p>

@@ -749,56 +749,7 @@ class Mechanic extends React.Component {
                 </div>
                 
                 {/* Outsource Stock */}
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="font-semibold mb-4 flex items-center gap-2">
-                    <Truck className="text-blue-600" size={18} />
-                    Outsource Stock
-                  </h4>
-                  {selectedTicket.outsourceStock && selectedTicket.outsourceStock.length > 0 ? (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left pb-2">Tool Name</th>
-                          <th className="text-left pb-2">Assigned Quantity</th>
-                          <th className="text-left pb-2">Assigned By</th>
-                          <th className="text-left pb-2">Status</th>
-                          <th className="text-left pb-2">Assigned At</th>
-                          <th className="text-left pb-2">Returned At</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedTicket.outsourceStock.map((tool, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="py-2">{tool.name || tool.tool_name}</td>
-                            <td>{tool.quantity || tool.assigned_quantity}</td>
-                            <td>{tool.assigned_by || 'N/A'}</td>
-                            <td>
-                              <span className={`px-2 py-1 rounded text-xs ${
-                                tool.status === 'assigned' ? 'bg-yellow-100 text-yellow-800' :
-                                tool.status === 'returned' ? 'bg-green-100 text-green-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {tool.status}
-                              </span>
-                            </td>
-                            <td className="text-gray-500 text-xs">
-                              {tool.requested_at || tool.assigned_at 
-                                ? new Date(tool.requested_at || tool.assigned_at).toLocaleDateString() 
-                                : 'N/A'}
-                            </td>
-                            <td className="text-gray-500 text-xs">
-                              {tool.received_at || tool.returned_at 
-                                ? new Date(tool.received_at || tool.returned_at).toLocaleDateString() 
-                                : 'N/A'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <p className="text-gray-500">No outsource stock recorded.</p>
-                  )}
-                </div>
+             
               </div>
             )}
           </div>

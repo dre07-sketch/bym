@@ -21,9 +21,11 @@ import {
   Users,
   ShoppingCart,
   Package,
+  Info,
+  ListChecks,
+  SquareStack,
 } from 'lucide-react';
-
-// Define Vehicle interface (unchanged)
+// Define Vehicle interface
 interface Vehicle {
   id: string;
   make: string;
@@ -40,6 +42,7 @@ interface Vehicle {
   progress: number;
   title: string;
   description: string;
+  createdAt: string; // Added this field
   disassembledParts: Array<{
     id: number;
     partName: string;
@@ -135,7 +138,6 @@ interface Vehicle {
     created_at: string;
   }>;
 }
-
 const VehicleStatus = () => {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'parts' | 'logs' | 'inspections' | 'bill' | 'tools'>('details');
@@ -147,7 +149,6 @@ const VehicleStatus = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-
   // Status and Priority styling
   const statusColors = {
     pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -156,14 +157,12 @@ const VehicleStatus = () => {
     'awaiting bill': 'bg-indigo-100 text-indigo-800 border-indigo-200',
     completed: 'bg-green-100 text-green-800 border-green-200',
   };
-
   const priorityColors = {
     low: 'bg-gray-100 text-gray-700',
     medium: 'bg-blue-100 text-blue-700',
     high: 'bg-orange-100 text-orange-700',
     urgent: 'bg-red-100 text-red-700 animate-pulse',
   };
-
   const statusIcons = {
     pending: <AlertCircle className="w-4 h-4" />,
     'in-progress': <Settings className="w-4 h-4" />,
@@ -171,29 +170,24 @@ const VehicleStatus = () => {
     'awaiting bill': <CreditCard className="w-4 h-4" />,
     completed: <CheckCircle className="w-4 h-4" />,
   };
-
   const billStatusColors = {
     pending: 'bg-yellow-100 text-yellow-800',
     invoiced: 'bg-blue-100 text-blue-800',
     paid: 'bg-green-100 text-green-800',
   };
-
   // Helper functions
-  const formatDateTime = (dateStr: string, timeStr: string): string => {
+  const formatDateTime = (dateStr: string): string => {
     try {
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return 'Invalid Date';
-      const [hours, minutes] = timeStr.split(':').map(Number);
-      const fullDate = new Date(date);
-      fullDate.setHours(hours, minutes, 0, 0);
       return (
-        fullDate.toLocaleDateString('en-US', {
+        date.toLocaleDateString('en-US', {
           month: 'short',
           day: 'numeric',
           year: 'numeric',
         }) +
         ' • ' +
-        fullDate.toLocaleTimeString('en-US', {
+        date.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: 'numeric',
           hour12: true,
@@ -204,18 +198,20 @@ const VehicleStatus = () => {
       return 'Invalid Date';
     }
   };
-
   const formatDate = (dateString: string) => {
     if (!dateString) return 'Not set';
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleDateString();
   };
-
+  const formatTime = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return isNaN(date.getTime()) ? 'N/A' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
   const formatCurrency = (value: number | string): string => {
     const numValue = typeof value === 'string' ? parseFloat(value) : value;
     return isNaN(numValue) ? 'N/A' : `$${numValue.toFixed(2)}`;
   };
-
   const renderDescription = (desc: string) => {
     const clean = desc.trim();
     const lines = clean
@@ -248,7 +244,6 @@ const VehicleStatus = () => {
       </p>
     );
   };
-
   // Fetch vehicles from backend
   const fetchVehicles = async () => {
     try {
@@ -269,7 +264,6 @@ const VehicleStatus = () => {
         else if (rawStatus.includes('inspect')) status = 'inspection';
         else if (rawStatus.includes('progress')) status = 'in-progress';
         else status = 'pending';
-
         const progressMap: Record<string, number> = {
           pending: 10,
           'in-progress': 60,
@@ -277,11 +271,9 @@ const VehicleStatus = () => {
           'awaiting bill': 90,
           completed: 100,
         };
-
         const services = row.title
           ? [row.title, ...(row.description ? [row.description] : [])]
           : ['Diagnostics'];
-
         // Mock or use real billing data
         const billing = row.billing
           ? {
@@ -304,7 +296,6 @@ const VehicleStatus = () => {
                 : [],
             }
           : null;
-
         return {
           id: row.ticket_number,
           make: String(vehicleData.make || 'Unknown'),
@@ -315,12 +306,14 @@ const VehicleStatus = () => {
           priority: ['low', 'medium', 'high', 'urgent'].includes(row.priority) ? row.priority : 'medium',
           estimatedCompletion: row.estimated_completion_date || row.completion_date || '',
           finalDeadline: row.completion_date || '',
-          technician: row.mechanic_assign || 'Unassigned',
+          // Updated to use mechanicName from API response
+          technician: row.mechanicName || 'Unassigned',
           inspector: row.inspector_assign || 'Unassigned',
           services,
           progress: progressMap[status] || 0,
           title: row.title || 'Service Ticket',
           description: row.description || 'No additional details provided.',
+          createdAt: row.created_at || '', // Added this field
           disassembledParts: (row.disassembled_parts || []).map((part: any) => ({
             id: part.id,
             partName: part.part_name,
@@ -412,11 +405,9 @@ const VehicleStatus = () => {
       setIsRefreshing(false);
     }
   };
-
   useEffect(() => {
     fetchVehicles();
   }, []);
-
   // Filter vehicles
   const filteredVehicles = vehicles.filter((vehicle) => {
     const statusMatch = statusFilter === 'all' || vehicle.status === statusFilter;
@@ -433,7 +424,6 @@ const VehicleStatus = () => {
       vehicle.description.toLowerCase().includes(query);
     return statusMatch && priorityMatch && searchMatch;
   });
-
   // Loading skeleton
   if (loading) {
     return (
@@ -454,7 +444,6 @@ const VehicleStatus = () => {
       </div>
     );
   }
-
   // Error state with retry
   if (error) {
     return (
@@ -475,7 +464,6 @@ const VehicleStatus = () => {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Header */}
@@ -499,7 +487,6 @@ const VehicleStatus = () => {
           </div>
         </div>
       </div>
-
       {/* Filters */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -544,7 +531,6 @@ const VehicleStatus = () => {
           </div>
         </div>
       </div>
-
       {/* Vehicle List */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -619,7 +605,6 @@ const VehicleStatus = () => {
           )}
         </div>
       </div>
-
       {/* Enhanced Detail Modal - Tabs at the Top */}
       {selectedVehicle && (
         <div className="fixed inset-0 bg-black bg-opacity-70 text-black flex items-center justify-center p-4 z-50 overflow-y-auto backdrop-blur-sm">
@@ -651,7 +636,7 @@ const VehicleStatus = () => {
             <div className="border-b border-gray-200 bg-gray-50">
               <div className="flex">
                 {[
-                  { key: 'details', label: 'Overview', icon: FileText },
+                  { key: 'details', label: 'Overview', icon: SquareStack },
                   { key: 'parts', label: 'Progress Logs', icon: Clock },
                   { key: 'logs', label: 'Disassembled Parts', icon: Wrench },
                   { key: 'inspections', label: 'Used Tools', icon: Settings },
@@ -720,7 +705,92 @@ const VehicleStatus = () => {
                         <p className="font-medium">56,741 miles</p>
                       </div>
                     </div>
-                    
+                  </div>
+                  
+                  {/* Garage Entry Time Card */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                      <div className="bg-blue-100 p-1.5 rounded-lg mr-2">
+                        <Calendar className="w-4 h-4 text-blue-600" />
+                      </div>
+                      Garage Entry Time
+                    </h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-4">
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 flex-1">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-gray-600">Arrival Date</p>
+                              <p className="text-xl font-bold text-blue-700">
+                                {formatDate(selectedVehicle.createdAt)}
+                              </p>
+                            </div>
+                            <div className="bg-blue-100 p-2 rounded-lg">
+                              <Calendar className="w-6 h-6 text-blue-600" />
+                            </div>
+                          </div>
+                        </div>
+                        
+                       
+                      </div>
+                      
+                      <div className="mt-2 text-sm text-gray-600 flex items-center">
+                        <Info className="w-4 h-4 mr-1.5 text-blue-500" />
+                        <span>
+                          Service ticket was created at this time when the vehicle entered our facility
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Service Timeline Card */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                      <ListChecks className="w-5 h-5 mr-2 text-blue-600" />
+                      Service Timeline
+                    </h3>
+                    <div className="relative">
+                      {/* Timeline line */}
+                      <div className="absolute left-4 top-6 bottom-0 w-0.5 bg-gray-200"></div>
+                      
+                      {/* Timeline items */}
+                      <div className="space-y-6">
+                        {/* Garage Entry */}
+                        <div className="relative flex items-start">
+                          <div className="absolute left-2 w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow"></div>
+                          <div className="ml-10">
+                            <div className="font-medium text-blue-700">Garage Entry</div>
+                            <div className="text-sm text-gray-600">
+                              {formatDateTime(selectedVehicle.createdAt)}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Estimated Completion */}
+                        <div className="relative flex items-start">
+                          <div className="absolute left-2 w-4 h-4 rounded-full bg-orange-500 border-2 border-white shadow"></div>
+                          <div className="ml-10">
+                            <div className="font-medium text-orange-700">Estimated Completion</div>
+                            <div className="text-sm text-gray-600">
+                              {formatDateTime(selectedVehicle.estimatedCompletion)}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Actual Completion (if exists) */}
+                        {selectedVehicle.finalDeadline && (
+                          <div className="relative flex items-start">
+                            <div className="absolute left-2 w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow"></div>
+                            <div className="ml-10">
+                              <div className="font-medium text-green-700">Service Completed</div>
+                              <div className="text-sm text-gray-600">
+                                {formatDateTime(selectedVehicle.finalDeadline)}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   
                   {/* Assigned Mechanic Card */}
@@ -780,7 +850,7 @@ const VehicleStatus = () => {
                                   <div key={log.id} className="relative">
                                     <div className="absolute -left-8 top-2 w-4 h-4 bg-blue-500 rounded-full border-4 border-white"></div>
                                     <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                                      <div className="text-sm text-gray-500 mb-1">{formatDateTime(log.date, log.time)}</div>
+                                      <div className="text-sm text-gray-500 mb-1">{formatDateTime(log.date + ' ' + log.time)}</div>
                                       <h5 className="text-base font-semibold text-gray-800">{log.status}</h5>
                                       <p className="text-gray-600 text-sm mt-2">{log.description}</p>
                                     </div>
@@ -1093,5 +1163,4 @@ const VehicleStatus = () => {
     </div>
   );
 };
-
 export default VehicleStatus;

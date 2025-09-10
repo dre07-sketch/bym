@@ -324,4 +324,34 @@ router.post('/add-vehicles', upload.array('images'), (req, res) => {
   });
 });
 
+
+router.get('/car-models', (req, res) => {
+  const query = `
+    SELECT make, model, service_interval_km 
+    FROM car_models 
+    ORDER BY make, model
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Database error fetching car models:', err);
+      return res.status(500).json({ message: 'Failed to fetch car models.' });
+    }
+
+    // Group models by make
+    const grouped = results.reduce((acc, row) => {
+      if (!acc[row.make]) {
+        acc[row.make] = [];
+      }
+      acc[row.make].push({
+        model: row.model,
+        serviceInterval: row.service_interval_km,
+      });
+      return acc;
+    }, {});
+
+    res.json(grouped);
+  });
+});
+
 module.exports = router;

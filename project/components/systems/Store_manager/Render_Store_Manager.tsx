@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   BarChart3,
   Users,
+  Check,
 } from 'lucide-react';
 
 import SidebarHeader from '../../layout/SidebarHeader';
@@ -17,6 +18,7 @@ import ToolMaintenance from './pages/screens/ToolMaintenance';
 import ToolReports from './pages/screens/ToolReports';
 import DamageReportPage from './pages/screens/DamageReportPage';
 import Reports from './pages/screens/reports-analytic';
+import ReturnedToolsList from './pages/screens/ReturnedToolsList';
 
 interface Render_Store_ManagerDashboardProps {
   onLogout: () => void;
@@ -31,6 +33,7 @@ const Render_Store_Manager: React.FC<Render_Store_ManagerDashboardProps> = ({ on
     { id: 'requests', label: 'Assign Tool', icon: Package },
     { id: 'inventory', label: 'Inventory Management', icon: Package },
     { id: 'assignments', label: 'Assignment & Return', icon: UserCheck },
+    { id: 'returns', label: 'Returned Tools', icon: Check },
     { id: 'damage-reports', label: 'Damage Reports', icon: AlertTriangle },
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
     
@@ -69,6 +72,7 @@ const Render_Store_Manager: React.FC<Render_Store_ManagerDashboardProps> = ({ on
       case 'requests': return <ToolRequests />;
       case 'inventory': return <InventoryManagement />;
       case 'assignments': return <AssignmentReturn />;
+      case 'returns': return <ReturnedToolsList />;
       case 'damage-reports': return <DamageReportPage />;
       case 'reports': return <Reports />;
      

@@ -6,10 +6,7 @@ import {
   MapPin, Wrench, DollarSign, FileText, Star, X, Package, PenTool, 
   ChevronDown, ChevronUp, ClipboardList, CheckSquare, ListChecks,
   SquareStack, ClipboardCheck, Scissors, PackagePlus, FileCheck, Users, UserCheck, 
-  CreditCard,
-
-
-
+  CreditCard, Receipt, Info
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,25 +39,10 @@ export default function ServiceTickets() {
   const [activeTab, setActiveTab] = useState('overview');
   const { addNotification } = useNotifications();
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-const [selectedMechanic, setSelectedMechanic] = useState(null);
-const [activeMechanicTab, setActiveMechanicTab] = useState(null);
-const [orderedPartsActiveTab, setOrderedPartsActiveTab] = useState('ordered'); // 'ordered' or 'outsource'
-// Safely convert payment values to numbers (moved inside the map)
-
-
-// Add this function to handle payment added
-const handlePaymentAdded = (paymentData) => {
-  addNotification({
-    type: 'success',
-    title: 'Payment Added',
-    message: `Payment of ETB ${paymentData.payment_amount} added for ${selectedMechanic.mechanic_name}`
-  });
-  
-  // Refresh ticket details to show the new payment
-  if (showTicketDetails) {
-    fetchTicketDetails(showTicketDetails.ticket_number);
-  }
-}
+  const [selectedMechanic, setSelectedMechanic] = useState(null);
+  const [activeMechanicTab, setActiveMechanicTab] = useState(null);
+  const [orderedPartsActiveTab, setOrderedPartsActiveTab] = useState('ordered');
+  const [bill, setBill] = useState(null);
   
   useEffect(() => {
     const fetchTickets = async () => {
@@ -68,13 +50,36 @@ const handlePaymentAdded = (paymentData) => {
         const response = await fetch('http://localhost:5001/api/tickets/service_tickets');
         if (!response.ok) throw new Error('Failed to fetch tickets');
         const data = await response.json();
-        const normalizedData = data.map(ticket => ({
-          ...ticket,
-          status: ticket.status === 'in progress' 
-            ? 'in-progress' 
-            : ticket.status.toLowerCase().replace(/\s+/g, '-')
-        }));
-        setTickets(normalizedData);
+        // Enrich each ticket with actual bill amount using your existing bill API
+        const ticketsWithBillAmount = await Promise.all(
+          data.map(async (ticket) => {
+            let actualBillAmount = null;
+            try {
+              const billRes = await fetch(`http://localhost:5001/api/bill/car-bills/${ticket.ticket_number}`);
+              if (billRes.ok) {
+                const billData = await billRes.json();
+                if (billData.success && billData.bill && billData.bill.final_total) {
+                  const total = parseFloat(billData.bill.final_total);
+                  if (!isNaN(total)) {
+                    actualBillAmount = total;
+                  }
+                }
+              }
+              // If 404 or no bill, leave as null
+            } catch (err) {
+              console.warn(`No bill for ticket ${ticket.ticket_number}`, err);
+              // Just skip; keep actualBillAmount = null
+            }
+            return {
+              ...ticket,
+              status: ticket.status === 'in progress'
+                ? 'in-progress'
+                : ticket.status.toLowerCase().replace(/\s+/g, '-'),
+              bill_amount: actualBillAmount, // Add actual bill amount here
+            };
+          })
+        );
+        setTickets(ticketsWithBillAmount);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
         addNotification({
@@ -88,53 +93,85 @@ const handlePaymentAdded = (paymentData) => {
     };
     fetchTickets();
   }, [addNotification]);
-
-const fetchTicketDetails = async (ticketNumber) => {
-  try {
-    const response = await fetch(`http://localhost:5001/api/tickets/service_tickets/${ticketNumber}`);
-    if (!response.ok) throw new Error('Failed to fetch ticket details');
-    const data = await response.json();
-    const normalizedTicket = {
-      ...data,
-      status: data.status === 'in progress' 
-        ? 'in-progress' 
-        : data.status.toLowerCase().replace(/\s+/g, '-')
-    };
-    
-    // Set ticket details first without payment history
-    setShowTicketDetails({
-      ...normalizedTicket,
-      paymentHistory: null
-    });
-    
-    setActiveTab('overview');
-    
-    // Then try to fetch payment history separately
+  
+  const fetchBill = async (ticketNumber) => {
     try {
-      const paymentResponse = await fetch(`http://localhost:5001/api/outsource-mechanic-payments/outsource-payments/${ticketNumber}`);
-      if (paymentResponse.ok) {
-        const paymentData = await paymentResponse.json();
-        // Update the ticket details with payment history
-        setShowTicketDetails(prev => ({
-          ...prev,
-          paymentHistory: paymentData
-        }));
-      } else {
-        console.warn('Payment history endpoint returned non-OK status');
+      const response = await fetch(`http://localhost:5001/api/bill/car-bills/${ticketNumber}`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          setBill(null);
+          return;
+        }
+        throw new Error('Failed to fetch bill');
       }
-    } catch (paymentErr) {
-      console.warn('Error fetching payment history:', paymentErr);
-      // Don't show error notification for payment history failure
+      const data = await response.json();
+      if (data.success) {
+        setBill(data.bill);
+      } else {
+        setBill(null);
+      }
+    } catch (err) {
+      console.error('Error fetching bill:', err);
+      setBill(null);
     }
-  } catch (err) {
-    setError(err instanceof Error ? err.message : 'An unknown error occurred');
+  };
+  
+  const fetchTicketDetails = async (ticketNumber) => {
+    try {
+      const response = await fetch(`http://localhost:5001/api/tickets/service_tickets/${ticketNumber}`);
+      if (!response.ok) throw new Error('Failed to fetch ticket details');
+      const data = await response.json();
+      const normalizedTicket = {
+        ...data,
+        status: data.status === 'in progress' 
+          ? 'in-progress' 
+          : data.status.toLowerCase().replace(/\s+/g, '-')
+      };
+      
+      setShowTicketDetails({
+        ...normalizedTicket,
+        paymentHistory: null
+      });
+      
+      setActiveTab('overview');
+      
+      try {
+        const paymentResponse = await fetch(`http://localhost:5001/api/outsource-mechanic-payments/outsource-payments/${ticketNumber}`);
+        if (paymentResponse.ok) {
+          const paymentData = await paymentResponse.json();
+          setShowTicketDetails(prev => ({
+            ...prev,
+            paymentHistory: paymentData
+          }));
+        }
+      } catch (paymentErr) {
+        console.warn('Error fetching payment history:', paymentErr);
+      }
+      
+      fetchBill(ticketNumber);
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      addNotification({
+        type: 'error',
+        title: 'Failed to load ticket',
+        message: 'Could not fetch ticket details'
+      });
+    }
+  };
+  
+  const handlePaymentAdded = (paymentData) => {
     addNotification({
-      type: 'error',
-      title: 'Failed to load ticket',
-      message: 'Could not fetch ticket details'
+      type: 'success',
+      title: 'Payment Added',
+      message: `Payment of ETB ${paymentData.payment_amount} added for ${selectedMechanic.mechanic_name}`
     });
+    
+    if (showTicketDetails) {
+      fetchTicketDetails(showTicketDetails.ticket_number);
+    }
   }
-};
+  
   const filteredTickets = tickets.filter(ticket => {
     const matchesSearch = 
       ticket.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -147,7 +184,7 @@ const fetchTicketDetails = async (ticketNumber) => {
     
     return matchesSearch && matchesStatus && matchesPriority;
   });
-
+  
   const getStatusColor = (status) => {
     const colorMap = {
       pending: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -160,23 +197,24 @@ const fetchTicketDetails = async (ticketNumber) => {
     };
     return colorMap[status] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
-
+  
   const getPriorityColor = (priority) => {
     return priority === 'high' ? 'bg-red-500' : priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500';
   };
-
+  
   const formatDateTime = (dateString) => {
     return dateString ? new Date(dateString).toLocaleString() : 'N/A';
   };
-
+  
   const formatDateOnly = (dateString) => {
     return dateString ? new Date(dateString).toLocaleDateString() : 'N/A';
   };
+  
   const openPaymentModal = (mechanic) => {
-  setSelectedMechanic(mechanic);
-  setIsPaymentModalOpen(true);
-};
-
+    setSelectedMechanic(mechanic);
+    setIsPaymentModalOpen(true);
+  };
+  
   const renderDescription = (desc) => {
     const lines = (desc || '').trim().split(/\n|;/).map(l => l.trim()).filter(Boolean);
     if (lines.length > 1) {
@@ -193,35 +231,32 @@ const fetchTicketDetails = async (ticketNumber) => {
     }
     return <p className="text-sm text-gray-700">{desc || 'No description provided.'}</p>;
   };
-
+  
   const toggleLogs = (ticketNumber) => {
     setExpandedLogs(prev => ({ ...prev, [ticketNumber]: !prev[ticketNumber] }));
   };
-
+  
   const tabs = [
     { id: 'overview', label: 'Overview', icon: SquareStack },
     { id: 'progressLogs', label: 'Progress Logs', icon: ClipboardCheck },
     { id: 'disassembledParts', label: 'Disassembled Parts', icon: Scissors },
     { id: 'usedTools', label: 'Used Tools', icon: Wrench },
     { id: 'orderedParts', label: 'Ordered Parts', icon: PackagePlus },
-    { id: 'inspection', label: 'Inspection', icon: FileCheck }
+    { id: 'inspection', label: 'Inspection', icon: FileCheck },
+    { id: 'bill', label: 'Bill', icon: Receipt }
   ];
-
-  // Get mechanic details by ID
+  
   const getMechanicDetails = (mechanicId) => {
     return mechanics.find(m => m.id === parseInt(mechanicId)) || { name: 'Unknown', specialty: 'Not specified' };
   };
-
-  // Get inspector from inspection data
+  
   const getInspector = () => {
     if (showTicketDetails.inspections && showTicketDetails.inspections.length > 0) {
-      // In a real app, this would come from the inspection data
-      // For now, we'll use a placeholder
       return { name: 'Inspector Name', role: 'Quality Assurance' };
     }
     return null;
   };
-
+  
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -229,7 +264,7 @@ const fetchTicketDetails = async (ticketNumber) => {
       </div>
     );
   }
-
+  
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       {/* Header */}
@@ -241,7 +276,7 @@ const fetchTicketDetails = async (ticketNumber) => {
           <p className="text-gray-600 mt-1">Manage and track all service requests</p>
         </div>
         <Button 
-         onClick={() => setIsNewTicketOpen(true)}
+          onClick={() => setIsNewTicketOpen(true)}
           className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium px-6 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -344,11 +379,27 @@ const fetchTicketDetails = async (ticketNumber) => {
                           <Car className="w-4 h-4" />
                           <span>{ticket.vehicle_info} ({ticket.license_plate})</span>
                         </div>
+                        {/* Mechanic Name - Added */}
+                        {ticket.mechanic_assignments && ticket.mechanic_assignments.length > 0 && (
+                          <div className="flex items-center space-x-2">
+                            <Wrench className="w-4 h-4 text-purple-600" />
+                            <span className="font-medium text-purple-700">
+                              {ticket.mechanic_assignments[0].mechanic_name}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center space-x-2">
+                          <Calendar className="w-4 h-4 text-blue-500" />
+                          <span className="text-gray-700">Arrived: {formatDateOnly(ticket.created_at)}</span>
+                        </div>
+                        {/* Estimated Time - Updated */}
+                        <div className="flex items-center space-x-2">
                           <Calendar className="w-4 h-4 text-orange-500" />
-                          <span className="text-gray-700">Est: {formatDateOnly(ticket.estimated_completion_date)}</span>
+                          <span className="text-gray-700">
+                            Est: {ticket.estimated_completion_date ? formatDateOnly(ticket.estimated_completion_date) : 'N/A'}
+                          </span>
                         </div>
                         {ticket.completion_date && (
                           <div className="flex items-center space-x-2">
@@ -362,7 +413,17 @@ const fetchTicketDetails = async (ticketNumber) => {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-green-600">
-                    ETB {ticket.estimated_cost?.toFixed(2) || '0.00'}
+                    {ticket.bill_amount !== null ? (
+                      <>
+                        ETB {ticket.bill_amount.toFixed(2)}
+                        <span className="text-xs text-gray-500 ml-1">(Billed)</span>
+                      </>
+                    ) : (
+                      <>
+                        ETB {ticket.estimated_cost?.toFixed(2) || '0.00'}
+                        <span className="text-xs text-gray-500 ml-1">(Est.)</span>
+                      </>
+                    )}
                   </div>
                   <Button 
                     size="sm" 
@@ -399,7 +460,10 @@ const fetchTicketDetails = async (ticketNumber) => {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  onClick={() => setShowTicketDetails(null)}
+                  onClick={() => {
+                    setShowTicketDetails(null);
+                    setBill(null);
+                  }}
                   className="text-white hover:bg-white/20"
                 >
                   <X className="w-5 h-5" />
@@ -473,20 +537,129 @@ const fetchTicketDetails = async (ticketNumber) => {
                     </Card>
                   </div>
                   
+                  {/* Garage Entry Time */}
+                  <Card className="shadow-md hover:shadow-lg transition-shadow">
+                    <CardHeader>
+                      <CardTitle className="flex items-center text-lg">
+                        <div className="bg-blue-100 p-1.5 rounded-lg mr-2">
+                          <Calendar className="w-4 h-4 text-blue-600" />
+                        </div>
+                        Garage Entry Time
+                      </CardTitle>
+                      <CardDescription className="text-sm text-gray-500">
+                        When the vehicle first arrived at our service center
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center space-x-4">
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 flex-1">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-gray-600">Arrival Date</p>
+                              <p className="text-xl font-bold text-blue-700">
+                                {formatDateOnly(showTicketDetails.created_at)}
+                              </p>
+                            </div>
+                            <div className="bg-blue-100 p-2 rounded-lg">
+                              <Calendar className="w-6 h-6 text-blue-600" />
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-gradient-to-br from-purple-50 to-violet-50 p-4 rounded-xl border border-purple-100 flex-1">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-gray-600">Arrival Time</p>
+                              <p className="text-xl font-bold text-purple-700">
+                                {new Date(showTicketDetails.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                            <div className="bg-purple-100 p-2 rounded-lg">
+                              <Clock className="w-6 h-6 text-purple-600" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-2 text-sm text-gray-600 flex items-center">
+                        <Info className="w-4 h-4 mr-1.5 text-blue-500" />
+                        <span>
+                          Service ticket was created at this time when the vehicle entered our facility
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Service Timeline */}
+                  <Card className="shadow-md">
+                    <CardHeader>
+                      <CardTitle className="flex items-center text-lg">
+                        <ListChecks className="w-4 h-4 mr-2 text-blue-600" />
+                        Service Timeline
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="relative">
+                        {/* Timeline line */}
+                        <div className="absolute left-4 top-6 bottom-0 w-0.5 bg-gray-200"></div>
+                        
+                        {/* Timeline items */}
+                        <div className="space-y-6">
+                          {/* Garage Entry */}
+                          <div className="relative flex items-start">
+                            <div className="absolute left-2 w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow"></div>
+                            <div className="ml-10">
+                              <div className="font-medium text-blue-700">Garage Entry</div>
+                              <div className="text-sm text-gray-600">
+                                {formatDateTime(showTicketDetails.created_at)}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Estimated Completion */}
+                          <div className="relative flex items-start">
+                            <div className="absolute left-2 w-4 h-4 rounded-full bg-orange-500 border-2 border-white shadow"></div>
+                            <div className="ml-10">
+                              <div className="font-medium text-orange-700">Estimated Completion</div>
+                              <div className="text-sm text-gray-600">
+                                {formatDateTime(showTicketDetails.estimated_completion_date)}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Actual Completion (if exists) */}
+                          {showTicketDetails.completion_date && (
+                            <div className="relative flex items-start">
+                              <div className="absolute left-2 w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow"></div>
+                              <div className="ml-10">
+                                <div className="font-medium text-green-700">Service Completed</div>
+                                <div className="text-sm text-gray-600">
+                                  {formatDateTime(showTicketDetails.completion_date)}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
                   {/* Assigned Mechanic */}
                   <Card className="shadow-md hover:shadow-lg transition-shadow">
                     <CardHeader>
                       <CardTitle className="flex items-center text-lg">
                         <Wrench className="w-4 h-4 mr-2 text-blue-600" />
-                        Assigned Mechanic
+                        Assigned Mechanics
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">
-                      {showTicketDetails.mechanic_assign ? (
-                        <>
-                          <p><strong>Name:</strong> {showTicketDetails.mechanic_assign}</p>
-                          <p><strong>Specialty:</strong> General Maintenance</p>
-                        </>
+                      {showTicketDetails.mechanic_assignments && showTicketDetails.mechanic_assignments.length > 0 ? (
+                        showTicketDetails.mechanic_assignments.map((assignment, index) => (
+                          <div key={assignment.id} className="border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                            <p><strong>Name:</strong> {assignment.mechanic_name}</p>
+                            <p><strong>Assigned At:</strong> {formatDateTime(assignment.assigned_at)}</p>
+                          </div>
+                        ))
                       ) : (
                         <p className="text-gray-500">No mechanic assigned yet</p>
                       )}
@@ -515,336 +688,321 @@ const fetchTicketDetails = async (ticketNumber) => {
                   </Card>
                   
                   {/* Outsourced Mechanics */}
-                  {/* Outsourced Mechanics */}
-{/* Outsourced Mechanics */}
-{showTicketDetails.outsource_mechanics && showTicketDetails.outsource_mechanics.length > 0 && (
-  <Card className="shadow-md hover:shadow-lg transition-shadow">
-    <CardHeader>
-      <CardTitle className="flex items-center text-lg">
-        <Users className="w-4 h-4 mr-2 text-blue-600" />
-        Outsourced Mechanics
-      </CardTitle>
-    </CardHeader>
-    <CardContent className="space-y-4">
-      {showTicketDetails.outsource_mechanics.map((mechanic, index) => {
-        // Get payment data for this mechanic
-        const mechanicPaymentData = showTicketDetails.paymentHistory?.mechanics?.find(
-          m => m.mechanic_name === mechanic.mechanic_name
-        );
-        
-        // Safely convert payment values to numbers
-        const agreedPayment = parseFloat(mechanic.payment) || 0;
-        const totalPaid = parseFloat(mechanicPaymentData?.total_paid) || 0;
-        const remainingBalance = parseFloat(mechanicPaymentData?.remaining_balance) || 0;
-        
-        return (
-          <div key={index} className="p-4 bg-gray-50 rounded-lg border">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-semibold text-lg">{mechanic.mechanic_name}</h3>
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Agreed Payment: <span className="font-medium">ETB {agreedPayment.toFixed(2)}</span></p>
-                {mechanicPaymentData && (
-                  <>
-                    <p className="text-sm text-gray-600">Total Paid: <span className="font-medium">ETB {totalPaid.toFixed(2)}</span></p>
-                    <p className={`text-sm font-medium ${remainingBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                      Remaining: ETB {remainingBalance.toFixed(2)}
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-            
-            {/* Tabs */}
-            <div className="flex border-b mb-3">
-              <button
-                className={`px-4 py-2 text-sm font-medium ${activeMechanicTab !== `payment-${index}` ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                onClick={() => setActiveMechanicTab(null)}
-              >
-                Details
-              </button>
-              <button
-                className={`px-4 py-2 text-sm font-medium ${activeMechanicTab === `payment-${index}` ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                onClick={() => setActiveMechanicTab(`payment-${index}`)}
-              >
-                Payment History
-              </button>
-            </div>
-            
-            {/* Tab Content */}
-            {activeMechanicTab !== `payment-${index}` ? (
-              // Details Tab
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Phone</p>
-                    <p className="font-medium">{mechanic.phone}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Payment Method</p>
-                    <p className="font-medium">{mechanic.payment_method || 'N/A'}</p>
-                  </div>
-                </div>
-                {mechanic.work_done && (
-                  <div className="mt-3">
-                    <p className="text-sm text-gray-600">Work Done</p>
-                    <p className="text-sm">{mechanic.work_done}</p>
-                  </div>
-                )}
-                {mechanic.notes && (
-                  <div className="mt-3">
-                    <p className="text-sm text-gray-600">Notes</p>
-                    <p className="text-sm">{mechanic.notes}</p>
-                  </div>
-                )}
-                <div className="mt-4">
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => openPaymentModal(mechanic)}
-                    className="border-green-300 hover:bg-green-50 hover:text-green-700"
-                  >
-                    <DollarSign className="w-3 h-3 mr-1" />
-                    Add Payment
-                  </Button>
-                </div>
-              </>
-            ) : (
-              // Payment History Tab
-              <div>
-                {mechanicPaymentData ? (
-                  <>
-                    {/* Payment Summary Card */}
-                    <div className="bg-white rounded-lg border p-4 mb-4">
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <p className="text-sm text-gray-600">Agreed Payment</p>
-                          <p className="font-bold text-lg">ETB {agreedPayment.toFixed(2)}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Total Paid</p>
-                          <p className="font-bold text-lg text-green-600">ETB {totalPaid.toFixed(2)}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Remaining Balance</p>
-                          <p className={`font-bold text-lg ${remainingBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                            ETB {remainingBalance.toFixed(2)}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Progress bar */}
-                      <div className="mt-4">
-                        <div className="flex justify-between text-xs text-gray-500 mb-1">
-                          <span>0%</span>
-                          <span>Payment Progress</span>
-                          <span>{agreedPayment > 0 ? Math.round((totalPaid / agreedPayment) * 100) : 0}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                          <div 
-                            className={`h-2.5 rounded-full ${remainingBalance > 0 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                            style={{ width: `${agreedPayment > 0 ? Math.min(100, (totalPaid / agreedPayment) * 100) : 0}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Payment Details */}
-                    {mechanicPaymentData.payments && mechanicPaymentData.payments.length > 0 ? (
-                      <div className="space-y-3">
-  <div className="flex items-center justify-between mb-4">
-    <h4 className="font-bold text-gray-800 text-lg flex items-center">
-      <span className="bg-blue-100 p-1.5 rounded-lg mr-2">
-        <CreditCard className="w-5 h-5 text-blue-600" />
-      </span>
-      Payment Details
-    </h4>
-    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-      {mechanicPaymentData.payments.length} Payments
-    </Badge>
-  </div>
-  
-  <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-    {/* Table Header */}
-    <div className="grid grid-cols-12 bg-gradient-to-r from-gray-50 to-gray-100 text-xs font-semibold text-gray-600 uppercase tracking-wider px-6 py-3 border-b border-gray-200">
-      <div className="col-span-3 flex items-center">
-        <Calendar className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
-        Date
-      </div>
-      <div className="col-span-3 flex items-center">
-        <CreditCard className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
-        Method
-      </div>
-      <div className="col-span-3 text-right flex items-center justify-end">
-        <DollarSign className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
-        Amount
-      </div>
-      <div className="col-span-3 flex items-center">
-        <FileText className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
-        Notes
-      </div>
-    </div>
-    
-    {/* Payment Rows */}
-    <div className="divide-y divide-gray-100">
-      {mechanicPaymentData.payments.map((payment, idx) => {
-        const paymentAmount = parseFloat(payment.payment_amount) || 0;
-        
-        // Get payment method icon and color
-        const getPaymentMethodInfo = (method) => {
-          const methods = {
-            'cash': { icon: '💵', color: 'bg-green-100 text-green-800 border-green-200' },
-            'bank_transfer': { icon: '🏦', color: 'bg-blue-100 text-blue-800 border-blue-200' },
-            'mobile_payment': { icon: '📱', color: 'bg-purple-100 text-purple-800 border-purple-200' },
-            'check': { icon: '📝', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-            'other': { icon: '💳', color: 'bg-gray-100 text-gray-800 border-gray-200' }
-          };
-          return methods[method] || methods.other;
-        };
-        
-        const paymentMethodInfo = getPaymentMethodInfo(payment.payment_method);
-        
-        // Format date with day of week
-        const formatDate = (dateString) => {
-          const date = new Date(dateString);
-          return date.toLocaleDateString('en-US', { 
-            weekday: 'short', 
-            month: 'short', 
-            day: 'numeric' 
-          });
-        };
-        
-        // Add animation delay based on index
-        const animationDelay = `${idx * 50}ms`;
-        
-        return (
-          <div 
-            key={idx} 
-            className="grid grid-cols-12 px-6 py-4 text-sm transition-all duration-300 hover:bg-blue-50/50 group relative overflow-hidden"
-            style={{ animationDelay }}
-          >
-            {/* Animated background effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-            
-            {/* Date Column */}
-            <div className="col-span-3 flex items-center">
-              <div className="bg-white rounded-lg p-2 shadow-sm border border-gray-100 group-hover:border-blue-200 transition-colors duration-300">
-                <div className="flex items-center">
-                  <Calendar className="w-4 h-4 mr-2 text-blue-500" />
-                  <div>
-                    <div className="font-medium text-gray-900">{formatDate(payment.payment_date)}</div>
-                    <div className="text-xs text-gray-500">{new Date(payment.payment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Method Column */}
-            <div className="col-span-3 flex items-center">
-              <Badge 
-                className={`${paymentMethodInfo.color} px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm hover:shadow-md transition-shadow duration-300`}
-              >
-                <span className="text-base">{paymentMethodInfo.icon}</span>
-                <span className="font-medium capitalize">
-                  {payment.payment_method.replace('_', ' ')}
-                </span>
-              </Badge>
-            </div>
-            
-            {/* Amount Column */}
-            <div className="col-span-3 flex items-center justify-end">
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg px-3 py-2 border border-green-200 shadow-sm group-hover:shadow-md transition-all duration-300 group-hover:scale-105">
-                <div className="text-xs text-gray-500">Amount</div>
-                <div className="font-bold text-lg text-green-700">ETB {paymentAmount.toFixed(2)}</div>
-              </div>
-            </div>
-            
-            {/* Notes Column */}
-            <div className="col-span-3 flex items-center">
-              {payment.notes ? (
-                <div className="bg-gray-50 rounded-lg p-2 border border-gray-200 w-full group-hover:border-blue-200 transition-colors duration-300">
-                  <div className="flex items-start">
-                    <FileText className="w-4 h-4 mt-0.5 mr-2 text-gray-400" />
-                    <div className="text-xs text-gray-600 italic">{payment.notes}</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center w-full">
-                  <span className="text-xs text-gray-400 italic">No notes</span>
-                </div>
-              )}
-            </div>
-            
-            {/* Hover effect indicator */}
-            <div className="absolute bottom-0 left-0 h-0.5 bg-blue-500 w-0 group-hover:w-full transition-all duration-300"></div>
-          </div>
-        );
-      })}
-    </div>
-  </div>
-  
-  {/* Summary Footer */}
-  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100 mt-4">
-    <div className="flex justify-between items-center">
-      <div className="text-sm text-gray-600">
-        Total Payments: <span className="font-bold text-blue-700">{mechanicPaymentData.payments.length}</span>
-      </div>
-      <div className="text-sm text-gray-600">
-        Total Amount: <span className="font-bold text-green-700">ETB {totalPaid.toFixed(2)}</span>
-      </div>
-      <div className="text-sm text-gray-600">
-        Last Payment: <span className="font-bold text-gray-800">
-          {mechanicPaymentData.payments.length > 0 
-            ? new Date(mechanicPaymentData.payments[mechanicPaymentData.payments.length - 1].payment_date).toLocaleDateString() 
-            : 'N/A'}
-        </span>
-      </div>
-    </div>
-  </div>
-</div>
-                    ) : (
-                      <div className="text-center py-8 bg-white rounded-lg border">
-                        <div className="flex justify-center mb-3">
-                          <div className="bg-gray-100 p-3 rounded-full">
-                            <CreditCard className="w-8 h-8 text-gray-400" />
-                          </div>
-                        </div>
-                        <p className="text-gray-500">No payments recorded yet</p>
-                        <p className="text-sm text-gray-400 mt-1">Add a payment to track the payment history</p>
-                      </div>
-                    )}
-                    
-                    <div className="mt-4 flex justify-end">
-                     
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-8 bg-white rounded-lg border">
-                    <div className="flex justify-center mb-3">
-                      <div className="bg-gray-100 p-3 rounded-full">
-                        <CreditCard className="w-8 h-8 text-gray-400" />
-                      </div>
-                    </div>
-                    <p className="text-gray-500">No payment history available</p>
-                    <p className="text-sm text-gray-400 mt-1">Add a payment to track the payment history</p>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => openPaymentModal(mechanic)}
-                      className="mt-4 border-green-300 hover:bg-green-50 hover:text-green-700"
-                    >
-                      <DollarSign className="w-3 h-3 mr-1" />
-                      Add Payment
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </CardContent>
-  </Card>
-)}
+                  {showTicketDetails.outsource_mechanics && showTicketDetails.outsource_mechanics.length > 0 && (
+                    <Card className="shadow-md hover:shadow-lg transition-shadow">
+                      <CardHeader>
+                        <CardTitle className="flex items-center text-lg">
+                          <Users className="w-4 h-4 mr-2 text-blue-600" />
+                          Outsourced Mechanics
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {showTicketDetails.outsource_mechanics.map((mechanic, index) => {
+                          const mechanicPaymentData = showTicketDetails.paymentHistory?.mechanics?.find(
+                            m => m.mechanic_name === mechanic.mechanic_name
+                          );
+                          
+                          const agreedPayment = parseFloat(mechanic.payment) || 0;
+                          const totalPaid = parseFloat(mechanicPaymentData?.total_paid) || 0;
+                          const remainingBalance = parseFloat(mechanicPaymentData?.remaining_balance) || 0;
+                          
+                          return (
+                            <div key={index} className="p-4 bg-gray-50 rounded-lg border">
+                              <div className="flex justify-between items-center mb-3">
+                                <h3 className="font-semibold text-lg">{mechanic.mechanic_name}</h3>
+                                <div className="text-right">
+                                  <p className="text-sm text-gray-600">Agreed Payment: <span className="font-medium">ETB {agreedPayment.toFixed(2)}</span></p>
+                                  {mechanicPaymentData && (
+                                    <>
+                                      <p className="text-sm text-gray-600">Total Paid: <span className="font-medium">ETB {totalPaid.toFixed(2)}</span></p>
+                                      <p className={`text-sm font-medium ${remainingBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                                        Remaining: ETB {remainingBalance.toFixed(2)}
+                                      </p>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="flex border-b mb-3">
+                                <button
+                                  className={`px-4 py-2 text-sm font-medium ${activeMechanicTab !== `payment-${index}` ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                  onClick={() => setActiveMechanicTab(null)}
+                                >
+                                  Details
+                                </button>
+                                <button
+                                  className={`px-4 py-2 text-sm font-medium ${activeMechanicTab === `payment-${index}` ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                  onClick={() => setActiveMechanicTab(`payment-${index}`)}
+                                >
+                                  Payment History
+                                </button>
+                              </div>
+                              
+                              {activeMechanicTab !== `payment-${index}` ? (
+                                <>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <p className="text-sm text-gray-600">Phone</p>
+                                      <p className="font-medium">{mechanic.phone}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-600">Payment Method</p>
+                                      <p className="font-medium">{mechanic.payment_method || 'N/A'}</p>
+                                    </div>
+                                  </div>
+                                  {mechanic.work_done && (
+                                    <div className="mt-3">
+                                      <p className="text-sm text-gray-600">Work Done</p>
+                                      <p className="text-sm">{mechanic.work_done}</p>
+                                    </div>
+                                  )}
+                                  {mechanic.notes && (
+                                    <div className="mt-3">
+                                      <p className="text-sm text-gray-600">Notes</p>
+                                      <p className="text-sm">{mechanic.notes}</p>
+                                    </div>
+                                  )}
+                                  <div className="mt-4">
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => openPaymentModal(mechanic)}
+                                      className="border-green-300 hover:bg-green-50 hover:text-green-700"
+                                    >
+                                      <DollarSign className="w-3 h-3 mr-1" />
+                                      Add Payment
+                                    </Button>
+                                  </div>
+                                </>
+                              ) : (
+                                <div>
+                                  {mechanicPaymentData ? (
+                                    <>
+                                      <div className="bg-white rounded-lg border p-4 mb-4">
+                                        <div className="grid grid-cols-3 gap-4 text-center">
+                                          <div>
+                                            <p className="text-sm text-gray-600">Agreed Payment</p>
+                                            <p className="font-bold text-lg">ETB {agreedPayment.toFixed(2)}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-sm text-gray-600">Total Paid</p>
+                                            <p className="font-bold text-lg text-green-600">ETB {totalPaid.toFixed(2)}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-sm text-gray-600">Remaining Balance</p>
+                                            <p className={`font-bold text-lg ${remainingBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                                              ETB {remainingBalance.toFixed(2)}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        
+                                        <div className="mt-4">
+                                          <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                            <span>0%</span>
+                                            <span>Payment Progress</span>
+                                            <span>{agreedPayment > 0 ? Math.round((totalPaid / agreedPayment) * 100) : 0}%</span>
+                                          </div>
+                                          <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                            <div 
+                                              className={`h-2.5 rounded-full ${remainingBalance > 0 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                                              style={{ width: `${agreedPayment > 0 ? Math.min(100, (totalPaid / agreedPayment) * 100) : 0}%` }}
+                                            ></div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      
+                                      {mechanicPaymentData.payments && mechanicPaymentData.payments.length > 0 ? (
+                                        <div className="space-y-3">
+                                          <div className="flex items-center justify-between mb-4">
+                                            <h4 className="font-bold text-gray-800 text-lg flex items-center">
+                                              <span className="bg-blue-100 p-1.5 rounded-lg mr-2">
+                                                <CreditCard className="w-5 h-5 text-blue-600" />
+                                              </span>
+                                              Payment Details
+                                            </h4>
+                                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                              {mechanicPaymentData.payments.length} Payments
+                                            </Badge>
+                                          </div>
+                                          
+                                          <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                            <div className="grid grid-cols-12 bg-gradient-to-r from-gray-50 to-gray-100 text-xs font-semibold text-gray-600 uppercase tracking-wider px-6 py-3 border-b border-gray-200">
+                                              <div className="col-span-3 flex items-center">
+                                                <Calendar className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
+                                                Date
+                                              </div>
+                                              <div className="col-span-3 flex items-center">
+                                                <CreditCard className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
+                                                Method
+                                              </div>
+                                              <div className="col-span-3 text-right flex items-center justify-end">
+                                                <DollarSign className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
+                                                Amount
+                                              </div>
+                                              <div className="col-span-3 flex items-center">
+                                                <FileText className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
+                                                Notes
+                                              </div>
+                                            </div>
+                                            
+                                            <div className="divide-y divide-gray-100">
+                                              {mechanicPaymentData.payments.map((payment, idx) => {
+                                                const paymentAmount = parseFloat(payment.payment_amount) || 0;
+                                                
+                                                const getPaymentMethodInfo = (method) => {
+                                                  const methods = {
+                                                    'cash': { icon: '💵', color: 'bg-green-100 text-green-800 border-green-200' },
+                                                    'bank_transfer': { icon: '🏦', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+                                                    'mobile_payment': { icon: '📱', color: 'bg-purple-100 text-purple-800 border-purple-200' },
+                                                    'check': { icon: '📝', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+                                                    'other': { icon: '💳', color: 'bg-gray-100 text-gray-800 border-gray-200' }
+                                                  };
+                                                  return methods[method] || methods.other;
+                                                };
+                                                
+                                                const paymentMethodInfo = getPaymentMethodInfo(payment.payment_method);
+                                                
+                                                const formatDate = (dateString) => {
+                                                  const date = new Date(dateString);
+                                                  return date.toLocaleDateString('en-US', { 
+                                                    weekday: 'short', 
+                                                    month: 'short', 
+                                                    day: 'numeric' 
+                                                  });
+                                                };
+                                                
+                                                const animationDelay = `${idx * 50}ms`;
+                                                
+                                                return (
+                                                  <div 
+                                                    key={idx} 
+                                                    className="grid grid-cols-12 px-6 py-4 text-sm transition-all duration-300 hover:bg-blue-50/50 group relative overflow-hidden"
+                                                    style={{ animationDelay }}
+                                                  >
+                                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                                                    
+                                                    <div className="col-span-3 flex items-center">
+                                                      <div className="bg-white rounded-lg p-2 shadow-sm border border-gray-100 group-hover:border-blue-200 transition-colors duration-300">
+                                                        <div className="flex items-center">
+                                                          <Calendar className="w-4 h-4 mr-2 text-blue-500" />
+                                                          <div>
+                                                            <div className="font-medium text-gray-900">{formatDate(payment.payment_date)}</div>
+                                                            <div className="text-xs text-gray-500">{new Date(payment.payment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                    
+                                                    <div className="col-span-3 flex items-center">
+                                                      <Badge 
+                                                        className={`${paymentMethodInfo.color} px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm hover:shadow-md transition-shadow duration-300`}
+                                                      >
+                                                        <span className="text-base">{paymentMethodInfo.icon}</span>
+                                                        <span className="font-medium capitalize">
+                                                          {payment.payment_method.replace('_', ' ')}
+                                                        </span>
+                                                      </Badge>
+                                                    </div>
+                                                    
+                                                    <div className="col-span-3 flex items-center justify-end">
+                                                      <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg px-3 py-2 border border-green-200 shadow-sm group-hover:shadow-md transition-all duration-300 group-hover:scale-105">
+                                                        <div className="text-xs text-gray-500">Amount</div>
+                                                        <div className="font-bold text-lg text-green-700">ETB {paymentAmount.toFixed(2)}</div>
+                                                      </div>
+                                                    </div>
+                                                    
+                                                    <div className="col-span-3 flex items-center">
+                                                      {payment.notes ? (
+                                                        <div className="bg-gray-50 rounded-lg p-2 border border-gray-200 w-full group-hover:border-blue-200 transition-colors duration-300">
+                                                          <div className="flex items-start">
+                                                            <FileText className="w-4 h-4 mt-0.5 mr-2 text-gray-400" />
+                                                            <div className="text-xs text-gray-600 italic">{payment.notes}</div>
+                                                          </div>
+                                                        </div>
+                                                      ) : (
+                                                        <div className="flex items-center justify-center w-full">
+                                                          <span className="text-xs text-gray-400 italic">No notes</span>
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                    
+                                                    <div className="absolute bottom-0 left-0 h-0.5 bg-blue-500 w-0 group-hover:w-full transition-all duration-300"></div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                          
+                                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100 mt-4">
+                                            <div className="flex justify-between items-center">
+                                              <div className="text-sm text-gray-600">
+                                                Total Payments: <span className="font-bold text-blue-700">{mechanicPaymentData.payments.length}</span>
+                                              </div>
+                                              <div className="text-sm text-gray-600">
+                                                Total Amount: <span className="font-bold text-green-700">ETB {totalPaid.toFixed(2)}</span>
+                                              </div>
+                                              <div className="text-sm text-gray-600">
+                                                Last Payment: <span className="font-bold text-gray-800">
+                                                  {mechanicPaymentData.payments.length > 0 
+                                                    ? new Date(mechanicPaymentData.payments[mechanicPaymentData.payments.length - 1].payment_date).toLocaleDateString() 
+                                                    : 'N/A'}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="text-center py-8 bg-white rounded-lg border">
+                                          <div className="flex justify-center mb-3">
+                                            <div className="bg-gray-100 p-3 rounded-full">
+                                              <CreditCard className="w-8 h-8 text-gray-400" />
+                                            </div>
+                                          </div>
+                                          <p className="text-gray-500">No payments recorded yet</p>
+                                          <p className="text-sm text-gray-400 mt-1">Add a payment to track the payment history</p>
+                                        </div>
+                                      )}
+                                      
+                                      <div className="mt-4 flex justify-end">
+                                        <Button 
+                                          size="sm" 
+                                          variant="outline"
+                                          onClick={() => openPaymentModal(mechanic)}
+                                          className="border-green-300 hover:bg-green-50 hover:text-green-700"
+                                        >
+                                          <DollarSign className="w-3 h-3 mr-1" />
+                                          Add Payment
+                                        </Button>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="text-center py-8 bg-white rounded-lg border">
+                                      <div className="flex justify-center mb-3">
+                                        <div className="bg-gray-100 p-3 rounded-full">
+                                          <CreditCard className="w-8 h-8 text-gray-400" />
+                                        </div>
+                                      </div>
+                                      <p className="text-gray-500">No payment history available</p>
+                                      <p className="text-sm text-gray-400 mt-1">Add a payment to track the payment history</p>
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline"
+                                        onClick={() => openPaymentModal(mechanic)}
+                                        className="mt-4 border-green-300 hover:bg-green-50 hover:text-green-700"
+                                      >
+                                        <DollarSign className="w-3 h-3 mr-1" />
+                                        Add Payment
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
+                  )}
                   
                   {/* Service */}
                   <Card className="shadow-md">
@@ -1006,129 +1164,125 @@ const fetchTicketDetails = async (ticketNumber) => {
               )}
               
               {/* Ordered Parts Tab */}
-           
-{activeTab === 'orderedParts' && (
-  <Card className="shadow-md">
-    <CardHeader>
-      <CardTitle className="flex items-center text-lg">
-        <PackagePlus className="w-4 h-4 mr-2 text-blue-600" />
-        Parts Management
-      </CardTitle>
-      
-      {/* Sub-tab navigation */}
-      <div className="flex border-b mt-4">
-        <button
-          className={`px-4 py-2 text-sm font-medium ${
-            orderedPartsActiveTab === 'ordered'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          onClick={() => setOrderedPartsActiveTab('ordered')}
-        >
-          Ordered Parts
-        </button>
-        <button
-          className={`px-4 py-2 text-sm font-medium ${
-            orderedPartsActiveTab === 'outsource'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          onClick={() => setOrderedPartsActiveTab('outsource')}
-        >
-          Outsource Stock
-        </button>
-      </div>
-    </CardHeader>
-    
-    <CardContent className="max-h-[60vh] overflow-y-auto space-y-3 p-2 bg-gray-50 rounded-lg">
-      {/* Ordered Parts Sub-tab */}
-      {orderedPartsActiveTab === 'ordered' && (
-        <>
-          {showTicketDetails.ordered_parts && showTicketDetails.ordered_parts.length > 0 ? (
-            showTicketDetails.ordered_parts.map(part => (
-              <div key={part.id} className="p-3 bg-white rounded-lg border shadow-sm hover:shadow transition-shadow">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="font-semibold text-gray-800">{part.name}</h4>
-                    <div className="flex space-x-4 mt-1 text-sm">
-                      <span className="text-gray-600">Category: <span className="font-medium">{part.category}</span></span>
-                      <span className="text-gray-600">SKU: <span className="font-medium">{part.sku}</span></span>
-                      <span className="text-gray-600">Quantity: <span className="font-medium">{part.quantity}</span></span>
+              {activeTab === 'orderedParts' && (
+                <Card className="shadow-md">
+                  <CardHeader>
+                    <CardTitle className="flex items-center text-lg">
+                      <PackagePlus className="w-4 h-4 mr-2 text-blue-600" />
+                      Parts Management
+                    </CardTitle>
+                    
+                    <div className="flex border-b mt-4">
+                      <button
+                        className={`px-4 py-2 text-sm font-medium ${
+                          orderedPartsActiveTab === 'ordered'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                        onClick={() => setOrderedPartsActiveTab('ordered')}
+                      >
+                        Ordered Parts
+                      </button>
+                      <button
+                        className={`px-4 py-2 text-sm font-medium ${
+                          orderedPartsActiveTab === 'outsource'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                        onClick={() => setOrderedPartsActiveTab('outsource')}
+                      >
+                        Outsource Stock
+                      </button>
                     </div>
-                  </div>
-                  <Badge variant="outline" className="text-xs">
-                    {part.status}
-                  </Badge>
-                </div>
-                <div className="mt-2 text-xs text-gray-500">
-                  Ordered on: {formatDateTime(part.ordered_at)}
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-8">
-              <PackagePlus className="w-12 h-12 text-gray-400 mx-auto mb-3 opacity-70" />
-              <p className="text-gray-500">No parts ordered yet.</p>
-              <p className="text-sm text-gray-400 mt-2">Parts ordered for this service will appear here</p>
-            </div>
-          )}
-        </>
-      )}
-      
-      {/* Outsource Stock Sub-tab */}
-      {orderedPartsActiveTab === 'outsource' && (
-        <>
-          {showTicketDetails.outsource_stock && showTicketDetails.outsource_stock.length > 0 ? (
-            showTicketDetails.outsource_stock.map(stock => (
-              <div key={stock.auto_id} className="p-3 bg-white rounded-lg border shadow-sm hover:shadow transition-shadow">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="font-semibold text-gray-800">{stock.name}</h4>
-                    <div className="flex space-x-4 mt-1 text-sm">
-                      <span className="text-gray-600">Category: <span className="font-medium">{stock.category}</span></span>
-                      <span className="text-gray-600">SKU: <span className="font-medium">{stock.sku}</span></span>
-                      <span className="text-gray-600">Quantity: <span className="font-medium">{stock.quantity}</span></span>
-                      <span className="text-gray-600">Source: <span className="font-medium">{stock.source_shop}</span></span>
-                    </div>
-                  </div>
-                  <Badge 
-                    variant="outline" 
-                    className={`text-xs ${
-                      stock.status === 'received' 
-                        ? 'bg-green-100 text-green-800 border-green-200' 
-                        : stock.status === 'requested'
-                          ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
-                          : 'bg-blue-100 text-blue-800 border-blue-200'
-                    }`}
-                  >
-                    {stock.status}
-                  </Badge>
-                </div>
-                <div className="mt-2 text-xs text-gray-500">
-                  Requested: {formatDateTime(stock.requested_at)}
-                  {stock.received_at && (
-                    <span className="ml-3">Received: {formatDateTime(stock.received_at)}</span>
-                  )}
-                </div>
-                {stock.notes && (
-                  <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-100">
-                    <p className="text-sm text-gray-700"><strong>Notes:</strong> {stock.notes}</p>
-                  </div>
-                )}
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-8">
-              <Package className="w-12 h-12 text-gray-400 mx-auto mb-3 opacity-70" />
-              <p className="text-gray-500">No outsource stock items yet.</p>
-              <p className="text-sm text-gray-400 mt-2">Outsourced parts for this service will appear here</p>
-            </div>
-          )}
-        </>
-      )}
-    </CardContent>
-  </Card>
-)}
+                  </CardHeader>
+                  
+                  <CardContent className="max-h-[60vh] overflow-y-auto space-y-3 p-2 bg-gray-50 rounded-lg">
+                    {orderedPartsActiveTab === 'ordered' && (
+                      <>
+                        {showTicketDetails.ordered_parts && showTicketDetails.ordered_parts.length > 0 ? (
+                          showTicketDetails.ordered_parts.map(part => (
+                            <div key={part.id} className="p-3 bg-white rounded-lg border shadow-sm hover:shadow transition-shadow">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h4 className="font-semibold text-gray-800">{part.name}</h4>
+                                  <div className="flex space-x-4 mt-1 text-sm">
+                                    <span className="text-gray-600">Category: <span className="font-medium">{part.category}</span></span>
+                                    <span className="text-gray-600">SKU: <span className="font-medium">{part.sku}</span></span>
+                                    <span className="text-gray-600">Quantity: <span className="font-medium">{part.quantity}</span></span>
+                                  </div>
+                                </div>
+                                <Badge variant="outline" className="text-xs">
+                                  {part.status}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 text-xs text-gray-500">
+                                Ordered on: {formatDateTime(part.ordered_at)}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-8">
+                            <PackagePlus className="w-12 h-12 text-gray-400 mx-auto mb-3 opacity-70" />
+                            <p className="text-gray-500">No parts ordered yet.</p>
+                            <p className="text-sm text-gray-400 mt-2">Parts ordered for this service will appear here</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    
+                    {orderedPartsActiveTab === 'outsource' && (
+                      <>
+                        {showTicketDetails.outsource_stock && showTicketDetails.outsource_stock.length > 0 ? (
+                          showTicketDetails.outsource_stock.map(stock => (
+                            <div key={stock.auto_id} className="p-3 bg-white rounded-lg border shadow-sm hover:shadow transition-shadow">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h4 className="font-semibold text-gray-800">{stock.name}</h4>
+                                  <div className="flex space-x-4 mt-1 text-sm">
+                                    <span className="text-gray-600">Category: <span className="font-medium">{stock.category}</span></span>
+                                    <span className="text-gray-600">SKU: <span className="font-medium">{stock.sku}</span></span>
+                                    <span className="text-gray-600">Quantity: <span className="font-medium">{stock.quantity}</span></span>
+                                    <span className="text-gray-600">Source: <span className="font-medium">{stock.source_shop}</span></span>
+                                  </div>
+                                </div>
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${
+                                    stock.status === 'received' 
+                                      ? 'bg-green-100 text-green-800 border-green-200' 
+                                      : stock.status === 'requested'
+                                        ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                                        : 'bg-blue-100 text-blue-800 border-blue-200'
+                                  }`}
+                                >
+                                  {stock.status}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 text-xs text-gray-500">
+                                Requested: {formatDateTime(stock.requested_at)}
+                                {stock.received_at && (
+                                  <span className="ml-3">Received: {formatDateTime(stock.received_at)}</span>
+                                )}
+                              </div>
+                              {stock.notes && (
+                                <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-100">
+                                  <p className="text-sm text-gray-700"><strong>Notes:</strong> {stock.notes}</p>
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-8">
+                            <Package className="w-12 h-12 text-gray-400 mx-auto mb-3 opacity-70" />
+                            <p className="text-gray-500">No outsource stock items yet.</p>
+                            <p className="text-sm text-gray-400 mt-2">Outsourced parts for this service will appear here</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
               
               {/* Inspection Tab */}
               {activeTab === 'inspection' && (
@@ -1195,12 +1349,151 @@ const fetchTicketDetails = async (ticketNumber) => {
                   </CardContent>
                 </Card>
               )}
+              
+              {/* Bill Tab */}
+              {activeTab === 'bill' && (
+                <Card className="shadow-md">
+                  <CardHeader>
+                    <CardTitle className="flex items-center text-lg">
+                      <Receipt className="w-4 h-4 mr-2 text-blue-600" />
+                      Bill Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {bill ? (
+                      <div className="space-y-6">
+                        {/* Bill Summary */}
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+                          <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-gray-800">Invoice #{bill.id}</h3>
+                            <Badge className={`${bill.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'} px-3 py-1`}>
+                              {bill.status.charAt(0).toUpperCase() + bill.status.slice(1)}
+                            </Badge>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <p className="text-sm text-gray-600">Ticket Number</p>
+                              <p className="font-medium">{bill.ticket_number}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Customer</p>
+                              <p className="font-medium">{bill.customer_name}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Vehicle</p>
+                              <p className="font-medium">{bill.vehicle_info}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Issue Date</p>
+                              <p className="font-medium">{formatDateTime(bill.created_at)}</p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Cost Breakdown */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <Card className="shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg">Cost Breakdown</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Labor Cost</span>
+                                <span className="font-medium">ETB {(parseFloat(bill.labor_cost) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Parts Cost</span>
+                                <span className="font-medium">ETB {(parseFloat(bill.parts_cost) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Outsourced Parts</span>
+                                <span className="font-medium">ETB {(parseFloat(bill.outsourced_parts_cost) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Outsourced Labor</span>
+                                <span className="font-medium">ETB {(parseFloat(bill.outsourced_labor_cost) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="border-t pt-3 mt-3 flex justify-between font-semibold">
+                                <span>Subtotal</span>
+                                <span>ETB {(parseFloat(bill.subtotal) || 0).toFixed(2)}</span>
+                              </div>
+                            </CardContent>
+                          </Card>
+                          
+                          <Card className="shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg">Tax & Discounts</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Tax Rate</span>
+                                <span className="font-medium">{bill.tax_rate || '0'}%</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Tax Amount</span>
+                                <span className="font-medium">ETB {(parseFloat(bill.tax_amount) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Discount</span>
+                                <span className="font-medium text-green-600">-ETB {(parseFloat(bill.discount) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="border-t pt-3 mt-3 flex justify-between font-bold text-lg">
+                                <span>Total</span>
+                                <span className="text-blue-600">ETB {(parseFloat(bill.final_total) || 0).toFixed(2)}</span>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+                        
+                        {/* Notes */}
+                        {bill.notes && (
+                          <Card className="shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg">Notes</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <p className="text-gray-700">{bill.notes}</p>
+                            </CardContent>
+                          </Card>
+                        )}
+                        
+                        {/* Action Buttons */}
+                        <div className="flex justify-end space-x-3 pt-4">
+                          <Button variant="outline" className="border-blue-300 hover:bg-blue-50">
+                            Print Invoice
+                          </Button>
+                          <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                            Send to Customer
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <Receipt className="w-16 h-16 text-gray-400 mx-auto mb-4 opacity-70" />
+                        <h3 className="text-xl font-medium text-gray-700 mb-2">No Bill Available</h3>
+                        <p className="text-gray-500 max-w-md mx-auto">
+                          This ticket doesn't have an associated bill yet. Bills are typically generated when a service is completed.
+                        </p>
+                        {showTicketDetails.status === 'completed' && (
+                          <Button className="mt-6 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
+                            Generate Bill
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
             
             {/* Footer */}
             <div className="bg-gray-50 px-6 py-4 flex justify-end border-t">
               <Button variant="outline" className="mr-2">Print</Button>
-              <Button onClick={() => setShowTicketDetails(null)}>Close</Button>
+              <Button onClick={() => {
+                setShowTicketDetails(null);
+                setBill(null);
+              }}>Close</Button>
             </div>
           </div>
         </div>
@@ -1211,16 +1504,15 @@ const fetchTicketDetails = async (ticketNumber) => {
         isOpen={isNewTicketOpen}
         onClose={() => setIsNewTicketOpen(false)}
       />
+      
       {/* === MODAL: Payment Modal === */}
-{/* === MODAL: Payment Modal === */}
-{/* === MODAL: Payment Modal === */}
-<PaymentFormModal
-  isOpen={isPaymentModalOpen}
-  onClose={() => setIsPaymentModalOpen(false)}
-  ticketNumber={showTicketDetails?.ticket_number}
-  mechanicName={selectedMechanic?.mechanic_name}
-  onPaymentAdded={handlePaymentAdded}
-/>
+      <PaymentFormModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        ticketNumber={showTicketDetails?.ticket_number}
+        mechanicName={selectedMechanic?.mechanic_name}
+        onPaymentAdded={handlePaymentAdded}
+      />
     </div>
   );
 }

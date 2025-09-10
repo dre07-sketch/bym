@@ -589,64 +589,7 @@ useEffect(() => {
 
 
 
- {/* Quick Actions */}
-      <div className="relative bg-white/5 backdrop-blur-3xl rounded-[2.5rem] p-12 shadow-[0_40px_80px_-12px_rgba(0,0,0,0.4)] border border-white/10 hover:shadow-[0_60px_120px_-12px_rgba(0,0,0,0.5)] hover:border-white/20 transition-all duration-1000 overflow-hidden group mx-6">
-        {/* Ambient background effects */}
-        <div className="absolute -top-40 -left-40 w-[32rem] h-[32rem] bg-gradient-to-br from-blue-400/15 via-cyan-300/8 to-transparent rounded-full blur-3xl opacity-40 pointer-events-none group-hover:opacity-60 transition-opacity duration-1500"></div>
-        <div className="absolute -bottom-40 -right-40 w-[32rem] h-[32rem] bg-gradient-to-br from-purple-400/15 via-indigo-300/8 to-transparent rounded-full blur-3xl opacity-40 pointer-events-none group-hover:opacity-60 transition-opacity duration-1500"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-slate-400/5 via-blue-400/8 to-purple-400/5 rounded-full blur-3xl opacity-30 pointer-events-none animate-pulse"></div>
-        <div className="absolute top-10 right-16 w-2 h-2 bg-blue-400 rounded-full opacity-60 animate-pulse shadow-lg shadow-blue-400/50"></div>
-        <div className="absolute bottom-16 left-12 w-1 h-1 bg-purple-400 rounded-full opacity-50 animate-pulse shadow-lg shadow-purple-400/50 animation-delay-500"></div>
-        <div className="absolute top-20 left-1/3 w-1.5 h-1.5 bg-cyan-400 rounded-full opacity-40 animate-pulse shadow-lg shadow-cyan-400/50 animation-delay-1000"></div>
-
-        {/* Header */}
-        <div className="flex items-center justify-between mb-10 relative z-10">
-          <div>
-           <h3 className="text-4xl font-black text-black tracking-tight mb-3 drop-shadow-[0_4px_12px_rgba(0,0,0,0.1)]">
-  Quick Actions
-</h3>
-
-            <div className="w-24 h-1 bg-gradient-to-r from-blue-400 via-cyan-300 to-purple-400 rounded-full shadow-lg shadow-blue-400/40"></div>
-          </div>
-          
-        </div>
-
-        {/* Actions Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
-          {quickActions.map((action, index) => (
-            <button
-              key={index}
-              onClick={action.action}
-              style={{ animationDelay: `${index * 100}ms` }}
-              className={`group relative h-36 flex flex-col items-center justify-center gap-5
-                         bg-gradient-to-br from-white/8 via-white/4 to-white/2 
-                         ${getColorClasses(action.color).gradient}
-                         ${getColorClasses(action.color).hoverGradient}
-                         backdrop-blur-2xl rounded-3xl border border-white/10 
-                         shadow-[0_12px_40px_-8px_rgba(0,0,0,0.3)]
-                         ${getColorClasses(action.color).shadow}
-                         ${getColorClasses(action.color).border} 
-                         transform transition-all duration-800 ease-out
-                         hover:-translate-y-4 hover:scale-[1.03]
-                         focus:outline-none focus:ring-4 focus:ring-white/20
-                         active:translate-y-0 active:scale-100 overflow-hidden
-                         animate-fade-in-up`}
-            >
-              <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-1200 bg-gradient-to-tr from-transparent via-white/15 to-transparent animate-shimmer pointer-events-none"></div>
-              <div className="absolute inset-1 rounded-[1.4rem] opacity-0 group-hover:opacity-50 transition-opacity duration-800 bg-gradient-to-br from-white/10 to-transparent blur-md pointer-events-none"></div>
-              <div className="relative z-10">
-                <action.icon className={`w-12 h-12 ${getColorClasses(action.color).iconColor} transition-all duration-600 transform group-hover:scale-125 group-hover:rotate-12 drop-shadow-lg group-hover:drop-shadow-2xl`} />
-              </div>
-              <span className={`text-sm font-bold ${getColorClasses(action.color).labelColor} transition-colors duration-600 tracking-wide z-10 relative drop-shadow-sm`}>
-                {action.label}
-              </span>
-              <div className={`absolute inset-0 rounded-3xl border border-transparent ${getColorClasses(action.color).glow} group-hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] transition-all duration-800`}></div>
-              <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-600 blur-md"></div>
-            </button>
-          ))}
-        </div>
-        <div className="mt-10 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"></div>
-      </div>
+    
 
 
 

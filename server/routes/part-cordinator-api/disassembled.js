@@ -83,42 +83,80 @@ router.put('/disassembled-parts/:id', (req, res) => {
 
 // Fetch today's disassembled parts only
 router.get('/today-parts', (req, res) => {
-    const sql = `
-        SELECT 
-            dp.id AS part_id,
-            dp.ticket_number,
-            dp.part_name,
-            dp.condition,
-            dp.status AS part_status,
-            dp.notes AS part_notes,
-            dp.logged_at,
-            st.ticket_number AS service_ticket_number,
-            st.customer_name,
-            st.license_plate,
-            st.mechanic_assign,
-            st.title,
-            st.description,
-            st.priority,
-            st.type,
-            st.status AS ticket_status,
-            st.completion_date,
-            st.estimated_completion_date
-        FROM disassembled_parts dp
-        JOIN service_tickets st 
-            ON dp.ticket_number = st.ticket_number
-        WHERE DATE(dp.logged_at) = CURDATE() -- ✅ only today's records
-        ORDER BY dp.logged_at DESC
-    `;
+  const sql = `
+    SELECT 
+        dp.id AS part_id,
+        dp.ticket_number,
+        dp.part_name,
+        dp.condition AS part_condition,
+        dp.status AS part_status,
+        dp.notes AS part_notes,
+        dp.logged_at,
+        st.id AS service_ticket_id,
+        st.customer_name,
+        st.license_plate,
+        st.title,
+        st.description AS issueDescription,
+        st.priority,
+        st.type,
+        st.status AS ticket_status,
+        st.completion_date,
+        st.estimated_completion_date,
+        st.created_at AS assignedDate,
+        ma.mechanic_name
+    FROM disassembled_parts dp
+    JOIN service_tickets st 
+        ON dp.ticket_number = st.ticket_number
+    LEFT JOIN mechanic_assignments ma
+        ON ma.ticket_number = st.ticket_number
+    WHERE DATE(dp.logged_at) = CURDATE() -- ✅ only today's records
+    ORDER BY dp.logged_at DESC
+  `;
 
-    db.query(sql, (err, results) => {
-        if (err) {
-            console.error("Error fetching today's disassembled parts:", err);
-            return res.status(500).json({ message: "Server error" });
-        }
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error("Error fetching today's disassembled parts:", err);
+      return res.status(500).json({ message: "Server error" });
+    }
 
-        res.json(results);
+    // Group by ticket
+    const ticketsMap = {};
+    results.forEach(row => {
+      if (!ticketsMap[row.ticket_number]) {
+        ticketsMap[row.ticket_number] = {
+          ticketNumber: row.ticket_number,
+          service_ticket_id: row.service_ticket_id,
+          clientName: row.customer_name,
+          licensePlate: row.license_plate,
+          mechanicName: row.mechanic_name, // ✅ now from mechanic_assignments
+          title: row.title,
+          issueDescription: row.issueDescription,
+          priority: row.priority,
+          type: row.type,
+          status: row.ticket_status,
+          assignedDate: row.assignedDate,
+          estimatedCompletionDate: row.estimated_completion_date,
+          finishedDate: row.completion_date,
+          replacedParts: []
+        };
+      }
+
+      // Push part info under replacedParts
+      ticketsMap[row.ticket_number].replacedParts.push({
+        partId: row.part_id,
+        partName: row.part_name,
+        condition: row.part_condition,
+        status: row.part_status,
+        notes: row.part_notes,
+        loggedAt: row.logged_at
+      });
     });
+
+    const tickets = Object.values(ticketsMap);
+    res.json(tickets);
+  });
 });
+
 
 
 // PUT /api/active-tickets/update-status/:ticket_number
