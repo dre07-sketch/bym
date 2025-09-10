@@ -18,101 +18,113 @@
 
   // ====== PROFORMA INVOICES ======
 
-  // POST /api/communication-center/proformas
-  // Save a new proforma invoice
-  router.post('/proformas', async (req, res) => {
-    const {
-      proforma_number,
-      proforma_date,
-      notes,
-      items,
-    } = req.body;
+ 
+router.post('/proformas-post', async (req, res) => {
+  const {
+    proforma_number,
+    proforma_date,
+    notes,
+    items,
+    customer_name,
+    company_name,
+    company_address,
+    company_phone,
+    company_vat_number
+  } = req.body;
 
-    // Required fields validation
-    if (!proforma_number || !proforma_date || !items || !Array.isArray(items) || items.length === 0) {
-      return sendResponse(res, false, null, 'Missing required fields: proforma_number, proforma_date, or items', 400);
+  // Required fields validation
+  if (!proforma_number || !proforma_date || !items || !Array.isArray(items) || items.length === 0) {
+    return sendResponse(res, false, null, 'Missing required fields: proforma_number, proforma_date, or items', 400);
+  }
+
+  for (const item of items) {
+    if (!item.description) {
+      return sendResponse(res, false, null, 'Each item must have a description.', 400);
     }
-
-    // Validate each item
-    for (const item of items) {
-      if (!item.description) {
-        return sendResponse(res, false, null, 'Each item must have a description.', 400);
-      }
-      if (typeof item.quantity !== 'number' || item.quantity <= 0) {
-        return sendResponse(res, false, null, 'Item quantity must be a positive number.', 400);
-      }
-      if (typeof item.unit_price !== 'number' || item.unit_price < 0) {
-        return sendResponse(res, false, null, 'Item unit price must be a non-negative number.', 400);
-      }
+    if (typeof item.quantity !== 'number' || item.quantity <= 0) {
+      return sendResponse(res, false, null, 'Item quantity must be a positive number.', 400);
     }
+    if (typeof item.unit_price !== 'number' || item.unit_price < 0) {
+      return sendResponse(res, false, null, 'Item unit price must be a non-negative number.', 400);
+    }
+  }
 
-    let connection;
-    try {
-      connection = await db.promise().getConnection();
-      await connection.beginTransaction();
+  let connection;
+  try {
+    connection = await db.promise().getConnection();
+    await connection.beginTransaction();
 
-      // Calculate totals
-      const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
-      const vat_amount = parseFloat((subtotal * 0.15).toFixed(2));
-      const total = subtotal + vat_amount;
+    // Calculate totals
+    const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+    const vat_rate = 15; // default VAT rate
+    const vat_amount = parseFloat((subtotal * (vat_rate / 100)).toFixed(2));
+    const total = subtotal + vat_amount;
 
-      // Insert proforma
-      const [proformaResult] = await connection.execute(
-        `INSERT INTO proformas 
-        (proforma_number, proforma_date, notes, status, subtotal, vat_amount, total)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          proforma_number,
-          proforma_date,
-          notes || null,
-          'Awaiting Send',
-          subtotal,
-          vat_amount,
-          total,
-        ]
-      );
-
-      const proformaId = proformaResult.insertId;
-
-      // Insert items
-      const itemValues = items.map(item => [
-        proformaId,
-        item.description,
-        item.size || null,
-        item.quantity,
-        item.unit_price,
-      ]);
-
-      await connection.query(
-        `INSERT INTO proforma_items (proforma_id, description, size, quantity, unit_price) VALUES ?`,
-        [itemValues]
-      );
-
-      await connection.commit();
-
-      return sendResponse(res, true, {
-        id: proformaId,
+    // Insert proforma (now including customer & company info)
+    const [proformaResult] = await connection.execute(
+      `INSERT INTO proformas 
+      (proforma_number, proforma_date, customer_name, company_name, company_address, company_phone, company_vat_number, notes, status, subtotal, vat_rate, vat_amount, total)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
         proforma_number,
         proforma_date,
+        customer_name || null,
+        company_name || null,
+        company_address || null,
+        company_phone || null,
+        company_vat_number || null,
+        notes || null,
+        'Awaiting Send',
         subtotal,
+        vat_rate,
         vat_amount,
         total,
-        item_count: items.length,
-      }, 'Proforma invoice saved successfully!', 201);
+      ]
+    );
 
-    } catch (error) {
-      if (connection) await connection.rollback().catch(console.error);
-      console.error('❌ Proforma save error:', error);
+    const proformaId = proformaResult.insertId;
 
-      if (error.code === 'ER_DUP_ENTRY') {
-        return sendResponse(res, false, null, `Proforma number "${proforma_number}" already exists.`, 409);
-      }
+    // Insert items
+    const itemValues = items.map(item => [
+      proformaId,
+      item.description,
+      item.size || null,
+      item.quantity,
+      item.unit_price,
+    ]);
 
-      return sendResponse(res, false, null, 'Failed to save proforma invoice.', 500);
-    } finally {
-      if (connection) connection.release();
+    await connection.query(
+      `INSERT INTO proforma_items (proforma_id, description, size, quantity, unit_price) VALUES ?`,
+      [itemValues]
+    );
+
+    await connection.commit();
+
+    return sendResponse(res, true, {
+      id: proformaId,
+      proforma_number,
+      proforma_date,
+      subtotal,
+      vat_rate,
+      vat_amount,
+      total,
+      item_count: items.length,
+    }, 'Proforma invoice saved successfully!', 201);
+
+  } catch (error) {
+    if (connection) await connection.rollback().catch(console.error);
+    console.error('❌ Proforma save error:', error);
+
+    if (error.code === 'ER_DUP_ENTRY') {
+      return sendResponse(res, false, null, `Proforma number "${proforma_number}" already exists.`, 409);
     }
-  });
+
+    return sendResponse(res, false, null, 'Failed to save proforma invoice.', 500);
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 
   // GET /api/communication-center/proformas
   // List all proformas with pagination, search, and filters

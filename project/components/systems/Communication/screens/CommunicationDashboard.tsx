@@ -20,9 +20,7 @@ import {
   BarChart3,
   Loader,
 } from 'lucide-react';
-
-// 🔽 Import the PerformaInvoice component
-import PerformaInvoice from '../popup/PerformaInvoice'; // ✅ Adjust path if needed
+import PerformaInvoice from '../popup/PerformaInvoice';
 
 interface Request {
   id: string;
@@ -30,7 +28,7 @@ interface Request {
   title: string;
   customer: string;
   vehicle: string;
-  status: 'Awaiting Send' | 'Draft' | 'Sent' | 'Accepted' | 'Cancelled'; // ✅ Real DB statuses
+  status: 'Awaiting Send' | 'Draft' | 'Sent' | 'Accepted' | 'Cancelled';
   date: string;
   amount?: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
@@ -57,7 +55,7 @@ interface ApiResponseItem {
   proforma_date: string;
   customer_name: string;
   vehicle?: string;
-  status: 'Awaiting Send' | 'Draft' | 'Sent' | 'Accepted' | 'Cancelled' ;
+  status: 'Awaiting Send' | 'Draft' | 'Sent' | 'Accepted' | 'Cancelled';
   subtotal: number;
   total: number;
   created_at: string;
@@ -69,7 +67,7 @@ interface CommunicationDashboardProps {
 }
 
 const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogout, userRole }) => {
-  const [activeForm, setActiveForm] = useState<string | null>(null);
+  const [showPerformaModal, setShowPerformaModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
@@ -98,7 +96,6 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
         setError(err instanceof Error ? err.message : 'Failed to load statistics.');
       }
     };
-
     fetchStats();
   }, []);
 
@@ -110,7 +107,6 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
         if (!response.ok) throw new Error(`Failed to fetch proformas: ${response.status}`);
         const result = await response.json();
         if (!result.success) throw new Error(result.message || 'Failed to load proformas');
-
         const mappedRequests = result.data.map((item: ApiResponseItem): Request => {
           let priority: 'low' | 'normal' | 'high' | 'urgent' = 'normal';
           switch (item.status) {
@@ -124,16 +120,15 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
               priority = 'normal';
               break;
             default:
-              priority = 'normal'; // Sent, Accepted
+              priority = 'normal';
           }
-
           return {
             id: item.id.toString(),
             type: 'performa',
             title: 'Proforma Invoice',
             customer: item.customer_name || 'Unknown Customer',
             vehicle: item.vehicle || 'N/A',
-            status: item.status, // ✅ Use real status directly
+            status: item.status,
             date: item.proforma_date,
             amount: new Intl.NumberFormat('en-US', {
               style: 'currency',
@@ -143,7 +138,6 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
             priority,
           };
         });
-
         setRequests(mappedRequests);
       } catch (err) {
         console.error('Fetch proformas error:', err);
@@ -152,9 +146,61 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
         setLoading(false);
       }
     };
-
     fetchProformas();
   }, []);
+
+  const refreshData = async () => {
+    setLoading(true);
+    try {
+      // Fetch stats
+      const statsResponse = await fetch('http://localhost:5001/api/communication-center/stats');
+      const statsResult = await statsResponse.json();
+      if (statsResult.success) setStats(statsResult.data);
+      
+      // Fetch proformas
+      const proformasResponse = await fetch('http://localhost:5001/api/communication-center/proformas');
+      const proformasResult = await proformasResponse.json();
+      if (proformasResult.success) {
+        const mappedRequests = proformasResult.data.map((item: ApiResponseItem): Request => {
+          let priority: 'low' | 'normal' | 'high' | 'urgent' = 'normal';
+          switch (item.status) {
+            case 'Cancelled':
+              priority = 'urgent';
+              break;
+            case 'Awaiting Send':
+              priority = 'high';
+              break;
+            case 'Draft':
+              priority = 'normal';
+              break;
+            default:
+              priority = 'normal';
+          }
+          return {
+            id: item.id.toString(),
+            type: 'performa',
+            title: 'Proforma Invoice',
+            customer: item.customer_name || 'Unknown Customer',
+            vehicle: item.vehicle || 'N/A',
+            status: item.status,
+            date: item.proforma_date,
+            amount: new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency: 'USD',
+              minimumFractionDigits: 2,
+            }).format(item.total),
+            priority,
+          };
+        });
+        setRequests(mappedRequests);
+      }
+    } catch (err) {
+      console.error('Refresh error:', err);
+      setError('Failed to refresh data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const recentActivity = [
     {
@@ -191,25 +237,12 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
     },
   ];
 
-  // Only show "cancelled" as high priority
   const urgentRequests = requests.filter((r) => r.status === 'Cancelled');
 
   const quickActions: QuickAction[] = [
-   
-    { label: 'Send Proforma', icon: Receipt, color: 'purple', action: () => setActiveForm('performa') },
+    { label: 'Send Proforma', icon: Receipt, color: 'purple', action: () => setShowPerformaModal(true) },
   ];
 
-  const handleFormSubmit = (data: unknown) => {
-    console.log('Form submitted:', data);
-    setActiveForm(null);
-    // In real app: refresh data from API
-  };
-
-  const handleFormCancel = () => {
-    setActiveForm(null);
-  };
-
-  // ✅ Use real status values
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'Accepted':
@@ -241,7 +274,6 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
     }
   };
 
-  // ✅ Use real status values
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Accepted':
@@ -273,13 +305,11 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
     }
   };
 
-  // ✅ Filter using real status values
   const filteredRequests = requests.filter((request) => {
     const matchesSearch =
       request.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       request.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
       request.vehicle.toLowerCase().includes(searchTerm.toLowerCase());
-
     const matchesStatus =
       filterStatus === 'all' ||
       (filterStatus === 'awaitingSend' && request.status === 'Awaiting Send') ||
@@ -287,50 +317,9 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
       (filterStatus === 'sent' && request.status === 'Sent') ||
       (filterStatus === 'accepted' && request.status === 'Accepted') ||
       (filterStatus === 'cancelled' && request.status === 'Cancelled');
-
     const matchesType = filterType === 'all' || request.type === filterType;
-
     return matchesSearch && matchesStatus && matchesType;
   });
-
-  // === Render Active Form ===
-  if (activeForm) {
-    switch (activeForm) {
-      case 'performa':
-        return (
-          <PerformaInvoice
-            onSubmit={handleFormSubmit}
-            onCancel={handleFormCancel}
-          />
-        );
-      case 'surveyor':
-      case 'salvage':
-      case 'payment':
-        return (
-          <div className="p-6 bg-gray-50 min-h-screen">
-            <div className="max-w-4xl mx-auto">
-              <div className="bg-white p-8 rounded-2xl shadow-lg">
-                <h2 className="text-2xl font-bold mb-6">New {activeForm.charAt(0).toUpperCase() + activeForm.slice(1)} Request</h2>
-                <p className="text-gray-600 mb-8">Fill out the form to submit a new {activeForm} request.</p>
-                <div className="flex justify-end space-x-4">
-                  <button onClick={handleFormCancel} className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => handleFormSubmit({ form: activeForm, timestamp: new Date() })}
-                    className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg"
-                  >
-                    Submit Request
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      default:
-        return null;
-    }
-  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -344,14 +333,14 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
         </div>
         <div className="flex items-center space-x-4">
           <button
-            onClick={() => window.location.reload()}
+            onClick={refreshData}
             className="flex items-center space-x-2 px-4 py-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition-colors"
           >
             <Activity className="w-4 h-4" />
             <span>Refresh</span>
           </button>
           <button
-            onClick={() => setActiveForm('performa')}
+            onClick={() => setShowPerformaModal(true)}
             className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-900 text-white rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105 flex items-center space-x-2"
           >
             <Plus className="w-4 h-4" />
@@ -383,7 +372,6 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
                 <FileText className="w-8 h-8 text-blue-200" />
               </div>
             </div>
-
             {/* Awaiting Send */}
             <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white rounded-2xl p-6 shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all">
               <div className="flex items-center justify-between">
@@ -395,7 +383,6 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
                 <AlertTriangle className="w-8 h-8 text-yellow-200 animate-pulse" />
               </div>
             </div>
-
             {/* Draft */}
             <div className="bg-gradient-to-br from-blue-400 to-blue-500 text-white rounded-2xl p-6 shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all">
               <div className="flex items-center justify-between">
@@ -407,7 +394,6 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
                 <FileText className="w-8 h-8 text-blue-200 animate-spin" />
               </div>
             </div>
-
             {/* Accepted */}
             <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all">
               <div className="flex items-center justify-between">
@@ -419,7 +405,6 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
                 <CheckCircle className="w-8 h-8 text-green-200" />
               </div>
             </div>
-
             {/* Cancelled */}
             <div className="bg-gradient-to-br from-red-500 to-orange-600 text-white rounded-2xl p-6 shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all">
               <div className="flex items-center justify-between">
@@ -435,40 +420,33 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
         )}
       </div>
 
-     {/* Quick Actions */}
-<div className="bg-gradient-to-br from-indigo-50 via-white to-cyan-50 rounded-3xl p-8 shadow-xl border border-indigo-100">
-  <div className="flex items-center justify-between mb-8">
-    <h3 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-cyan-600">
-      Quick Actions
-    </h3>
-    <div className="h-1 w-24 bg-gradient-to-r from-indigo-400 to-cyan-400 rounded-full"></div>
-  </div>
-  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-    {quickActions.map((action, index) => (
-      <button
-        key={index}
-        onClick={action.action}
-        className="group relative h-32 flex flex-col items-center justify-center space-y-3 bg-white rounded-2xl border-2 border-transparent hover:border-indigo-200 hover:shadow-xl transition-all duration-500 transform hover:-translate-y-2 overflow-hidden"
-      >
-        {/* Background decoration */}
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-        
-        {/* Icon container with gradient background */}
-        <div className="relative z-10 w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-100 to-cyan-100 flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-500 group-hover:scale-110">
-          <action.icon className="w-7 h-7 text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-cyan-600" />
+      {/* Quick Actions */}
+      <div className="bg-gradient-to-br from-indigo-50 via-white to-cyan-50 rounded-3xl p-8 shadow-xl border border-indigo-100">
+        <div className="flex items-center justify-between mb-8">
+          <h3 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-cyan-600">
+            Quick Actions
+          </h3>
+          <div className="h-1 w-24 bg-gradient-to-r from-indigo-400 to-cyan-400 rounded-full"></div>
         </div>
-        
-        {/* Text */}
-        <span className="relative z-10 text-sm font-semibold text-gray-700 group-hover:text-indigo-700 transition-colors duration-300">
-          {action.label}
-        </span>
-        
-        {/* Animated accent line */}
-        <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-400 to-cyan-400 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left"></div>
-      </button>
-    ))}
-  </div>
-</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {quickActions.map((action, index) => (
+            <button
+              key={index}
+              onClick={action.action}
+              className="group relative h-32 flex flex-col items-center justify-center space-y-3 bg-white rounded-2xl border-2 border-transparent hover:border-indigo-200 hover:shadow-xl transition-all duration-500 transform hover:-translate-y-2 overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <div className="relative z-10 w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-100 to-cyan-100 flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-500 group-hover:scale-110">
+                <action.icon className="w-7 h-7 text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-cyan-600" />
+              </div>
+              <span className="relative z-10 text-sm font-semibold text-gray-700 group-hover:text-indigo-700 transition-colors duration-300">
+                {action.label}
+              </span>
+              <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-400 to-cyan-400 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left"></div>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Urgent Requests & Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -507,7 +485,6 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
             )}
           </div>
         </div>
-
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-semibold text-gray-800 flex items-center">
@@ -671,6 +648,16 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
           </div>
         )}
       </div>
+
+      {/* Performa Invoice Modal */}
+      <PerformaInvoice
+        isOpen={showPerformaModal}
+        onClose={() => setShowPerformaModal(false)}
+        onSaveSuccess={() => {
+          refreshData();
+          setShowPerformaModal(false);
+        }}
+      />
     </div>
   );
 };
