@@ -554,100 +554,10 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
       </div>
 
       {/* Filter Controls */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search requests..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full md:w-64 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center space-x-4">
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="awaitingSend">Awaiting Send</option>
-              <option value="draft">Draft</option>
-              <option value="sent">Sent</option>
-              <option value="accepted">Accepted</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Types</option>
-              <option value="performa">Proforma</option>
-            </select>
-          </div>
-        </div>
-      </div>
+ 
 
       {/* Requests List */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-xl font-semibold text-gray-800">All Proforma Invoices</h3>
-        </div>
-        {loading ? (
-          <div className="text-center py-12">
-            <Loader className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-4" />
-            <p className="text-gray-500">Loading invoices...</p>
-          </div>
-        ) : error ? (
-          <div className="text-center py-12 text-red-600">
-            <p>{error}</p>
-          </div>
-        ) : filteredRequests.length === 0 ? (
-          <div className="text-center py-12">
-            <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">No invoices match your filters</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {filteredRequests.map((req) => (
-              <div key={req.id} className="p-6 hover:bg-gray-50 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex-shrink-0">{getTypeIcon(req.type)}</div>
-                    <div>
-                      <h4 className="font-semibold text-gray-800">{req.title}</h4>
-                      <div className="text-sm text-gray-600 mt-1 flex items-center space-x-4">
-                        <span>{req.customer}</span>
-                        <span>•</span>
-                        <span>{req.vehicle}</span>
-                        <span>•</span>
-                        <span>{new Date(req.date).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-4">
-                    {req.amount && (
-                      <span className="font-semibold text-gray-800">{req.amount}</span>
-                    )}
-                    <div className="flex items-center space-x-2">
-                      <div className={`w-2 h-2 rounded-full ${getPriorityColor(req.priority)}`}></div>
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(req.status)}`}
-                      >
-                        {req.status}
-                      </span>
-                    </div>
-                    <div>{getStatusIcon(req.status)}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+    
 
       {/* Performa Invoice Modal */}
       <PerformaInvoice

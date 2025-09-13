@@ -128,86 +128,93 @@ router.post('/proformas-post', async (req, res) => {
 
   // GET /api/communication-center/proformas
   // List all proformas with pagination, search, and filters
-  router.get('/proformas', async (req, res) => {
-    const {
-      page = 1,
-      limit = 10,
-      search,
-      status,
-      date,
-    } = req.query;
+router.get('/proformas', async (req, res) => {
+  const {
+    page = 1,
+    limit = 10,
+    search,
+    status,
+    date,
+  } = req.query;
 
-    const pageNum = Math.max(1, parseInt(page)) || 1;
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit))) || 10;
-    const offset = (pageNum - 1) * limitNum;
+  const pageNum = Math.max(1, parseInt(page)) || 1;
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit))) || 10;
+  const offset = (pageNum - 1) * limitNum;
 
-    let connection;
-    try {
-      connection = await db.promise().getConnection();
+  let connection;
+  try {
+    connection = await db.promise().getConnection();
 
-      // Base query
-      let query = `
-        SELECT 
-          id,
-          proforma_number,
-          proforma_date,
-          notes,
-          status,
-          subtotal,
-          vat_amount,
-          total,
-          created_at,
-          updated_at
-        FROM proformas
-        WHERE 1=1
-      `;
-      const countQuery = `SELECT COUNT(*) AS total FROM proformas WHERE 1=1`;
-      const params = [];
-
-      // Apply filters
-      if (search) {
-        query += ` AND (proforma_number LIKE ? OR notes LIKE ?)`;
-        countQuery += ` AND (proforma_number LIKE ? OR notes LIKE ?)`;
-        params.push(`%${search}%`, `%${search}%`);
-      }
-
-      if (status) {
-        query += ` AND status = ?`;
-        countQuery += ` AND status = ?`;
-        params.push(status);
-      }
-
-      if (date) {
-        query += ` AND DATE(proforma_date) = DATE(?)`;
-        countQuery += ` AND DATE(proforma_date) = DATE(?)`;
-        params.push(date);
-      }
-
-      // Add sorting and pagination
-      query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
-      params.push(limitNum, offset);
-
-      // Execute both queries
-      const [rows] = await connection.execute(query, params);
-      const [[{ total }]] = await connection.execute(countQuery, params.slice(0, -2)); // exclude LIMIT/OFFSET
-
-      const totalPages = Math.ceil(total / limitNum);
-
-      connection.release();
-
-      return sendResponse(res, true, rows, 'Proforma list retrieved successfully.', 200, {
-        page: pageNum,
-        pages: totalPages,
+    // Base query with all fields you want
+    let query = `
+      SELECT 
+        id,
+        proforma_number,
+        proforma_date,
+        customer_name,
+        company_name,
+        company_address,
+        company_phone,
+        company_vat_number,
+        notes,
+        status,
+        subtotal,
+        vat_rate,
+        vat_amount,
         total,
-        limit: limitNum,
-      });
+        created_at,
+        updated_at
+      FROM proformas
+      WHERE 1=1
+    `;
+    let countQuery = `SELECT COUNT(*) AS total FROM proformas WHERE 1=1`;
+    const params = [];
 
-    } catch (error) {
-      if (connection) connection.release();
-      console.error('❌ Fetch proformas error:', error);
-      return sendResponse(res, false, null, 'Could not retrieve proforma invoices.', 500);
+    // Apply filters
+    if (search) {
+      query += ` AND (proforma_number LIKE ? OR notes LIKE ? OR customer_name LIKE ? OR company_name LIKE ?)`;
+      countQuery += ` AND (proforma_number LIKE ? OR notes LIKE ? OR customer_name LIKE ? OR company_name LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
-  });
+
+    if (status) {
+      query += ` AND status = ?`;
+      countQuery += ` AND status = ?`;
+      params.push(status);
+    }
+
+    if (date) {
+      query += ` AND DATE(proforma_date) = DATE(?)`;
+      countQuery += ` AND DATE(proforma_date) = DATE(?)`;
+      params.push(date);
+    }
+
+    // Add sorting and pagination
+    query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    params.push(limitNum, offset);
+
+    // Execute both queries
+    const [rows] = await connection.execute(query, params);
+    const [[{ total }]] = await connection.execute(countQuery, params.slice(0, -2)); // exclude LIMIT/OFFSET
+
+    const totalPages = Math.ceil(total / limitNum);
+
+    connection.release();
+
+    return sendResponse(res, true, rows, 'Proforma list retrieved successfully.', 200, {
+      page: pageNum,
+      pages: totalPages,
+      total,
+      limit: limitNum,
+    });
+
+  } catch (error) {
+    if (connection) connection.release();
+    console.error('❌ Fetch proformas error:', error);
+    return sendResponse(res, false, null, 'Could not retrieve proforma invoices.', 500);
+  }
+});
+
 
   // GET /api/communication-center/proformas/:id
   // Get single proforma with items

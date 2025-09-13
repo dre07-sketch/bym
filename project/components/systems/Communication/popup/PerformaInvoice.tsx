@@ -33,9 +33,16 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
   const [toastMessage, setToastMessage] = useState('');
   const [savedInvoiceNumber, setSavedInvoiceNumber] = useState('');
   
+  // Generate a unique proforma number with a random component
+  const generateProformaNumber = () => {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000);
+    return `PF-${timestamp}-${random}`;
+  };
+  
   const [formData, setFormData] = useState({
     invoiceInfo: {
-      proformaNumber: `PF-${Date.now()}`,
+      proformaNumber: generateProformaNumber(),
       date: new Date().toISOString().split('T')[0],
       validUntil: '',
       paymentTerms: '',
@@ -162,31 +169,6 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
     printWindow.close();
   };
 
-  const handleDownload = async () => {
-    if (!printRef.current || isGenerating) return;
-    setIsGenerating(true);
-    try {
-      const canvas = await html2canvas(printRef.current, {
-        scale: 5,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        allowTaint: true,
-      });
-      const imgData = canvas.toDataURL('/Crop image project.png', 1.0);
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`proforma-invoice-${formData.invoiceInfo.proformaNumber}.pdf`);
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      alert('Failed to generate PDF. Please try again.');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
   const handlePreviewPrint = () => {
     if (!previewRef.current) return;
     const printWindow = window.open('', '_blank');
@@ -211,44 +193,298 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
     printWindow.close();
   };
 
-  const handlePreviewDownload = async () => {
-    if (!previewRef.current || isGenerating) return;
-    setIsGenerating(true);
+  const createPrintElement = () => {
+    // Create a temporary div element with the print content
+    const printElement = document.createElement('div');
+    printElement.innerHTML = `
+      <div class="p-8 bg-white max-w-4xl mx-auto">
+        <!-- Company Header -->
+        <div class="text-center mb-6">
+          <div class="flex justify-center mb-2">
+            <div class="w-16 h-16 border-2 border-black rounded-full flex items-center justify-center">
+              <img src="photo_1_2025-06-05_14-37-50.jpg" alt="Company Logo" class="w-12 h-12 object-contain" />
+            </div>
+          </div>
+          <h1 class="text-3xl font-bold text-black mb-1">BYM TRADING PLC</h1>
+          <p class="text-black mb-1">Addis Ababa, ETHIOPIA</p>
+          <p class="text-black">Phone: 0911-47-54-43</p>
+        </div>
+        
+        <!-- Proforma Invoice Title -->
+        <div class="border-t-2 border-b-2 border-black py-3 mb-6">
+          <h2 class="text-2xl font-bold text-center text-black">PROFORMA INVOICE</h2>
+        </div>
+        
+        <!-- Invoice Details -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+          <div>
+            <p class="text-sm text-black">Proforma #</p>
+            <p class="font-semibold text-black">${formData.invoiceInfo.proformaNumber}</p>
+          </div>
+          <div>
+            <p class="text-sm text-black">Date</p>
+            <p class="text-black">${formData.invoiceInfo.date}</p>
+          </div>
+          <div>
+            <p class="text-sm text-black">Valid Until</p>
+            <p class="text-black">${formData.invoiceInfo.validUntil || 'N/A'}</p>
+          </div>
+        </div>
+        
+        <!-- Customer Info -->
+        <div class="mb-6">
+          <p class="text-sm text-black mb-1">To:</p>
+          <p class="font-semibold text-black">${formData.customerInfo.name}</p>
+        </div>
+        
+        <!-- Items Table -->
+        <div class="overflow-x-auto mb-6">
+          <table class="w-full border-collapse border border-black">
+            <thead>
+              <tr class="border-b border-black">
+                <th class="border border-black px-4 py-2 text-left text-black">Description</th>
+                <th class="border border-black px-4 py-2 text-left text-black">Size</th>
+                <th class="border border-black px-4 py-2 text-center text-black">Quantity</th>
+                <th class="border border-black px-4 py-2 text-right text-black">Unit Price</th>
+                <th class="border border-black px-4 py-2 text-right text-black">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${formData.items.map(item => `
+                <tr>
+                  <td class="border border-black px-4 py-2 text-black">${item.description}</td>
+                  <td class="border border-black px-4 py-2 text-black">${item.size}</td>
+                  <td class="border border-black px-4 py-2 text-center text-black">${item.quantity}</td>
+                  <td class="border border-black px-4 py-2 text-right text-black">${item.unitPrice}</td>
+                  <td class="border border-black px-4 py-2 text-right text-black">${item.amount}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Totals -->
+        <div class="flex justify-end mb-6">
+          <div class="w-64 border border-black rounded-lg p-4">
+            <div class="flex justify-between mb-1">
+              <span class="text-black">Subtotal:</span>
+              <span class="text-black">${formData.totals.subtotal}</span>
+            </div>
+            <div class="flex justify-between mb-1">
+              <span class="text-black">VAT (${formData.totals.vatRate}%):</span>
+              <span class="text-black">${formData.totals.vatAmount}</span>
+            </div>
+            <div class="flex justify-between font-bold border-t border-black pt-1">
+              <span class="text-black">Total:</span>
+              <span class="text-black">${formData.totals.total}</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Bottom Section -->
+        <div class="border-t border-black pt-4">
+          <div class="text-center mb-4">
+            <p class="text-lg font-bold text-black">የመኪናዎ ደህንነት ማእከል</p>
+            <p class="text-lg font-bold text-black">THE CAR SAFETY CENTER</p>
+          </div>
+          
+          <!-- Terms and Conditions -->
+          <div class="mb-6">
+            <div class="mb-3">
+              <p class="text-sm text-black mb-1">1. The offer provided is valid for ___________ days of the date submitted</p>
+              <p class="text-sm text-black mb-1">1. የተሰጠው ቅጥር በተሰጠበት ቀን ከዚያ በኋላ ________ ቀናት ውስጥ ይገባል</p>
+            </div>
+            <div class="mb-3">
+              <p class="text-sm text-black mb-1">2. Payment mode is due ____________ in advance</p>
+              <p class="text-sm text-black mb-1">2. የክፍያ ዘዴ በመጀመሪያ ____________ ይከፈላል</p>
+            </div>
+            <div class="mb-3">
+              <p class="text-sm text-black mb-1">3. Delivery time ___________</p>
+              <p class="text-sm text-black mb-1">3. የማስረከቢያ ጊዜ ___________</p>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-6 mb-6">
+            <div>
+              <p class="text-sm font-semibold mb-2 text-black">Payment Method:</p>
+              <div class="flex items-center mb-1">
+                <div class="w-4 h-4 border border-black mr-2"></div>
+                <span class="text-sm text-black">Cash / በገንዘብ</span>
+              </div>
+              <div class="flex items-center mb-1">
+                <div class="w-4 h-4 border border-black mr-2"></div>
+                <span class="text-sm text-black">Bank Transfer / ባንክ ትራንስፈር</span>
+              </div>
+              <div class="flex items-center">
+                <div class="w-4 h-4 border border-black mr-2"></div>
+                <span class="text-sm text-black">Check / ቼክ</span>
+              </div>
+            </div>
+            <div>
+              <p class="text-sm font-semibold mb-2 text-black">Delivery Status:</p>
+              <div class="flex items-center mb-1">
+                <div class="w-4 h-4 border border-black mr-2"></div>
+                <span class="text-sm text-black">Partial Delivery / የከፊል ማስረከቢያ</span>
+              </div>
+              <div class="flex items-center">
+                <div class="w-4 h-4 border border-black mr-2"></div>
+                <span class="text-sm text-black">Full Delivery / ሙሉ ማስረከቢያ</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-6 mb-6">
+            <div>
+              <p class="text-sm font-semibold mb-2 text-black">Customer Confirmation:</p>
+              <div class="flex items-center mb-1">
+                <div class="w-4 h-4 border border-black mr-2"></div>
+                <span class="text-sm text-black">I have read and agree to the terms</span>
+              </div>
+              <div class="flex items-center">
+                <div class="w-4 h-4 border border-black mr-2"></div>
+                <span class="text-sm text-black">I accept the delivery schedule</span>
+              </div>
+            </div>
+            <div>
+              <p class="text-sm font-semibold mb-2 text-black">Additional Notes:</p>
+              <div class="flex items-center mb-1">
+                <div class="w-4 h-4 border border-black mr-2"></div>
+                <span class="text-sm text-black">Insurance Required / ዋስትና ያስፈልጋል</span>
+              </div>
+              <div class="flex items-center">
+                <div class="w-4 h-4 border border-black mr-2"></div>
+                <span class="text-sm text-black">Special Instructions / ልዩ መመሪያዎች</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Signature Section -->
+        <div class="flex justify-end mt-6">
+          <div class="text-right">
+            <p class="text-sm text-black mb-1">Signature / ፊርማ:</p>
+            <div class="w-48 h-12 border-b border-black"></div>
+            <p class="text-sm text-black mt-2">Date / ቀን: _______________</p>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Apply styles to make it look like the original
+    printElement.style.position = 'absolute';
+    printElement.style.left = '-9999px';
+    printElement.style.top = '0';
+    printElement.style.width = '210mm'; // A4 width
+    printElement.style.backgroundColor = '#ffffff';
+    printElement.style.fontFamily = 'Georgia, Times New Roman, serif';
+    printElement.style.color = 'black';
+    
+    // Add to body temporarily
+    document.body.appendChild(printElement);
+    
+    return printElement;
+  };
+
+  const handleDownloadPDF = async () => {
+    let element = printRef.current;
+    let tempElement = null;
+    
+    // If printRef is not available, create a temporary element
+    if (!element) {
+      console.warn('Print reference is not available, creating temporary element');
+      tempElement = createPrintElement();
+      element = tempElement;
+    }
+    
     try {
-      const canvas = await html2canvas(previewRef.current, {
-        scale: 3,
+      // Wait a bit to ensure all content is rendered
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Temporarily remove any animations or transitions that might interfere
+      const originalTransition = element.style.transition;
+      element.style.transition = 'none';
+      
+      const canvas = await html2canvas(element, {
+        scale: 3, // Increased scale for better quality
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
         allowTaint: true,
+        // Ensure all text is rendered
+        onclone: (clonedDoc) => {
+          clonedDoc.querySelectorAll('*').forEach(el => {
+            const style = window.getComputedStyle(el);
+            el.style.fontFamily = style.fontFamily;
+            el.style.fontSize = style.fontSize;
+            el.style.fontWeight = style.fontWeight;
+            el.style.color = style.color;
+            el.style.backgroundColor = style.backgroundColor;
+          });
+          return clonedDoc;
+        }
       });
-      const imgData = canvas.toDataURL('/Crop image project.png', 1.0);
+      
+      // Restore original transition
+      element.style.transition = originalTransition;
+      
+      const imgData = canvas.toDataURL('image/png', 1.0);
       const pdf = new jsPDF('p', 'mm', 'a4');
+      
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`proforma-invoice-${formData.invoiceInfo.proformaNumber}.pdf`);
+      
+      // Check if content fits on one page
+      if (pdfHeight <= pdf.internal.pageSize.getHeight()) {
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      } else {
+        // Multi-page PDF
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        let remainingHeight = canvas.height;
+        let position = 0;
+        
+        while (remainingHeight > 0) {
+          const pageCanvas = document.createElement('canvas');
+          const ctx = pageCanvas.getContext('2d');
+          
+          const sourceCanvas = document.createElement('canvas');
+          const sourceCtx = sourceCanvas.getContext('2d');
+          sourceCanvas.width = canvas.width;
+          sourceCanvas.height = canvas.height;
+          sourceCtx.drawImage(canvas, 0, 0);
+          
+          const sliceHeight = Math.min(pageHeight * (canvas.width / pdfWidth), remainingHeight);
+          
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = sliceHeight;
+          ctx.drawImage(sourceCanvas, 0, position, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+          
+          const sliceImgData = pageCanvas.toDataURL('image/png', 1.0);
+          const slicePdfHeight = (sliceHeight * pdfWidth) / canvas.width;
+          
+          if (position > 0) {
+            pdf.addPage();
+          }
+          
+          pdf.addImage(sliceImgData, 'PNG', 0, 0, pdfWidth, slicePdfHeight);
+          
+          remainingHeight -= sliceHeight;
+          position += sliceHeight;
+        }
+      }
+      
+      pdf.save(`proforma-${formData.invoiceInfo.proformaNumber}.pdf`);
     } catch (error) {
       console.error('PDF generation error:', error);
       alert('Failed to generate PDF. Please try again.');
     } finally {
-      setIsGenerating(false);
+      // Clean up temporary element if it was created
+      if (tempElement && tempElement.parentNode) {
+        tempElement.parentNode.removeChild(tempElement);
+      }
     }
   };
 
-  const handleSave = () => {
-    if (!formData.customerInfo.name.trim()) {
-      alert('Customer Name is required.');
-      return;
-    }
-    if (formData.items.length === 0) {
-      alert('Please add at least one item.');
-      return;
-    }
-    setShowPreview(true);
-  };
-
-  const finalizeInvoice = async () => {
+  const saveAndDownloadPDF = async (retryCount = 0) => {
     if (!formData.customerInfo.name.trim()) {
       alert('Customer Name is required.');
       return;
@@ -258,9 +494,12 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
       return;
     }
     
+    // Generate a new proforma number if this is a retry
+    const proformaNumber = retryCount > 0 ? generateProformaNumber() : formData.invoiceInfo.proformaNumber;
+    
     // Updated payload to match new API requirements
     const payload = {
-      proforma_number: formData.invoiceInfo.proformaNumber,
+      proforma_number: proformaNumber,
       proforma_date: formData.invoiceInfo.date,
       notes: formData.invoiceInfo.validUntil ? `Valid until: ${formData.invoiceInfo.validUntil}` : null,
       customer_name: formData.customerInfo.name,
@@ -286,6 +525,21 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
       });
       
       if (!response.ok) {
+        // Handle 409 Conflict specifically
+        if (response.status === 409 && retryCount < 3) {
+          console.log(`Conflict detected, retrying with new proforma number (attempt ${retryCount + 1})`);
+          // Update the form data with the new proforma number
+          setFormData(prev => ({
+            ...prev,
+            invoiceInfo: {
+              ...prev.invoiceInfo,
+              proformaNumber: proformaNumber
+            }
+          }));
+          // Retry with a new proforma number
+          return saveAndDownloadPDF(retryCount + 1);
+        }
+        
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `HTTP ${response.status}`);
       }
@@ -297,6 +551,13 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
       setShowToast(true);
       
       if (onSaveSuccess) onSaveSuccess();
+      
+      // Wait a moment before generating PDF to ensure UI updates
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Now generate and download the PDF using the improved function
+      await handleDownloadPDF();
+      
     } catch (error) {
       console.error('Save error:', error);
       let errorMessage = 'An unknown error occurred';
@@ -311,6 +572,18 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleSave = () => {
+    if (!formData.customerInfo.name.trim()) {
+      alert('Customer Name is required.');
+      return;
+    }
+    if (formData.items.length === 0) {
+      alert('Please add at least one item.');
+      return;
+    }
+    setShowPreview(true);
   };
 
   const cancelPreview = () => {
@@ -339,8 +612,19 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
         
         {/* Modal Content */}
         <div className="flex-1 overflow-y-auto">
-          {/* Print View (Hidden) */}
-          <div ref={printRef} className="hidden">
+          {/* Print View (Hidden but rendered) */}
+          <div 
+            ref={printRef} 
+            style={{ 
+              position: 'absolute', 
+              left: '-9999px', 
+              top: '0',
+              width: '210mm',
+              backgroundColor: '#ffffff',
+              fontFamily: 'Georgia, Times New Roman, serif',
+              color: 'black'
+            }}
+          >
             <div className="p-8 bg-white max-w-4xl mx-auto">
               {/* Company Header */}
               <div className="text-center mb-6">
@@ -930,19 +1214,12 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
                     Print
                   </button>
                   <button
-                    onClick={handlePreviewDownload}
+                    onClick={() => saveAndDownloadPDF()}
                     disabled={isGenerating}
-                    className="px-8 py-3 border-2 border-black hover:bg-black hover:text-white text-black rounded-xl flex items-center space-x-2 disabled:opacity-70"
+                    className="px-8 py-3 border-2 border-black hover:bg-black hover:text-white text-black rounded-xl font-bold disabled:opacity-70 flex items-center space-x-2"
                   >
                     <Download className="w-5 h-5" />
-                    <span>{isGenerating ? 'Generating...' : 'Download PDF'}</span>
-                  </button>
-                  <button
-                    onClick={finalizeInvoice}
-                    disabled={isGenerating}
-                    className="px-8 py-3 border-2 border-black hover:bg-black hover:text-white text-black rounded-xl font-bold disabled:opacity-70"
-                  >
-                    {isGenerating ? 'Saving...' : 'Confirm & Save'}
+                    <span>{isGenerating ? 'Saving & Downloading...' : 'Confirm, Save & Download'}</span>
                   </button>
                 </div>
               </div>

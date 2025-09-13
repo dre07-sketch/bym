@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation'; // Updated import
+import { useRouter } from 'next/navigation';
 import { Close } from '@radix-ui/react-toast';
 // Icons from Lucide React
 import {
@@ -41,9 +41,12 @@ import {
   TrendingUp,
   Users,
   Activity,
-  Zap
+  Zap,
+  MapPinIcon
 } from 'lucide-react';
 import PerformaInvoice from '../popup/PerformaInvoice';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 interface ProformaItem {
   id: number;
@@ -58,21 +61,30 @@ interface Proforma {
   proforma_number: string;
   proforma_date: string;
   customer_name?: string;
-  customer_email?: string;
-  customer_phone?: string;
-  customer_address?: string;
-  vehicle?: string;
+  company_name?: string;
+  company_address?: string;
+  company_phone?: string;
+  company_vat_number?: string;
+  notes?: string;
   status: 'Draft' | 'Awaiting Send' | 'Sent' | 'Accepted' | 'Cancelled';
   subtotal: number;
+  vat_rate?: number;
   vat_amount: number;
   total: number;
   created_at: string;
-  notes?: string;
+  updated_at?: string;
   items?: ProformaItem[];
 }
 
+interface PaginationData {
+  page: number;
+  pages: number;
+  total: number;
+  limit: number;
+}
+
 const Performa: React.FC = () => {
-  const router = useRouter(); // Updated hook
+  const router = useRouter();
   const [proformas, setProformas] = useState<Proforma[]>([]);
   const [filteredProformas, setFilteredProformas] = useState<Proforma[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -84,32 +96,71 @@ const Performa: React.FC = () => {
   const [sortBy, setSortBy] = useState<'date' | 'amount' | 'status'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
+  // Pagination state - ensure it's always defined
+  const [pagination, setPagination] = useState<PaginationData>({
+    page: 1,
+    pages: 1,
+    total: 0,
+    limit: 10
+  });
+  
   // Modal states
   const [selectedProformaId, setSelectedProformaId] = useState<number | null>(null);
   const [selectedProforma, setSelectedProforma] = useState<Proforma | null>(null);
   const [modalLoading, setModalLoading] = useState<boolean>(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState<boolean>(false);
-
+  
   // Function to navigate to the PerformaInvoice page
   const handleNewProforma = () => {
-  setShowInvoiceModal(true); // ✅ Open modal
-};
+    setShowInvoiceModal(true);
+  };
+  
+  // Function to refresh data after saving
+  const refreshData = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+        ...(searchTerm && { search: searchTerm }),
+        ...(filterStatus !== 'all' && { status: filterStatus }),
+        ...(dateRange.start && { date: dateRange.start })
+      });
+      
+      const response = await fetch(`http://localhost:5001/api/communication-center/proformas?${params}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      if (!result.success) throw new Error(result.message);
+      
+      setProformas(result.data);
+      setPagination(result.meta || pagination); // Fallback to current pagination if meta is undefined
+      setFilteredProformas(result.data);
+    } catch (err) {
+      console.error('Fetch proformas error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load proforma invoices.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Fetch proformas from backend
   useEffect(() => {
     const fetchProformas = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/communication-center/proformas');
+        const params = new URLSearchParams({
+          page: '1',
+          limit: '10'
+        });
+        
+        const response = await fetch(`http://localhost:5001/api/communication-center/proformas?${params}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const result = await response.json();
         if (!result.success) throw new Error(result.message);
-        // Sort by most recent first
-        const sorted = result.data.sort(
-          (a: Proforma, b: Proforma) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-        setProformas(sorted);
-        setFilteredProformas(sorted);
+        
+        setProformas(result.data);
+        setPagination(result.meta || pagination); // Fallback to current pagination if meta is undefined
+        setFilteredProformas(result.data);
       } catch (err) {
         console.error('Fetch proformas error:', err);
         setError(err instanceof Error ? err.message : 'Failed to load proforma invoices.');
@@ -122,57 +173,44 @@ const Performa: React.FC = () => {
 
   // Apply filters and search
   useEffect(() => {
-    let filtered = [...proformas];
-    
-    // Filter by date range
-    if (dateRange.start && dateRange.end) {
-      const startDate = new Date(dateRange.start);
-      const endDate = new Date(dateRange.end);
-      filtered = filtered.filter(p => {
-        const proformaDate = new Date(p.proforma_date);
-        return proformaDate >= startDate && proformaDate <= endDate;
-      });
-    }
-    
-    // Filter by status
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter((p) => {
-        if (filterStatus === 'awaitingSend') return p.status === 'Awaiting Send';
-        return p.status.toLowerCase() === filterStatus.toLowerCase();
-      });
-    }
-    
-    // Filter by search term
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (p) =>
-          p.proforma_number.toLowerCase().includes(term) ||
-          (p.customer_name && p.customer_name.toLowerCase().includes(term)) ||
-          (p.vehicle && p.vehicle.toLowerCase().includes(term)) ||
-          (p.notes && p.notes.toLowerCase().includes(term))
-      );
-    }
-    
-    // Apply sorting
-    filtered.sort((a, b) => {
-      if (sortBy === 'date') {
-        const dateA = new Date(a.proforma_date).getTime();
-        const dateB = new Date(b.proforma_date).getTime();
-        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-      } else if (sortBy === 'amount') {
-        return sortOrder === 'asc' ? a.total - b.total : b.total - a.total;
-      } else {
-        // Sort by status priority
-        const statusOrder = ['Draft', 'Awaiting Send', 'Sent', 'Accepted', 'Cancelled'];
-        const statusA = statusOrder.indexOf(a.status);
-        const statusB = statusOrder.indexOf(b.status);
-        return sortOrder === 'asc' ? statusA - statusB : statusB - statusA;
+    const applyFilters = async () => {
+      setLoading(true);
+      try {
+        // Ensure we have valid pagination values
+        const currentPage = pagination?.page || 1;
+        const currentLimit = pagination?.limit || 10;
+        
+        const params = new URLSearchParams({
+          page: currentPage.toString(),
+          limit: currentLimit.toString(),
+          ...(searchTerm && { search: searchTerm }),
+          ...(filterStatus !== 'all' && { status: filterStatus }),
+          ...(dateRange.start && { date: dateRange.start })
+        });
+        
+        const response = await fetch(`http://localhost:5001/api/communication-center/proformas?${params}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message);
+        
+        setProformas(result.data);
+        setPagination(result.meta || { page: currentPage, pages: 1, total: 0, limit: currentLimit });
+        setFilteredProformas(result.data);
+      } catch (err) {
+        console.error('Fetch proformas error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load proforma invoices.');
+      } finally {
+        setLoading(false);
       }
-    });
+    };
     
-    setFilteredProformas(filtered);
-  }, [searchTerm, filterStatus, proformas, dateRange, sortBy, sortOrder]);
+    applyFilters();
+  }, [searchTerm, filterStatus, dateRange]); // Removed pagination.limit from dependencies
+
+  // Handle pagination
+  const handlePageChange = (page: number) => {
+    setPagination(prev => ({ ...prev, page }));
+  };
 
   // Fetch proforma details when modal is opened
   useEffect(() => {
@@ -213,6 +251,97 @@ const Performa: React.FC = () => {
     setSelectedProforma(null);
     setModalError(null);
   };
+
+  // Download PDF for detail modal
+ // Update the handleDownloadPDF function
+const handleDownloadPDF = async () => {
+  if (!selectedProforma) return;
+  
+  try {
+    // Wait a bit to ensure all content is rendered
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    const element = document.getElementById('proforma-detail-content');
+    if (!element) return;
+    
+    // Temporarily remove any animations or transitions that might interfere
+    const originalTransition = element.style.transition;
+    element.style.transition = 'none';
+    
+    const canvas = await html2canvas(element, {
+      scale: 3, // Increased scale for better quality
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      allowTaint: true,
+      // Ensure all text is rendered
+      onclone: (clonedDoc) => {
+        clonedDoc.querySelectorAll('*').forEach(el => {
+          const style = window.getComputedStyle(el);
+          el.style.fontFamily = style.fontFamily;
+          el.style.fontSize = style.fontSize;
+          el.style.fontWeight = style.fontWeight;
+          el.style.color = style.color;
+          el.style.backgroundColor = style.backgroundColor;
+        });
+        return clonedDoc;
+      }
+    });
+    
+    // Restore original transition
+    element.style.transition = originalTransition;
+    
+    const imgData = canvas.toDataURL('image/png', 1.0);
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    
+    // Check if content fits on one page
+    if (pdfHeight <= pdf.internal.pageSize.getHeight()) {
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    } else {
+      // Multi-page PDF
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      let remainingHeight = canvas.height;
+      let position = 0;
+      
+      while (remainingHeight > 0) {
+        const pageCanvas = document.createElement('canvas');
+        const ctx = pageCanvas.getContext('2d');
+        
+        const sourceCanvas = document.createElement('canvas');
+        const sourceCtx = sourceCanvas.getContext('2d');
+        sourceCanvas.width = canvas.width;
+        sourceCanvas.height = canvas.height;
+        sourceCtx.drawImage(canvas, 0, 0);
+        
+        const sliceHeight = Math.min(pageHeight * (canvas.width / pdfWidth), remainingHeight);
+        
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeight;
+        ctx.drawImage(sourceCanvas, 0, position, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+        
+        const sliceImgData = pageCanvas.toDataURL('image/png', 1.0);
+        const slicePdfHeight = (sliceHeight * pdfWidth) / canvas.width;
+        
+        if (position > 0) {
+          pdf.addPage();
+        }
+        
+        pdf.addImage(sliceImgData, 'PNG', 0, 0, pdfWidth, slicePdfHeight);
+        
+        remainingHeight -= sliceHeight;
+        position += sliceHeight;
+      }
+    }
+    
+    pdf.save(`proforma-${selectedProforma.proforma_number}.pdf`);
+  } catch (error) {
+    console.error('PDF generation error:', error);
+    alert('Failed to generate PDF. Please try again.');
+  }
+};
 
   // Status badge colors
   const getStatusConfig = (status: string) => {
@@ -305,152 +434,135 @@ const Performa: React.FC = () => {
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cyan-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
         <div className="absolute top-40 left-40 w-80 h-80 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
       </div>
-      
-      {/* Floating action buttons */}
-      <div className="fixed bottom-8 right-8 z-40 flex flex-col space-y-3">
-        <button 
-          onClick={handleNewProforma}
-          className="w-14 h-14 rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 flex items-center justify-center"
-        >
-          <Plus className="w-6 h-6" />
-        </button>
-        <button className="w-14 h-14 rounded-full bg-white text-indigo-600 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 flex items-center justify-center border border-indigo-100">
-          <Filter className="w-6 h-6" />
-        </button>
-      </div>
 
       <div className="max-w-7xl mx-auto relative z-10">
         {/* Page Header */}
-        <div className="mb-12">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-8 mb-10">
+        <div className="mb-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-8 mb-6">
             <div className="relative">
               <div className="absolute -top-3 -left-3 text-indigo-500">
                 <Zap className="w-10 h-10" />
               </div>
-              <h1 className="text-5xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 flex items-center">
-                <Receipt className="w-12 h-12 mr-4 text-indigo-600" />
+              <h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 flex items-center">
+                <Receipt className="w-10 h-10 mr-4 text-indigo-600" />
                 Proforma Invoices
               </h1>
-              <p className="text-slate-600 mt-3 text-lg">Manage and track all customer proforma invoices</p>
+              <p className="text-slate-600 mt-2 text-lg">Manage and track all customer proforma invoices</p>
             </div>
             <div className="flex gap-4">
               <button
-                onClick={() => window.location.reload()}
-                className="flex items-center space-x-3 px-6 py-4 bg-white border border-indigo-100 rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
+                onClick={refreshData}
+                className="flex items-center space-x-3 px-6 py-3 bg-white border border-indigo-100 rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
               >
                 <Activity className="w-5 h-5 text-indigo-600" />
                 <span className="font-medium text-slate-700">Refresh</span>
               </button>
               <button 
                 onClick={handleNewProforma}
-                className="flex items-center space-x-3 px-6 py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                className="flex items-center space-x-3 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
               >
                 <Plus className="w-5 h-5" />
                 <span className="font-medium">New Proforma</span>
               </button>
             </div>
           </div>
-
+          
           {/* Stats Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-10">
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-indigo-50 relative overflow-hidden hover:shadow-xl transition-all duration-300">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-100 rounded-full -mr-10 -mt-10"></div>
-              <div className="flex items-center mb-3">
-                <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center mr-3">
-                  <Receipt className="w-5 h-5 text-indigo-600" />
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-4 border border-indigo-50 relative overflow-hidden hover:shadow-lg transition-all duration-300">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-100 rounded-full -mr-8 -mt-8"></div>
+              <div className="flex items-center mb-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center mr-2">
+                  <Receipt className="w-4 h-4 text-indigo-600" />
                 </div>
-                <p className="text-slate-500 text-sm font-medium">Total Proformas</p>
+                <p className="text-slate-500 text-sm font-medium">Total</p>
               </div>
-              <p className="text-3xl font-bold text-slate-800">{proformas.length}</p>
-              <div className="mt-2 flex items-center text-green-600 text-sm">
-                <TrendingUp className="w-4 h-4 mr-1" />
-                <span>12% from last month</span>
-              </div>
+              <p className="text-2xl font-bold text-slate-800">{pagination.total}</p>
             </div>
             
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-amber-50 relative overflow-hidden hover:shadow-xl transition-all duration-300">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-amber-100 rounded-full -mr-10 -mt-10"></div>
-              <div className="flex items-center mb-3">
-                <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center mr-3">
-                  <Clock className="w-5 h-5 text-amber-600" />
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-4 border border-amber-50 relative overflow-hidden hover:shadow-lg transition-all duration-300">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-amber-100 rounded-full -mr-8 -mt-8"></div>
+              <div className="flex items-center mb-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center mr-2">
+                  <Clock className="w-4 h-4 text-amber-600" />
                 </div>
-                <p className="text-slate-500 text-sm font-medium">Awaiting Send</p>
+                <p className="text-slate-500 text-sm font-medium">Awaiting</p>
               </div>
-              <p className="text-3xl font-bold text-slate-800">
+              <p className="text-2xl font-bold text-slate-800">
                 {proformas.filter(p => p.status === 'Awaiting Send').length}
               </p>
             </div>
             
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-indigo-50 relative overflow-hidden hover:shadow-xl transition-all duration-300">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-100 rounded-full -mr-10 -mt-10"></div>
-              <div className="flex items-center mb-3">
-                <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center mr-3">
-                  <Send className="w-5 h-5 text-indigo-600" />
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-4 border border-indigo-50 relative overflow-hidden hover:shadow-lg transition-all duration-300">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-100 rounded-full -mr-8 -mt-8"></div>
+              <div className="flex items-center mb-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center mr-2">
+                  <Send className="w-4 h-4 text-indigo-600" />
                 </div>
                 <p className="text-slate-500 text-sm font-medium">Sent</p>
               </div>
-              <p className="text-3xl font-bold text-slate-800">
+              <p className="text-2xl font-bold text-slate-800">
                 {proformas.filter(p => p.status === 'Sent').length}
               </p>
             </div>
             
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-emerald-50 relative overflow-hidden hover:shadow-xl transition-all duration-300">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-100 rounded-full -mr-10 -mt-10"></div>
-              <div className="flex items-center mb-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center mr-3">
-                  <CheckCircle className="w-5 h-5 text-emerald-600" />
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-4 border border-emerald-50 relative overflow-hidden hover:shadow-lg transition-all duration-300">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-100 rounded-full -mr-8 -mt-8"></div>
+              <div className="flex items-center mb-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center mr-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
                 </div>
                 <p className="text-slate-500 text-sm font-medium">Accepted</p>
               </div>
-              <p className="text-3xl font-bold text-slate-800">
+              <p className="text-2xl font-bold text-slate-800">
                 {proformas.filter(p => p.status === 'Accepted').length}
               </p>
             </div>
             
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-rose-50 relative overflow-hidden hover:shadow-xl transition-all duration-300">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-rose-100 rounded-full -mr-10 -mt-10"></div>
-              <div className="flex items-center mb-3">
-                <div className="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center mr-3">
-                  <X className="w-5 h-5 text-rose-600" />
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-4 border border-rose-50 relative overflow-hidden hover:shadow-lg transition-all duration-300">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-rose-100 rounded-full -mr-8 -mt-8"></div>
+              <div className="flex items-center mb-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center mr-2">
+                  <X className="w-4 h-4 text-rose-600" />
                 </div>
                 <p className="text-slate-500 text-sm font-medium">Cancelled</p>
               </div>
-              <p className="text-3xl font-bold text-slate-800">
+              <p className="text-2xl font-bold text-slate-800">
                 {proformas.filter(p => p.status === 'Cancelled').length}
               </p>
             </div>
           </div>
         </div>
-
+        
         {/* Filters & Search */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 mb-8 border border-indigo-50">
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-4 mb-6 border border-indigo-50">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
             {/* Search */}
             <div className="relative flex-1 max-w-lg">
               <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by number, customer, vehicle..."
+                placeholder="Search by number, customer, company..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-14 pr-5 py-4 w-full bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-800 placeholder-slate-400 shadow-sm"
+                className="pl-14 pr-5 py-3 w-full bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-800 placeholder-slate-400 shadow-sm"
               />
             </div>
             
             {/* Filter Toggle */}
             <button 
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center space-x-3 px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl shadow-sm hover:bg-slate-100 transition"
+              className="flex items-center space-x-3 px-6 py-3 bg-slate-50 border border-slate-200 rounded-xl shadow-sm hover:bg-slate-100 transition"
             >
               <Filter className="w-5 h-5 text-slate-600" />
               <span className="font-medium text-slate-700">Filters</span>
               <ChevronDown className={`w-5 h-5 text-slate-600 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
             </button>
           </div>
-
+          
           {/* Advanced Filters */}
           {showFilters && (
-            <div className="mt-8 pt-8 border-t border-slate-200">
+            <div className="mt-6 pt-6 border-t border-slate-200">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Status Filter */}
                 <div>
@@ -458,7 +570,7 @@ const Performa: React.FC = () => {
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 text-slate-800 shadow-sm"
+                    className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-800 shadow-sm"
                   >
                     <option value="all">All Status</option>
                     <option value="draft">Draft</option>
@@ -468,7 +580,6 @@ const Performa: React.FC = () => {
                     <option value="cancelled">Cancelled</option>
                   </select>
                 </div>
-
                 {/* Date Range Start */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-3">From Date</label>
@@ -477,12 +588,11 @@ const Performa: React.FC = () => {
                       type="date"
                       value={dateRange.start}
                       onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
-                      className="w-full pl-14 pr-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 text-slate-800 shadow-sm"
+                      className="w-full pl-14 pr-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-800 shadow-sm"
                     />
                     <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
                   </div>
                 </div>
-
                 {/* Date Range End */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-3">To Date</label>
@@ -491,18 +601,17 @@ const Performa: React.FC = () => {
                       type="date"
                       value={dateRange.end}
                       onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
-                      className="w-full pl-14 pr-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 text-slate-800 shadow-sm"
+                      className="w-full pl-14 pr-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-800 shadow-sm"
                     />
                     <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
                   </div>
                 </div>
               </div>
-
               {/* Reset Filters Button */}
-              <div className="mt-8 flex justify-end">
+              <div className="mt-6 flex justify-end">
                 <button
                   onClick={resetFilters}
-                  className="px-5 py-3 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"
+                  className="px-5 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"
                 >
                   Reset Filters
                 </button>
@@ -510,12 +619,12 @@ const Performa: React.FC = () => {
             </div>
           )}
         </div>
-
+        
         {/* Sorting Controls */}
-        <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl font-bold text-slate-800 flex items-center">
-            {filteredProformas.length} Proforma{filteredProformas.length !== 1 ? 's' : ''} Found
-            <Star className="w-6 h-6 text-amber-500 ml-3" />
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-slate-800 flex items-center">
+            {pagination.total} Proforma{pagination.total !== 1 ? 's' : ''} Found
+            <Star className="w-5 h-5 text-amber-500 ml-3" />
           </h2>
           <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-3">
@@ -523,7 +632,7 @@ const Performa: React.FC = () => {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-medium shadow-sm"
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-slate-800 font-medium shadow-sm"
               >
                 <option value="date">Date</option>
                 <option value="amount">Amount</option>
@@ -531,18 +640,18 @@ const Performa: React.FC = () => {
               </select>
               <button 
                 onClick={toggleSortOrder}
-                className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 shadow-sm"
+                className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 shadow-sm"
               >
                 {sortOrder === 'asc' ? <ArrowUp className="w-5 h-5" /> : <ArrowDown className="w-5 h-5" />}
               </button>
             </div>
-            <button className="flex items-center space-x-3 text-slate-600 hover:text-slate-900 font-medium px-4 py-3 rounded-xl hover:bg-slate-50 transition">
+            <button className="flex items-center space-x-3 text-slate-600 hover:text-slate-900 font-medium px-4 py-2 rounded-xl hover:bg-slate-50 transition">
               <Download className="w-5 h-5" />
               <span>Export</span>
             </button>
           </div>
         </div>
-
+        
         {/* Proforma List */}
         {loading ? (
           <div className="text-center py-24">
@@ -561,7 +670,7 @@ const Performa: React.FC = () => {
             </div>
             <p className="text-rose-700 font-bold text-xl mb-4">Error: {error}</p>
             <button
-              onClick={() => window.location.reload()}
+              onClick={refreshData}
               className="mt-6 px-8 py-4 bg-gradient-to-r from-rose-600 to-pink-600 text-white rounded-2xl hover:from-rose-700 hover:to-pink-700 transition font-medium shadow-lg"
             >
               Retry
@@ -588,134 +697,173 @@ const Performa: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="space-y-8">
-            {filteredProformas.map((p) => {
-              const StatusIcon = getStatusConfig(p.status).icon;
-              const { color, bgColor, textColor, ring } = getStatusConfig(p.status);
-              return (
-                <div
-                  key={p.id}
-                  className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg overflow-hidden border border-slate-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 group"
-                >
-                  <div className="p-8">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-8 mb-8">
-                      <div className="flex items-center">
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mr-6 shadow-lg">
-                          <Receipt className="w-8 h-8 text-white" />
+          <>
+            <div className="space-y-4">
+              {filteredProformas.map((p) => {
+                const StatusIcon = getStatusConfig(p.status).icon;
+                const { color, bgColor, textColor, ring } = getStatusConfig(p.status);
+                return (
+                  <div
+                    key={p.id}
+                    className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md overflow-hidden border border-slate-100 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 group"
+                  >
+                    <div className="p-4">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                        <div className="flex items-center">
+                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mr-3 shadow-md">
+                            <Receipt className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-bold text-slate-800">{p.proforma_number}</h3>
+                            <div className="flex items-center mt-1">
+                              <Calendar className="w-4 h-4 text-slate-500 mr-1" />
+                              <span className="text-slate-600 text-sm">{formatDate(p.proforma_date)}</span>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="text-3xl font-bold text-slate-800">{p.proforma_number}</h3>
-                          <div className="flex items-center mt-3">
-                            <Calendar className="w-5 h-5 text-slate-500 mr-2" />
-                            <span className="text-slate-600 font-medium">{formatDate(p.proforma_date)}</span>
+                        
+                        <div className="flex items-center space-x-4">
+                          <span className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-bold border ${color} shadow-sm ring-2 ${ring}`}>
+                            <StatusIcon className="w-4 h-4" />
+                            <span>{p.status}</span>
+                          </span>
+                          
+                          <div className="text-right">
+                            <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-700">
+                              {formatCurrency(p.total)}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              VAT: {formatCurrency(p.vat_amount)}
+                            </p>
                           </div>
                         </div>
                       </div>
                       
-                      <div className="flex items-center space-x-8">
-                        <span className={`flex items-center space-x-3 px-5 py-3 rounded-full text-sm font-bold border ${color} shadow-sm ring-2 ${ring}`}>
-                          <StatusIcon className="w-5 h-5" />
-                          <span>{p.status}</span>
-                        </span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+                        {p.customer_name && (
+                          <div className="flex items-center text-slate-700">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center mr-2">
+                              <User className="w-4 h-4 text-emerald-600" />
+                            </div>
+                            <div>
+                              <span className="text-xs text-slate-500 font-medium block">CUSTOMER</span>
+                              <span className="font-medium text-sm">{p.customer_name}</span>
+                            </div>
+                          </div>
+                        )}
                         
-                        <div className="text-right">
-                          <p className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-700">
-                            {formatCurrency(p.total)}
-                          </p>
-                          <p className="text-sm text-slate-500 mt-2">
-                            VAT: {formatCurrency(p.vat_amount)}
-                          </p>
-                        </div>
+                        {p.company_name && (
+                          <div className="flex items-center text-slate-700">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-100 to-violet-100 flex items-center justify-center mr-2">
+                              <Building className="w-4 h-4 text-purple-600" />
+                            </div>
+                            <div>
+                              <span className="text-xs text-slate-500 font-medium block">COMPANY</span>
+                              <span className="font-medium text-sm">{p.company_name}</span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {p.notes && (
+                          <div className="flex items-start text-slate-700">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center mr-2 mt-1">
+                              <FileText className="w-4 h-4 text-amber-600" />
+                            </div>
+                            <div>
+                              <span className="text-xs text-slate-500 font-medium block">NOTES</span>
+                              <p className="font-medium text-sm truncate">{p.notes}</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8 border-t border-slate-100">
-                      {p.customer_name && (
-                        <div className="flex items-center text-slate-700">
-                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center mr-4">
-                            <User className="w-6 h-6 text-emerald-600" />
-                          </div>
-                          <div>
-                            <span className="text-xs text-slate-500 font-medium block">CUSTOMER</span>
-                            <span className="font-semibold text-lg">{p.customer_name}</span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {p.vehicle && (
-                        <div className="flex items-center text-slate-700">
-                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center mr-4">
-                            <Car className="w-6 h-6 text-amber-600" />
-                          </div>
-                          <div>
-                            <span className="text-xs text-slate-500 font-medium block">VEHICLE</span>
-                            <span className="font-semibold text-lg">{p.vehicle}</span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {p.notes && (
-                        <div className="flex items-start text-slate-700">
-                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-100 to-violet-100 flex items-center justify-center mr-4 mt-1">
-                            <FileText className="w-6 h-6 text-purple-600" />
-                          </div>
-                          <div>
-                            <span className="text-xs text-slate-500 font-medium block">NOTES</span>
-                            <p className="font-medium text-lg">{p.notes}</p>
-                          </div>
-                        </div>
-                      )}
+                    <div className="px-4 py-3 bg-slate-50 flex justify-end space-x-2 border-t border-slate-100">
+                      <button 
+                        onClick={() => handleViewProforma(p.id)}
+                        className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all duration-300 group shadow-sm"
+                      >
+                        <Eye className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                      </button>
+                      <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 transition-all duration-300 group shadow-sm">
+                        <Edit className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                      </button>
+                      <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 transition-all duration-300 group shadow-sm">
+                        <Trash2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                      </button>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+            
+            {/* Pagination */}
+            {pagination.pages > 1 && (
+              <div className="flex justify-center mt-8">
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handlePageChange(pagination.page - 1)}
+                    disabled={pagination.page === 1}
+                    className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
                   
-                  <div className="px-8 py-6 bg-slate-50 flex justify-end space-x-4 border-t border-slate-100">
-                    <button 
-                      onClick={() => handleViewProforma(p.id)}
-                      className="p-4 rounded-2xl bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all duration-300 group shadow-sm"
+                  {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => handlePageChange(page)}
+                      className={`px-4 py-2 rounded-lg ${
+                        page === pagination.page
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
                     >
-                      <Eye className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                      {page}
                     </button>
-                    <button className="p-4 rounded-2xl bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 transition-all duration-300 group shadow-sm">
-                      <Edit className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                    </button>
-                    <button className="p-4 rounded-2xl bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 transition-all duration-300 group shadow-sm">
-                      <Trash2 className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                    </button>
-                  </div>
+                  ))}
+                  
+                  <button
+                    onClick={() => handlePageChange(pagination.page + 1)}
+                    disabled={pagination.page === pagination.pages}
+                    className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
-
+      
       {/* Proforma Detail Modal */}
       {selectedProformaId !== null && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-200">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-8 text-white">
+            <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-3xl font-bold flex items-center">
-                    <Receipt className="w-10 h-10 mr-4" />
+                  <h2 className="text-2xl font-bold flex items-center">
+                    <Receipt className="w-8 h-8 mr-3" />
                     Proforma Invoice Details
                   </h2>
-                  <p className="text-indigo-100 mt-2">
+                  <p className="text-indigo-100 mt-1">
                     {selectedProforma ? selectedProforma.proforma_number : `Proforma #${selectedProformaId}`}
                   </p>
                 </div>
                 <button 
                   onClick={closeModal}
-                  className="p-3 rounded-full hover:bg-indigo-500 transition"
+                  className="p-2 rounded-full hover:bg-indigo-500 transition"
                 >
-                  <Close className="w-7 h-7" />
+                  <Close className="w-6 h-6" />
                 </button>
               </div>
             </div>
-
+            
             {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-8">
+            <div className="flex-1 overflow-y-auto p-6">
               {modalLoading ? (
                 <div className="flex justify-center items-center h-64">
                   <div className="relative inline-block">
@@ -725,7 +873,7 @@ const Performa: React.FC = () => {
                   <span className="ml-4 text-slate-600 text-lg">Loading proforma details...</span>
                 </div>
               ) : modalError ? (
-                <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center">
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
                   <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
                     <X className="w-8 h-8 text-red-500" />
                   </div>
@@ -738,91 +886,139 @@ const Performa: React.FC = () => {
                   </button>
                 </div>
               ) : selectedProforma ? (
-                <div className="space-y-10">
+                <div id="proforma-detail-content" className="space-y-6 text-black">
                   {/* Proforma Header */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="bg-slate-50 rounded-2xl p-6">
-                      <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
-                        <Hash className="w-6 h-6 mr-3 text-indigo-600" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-slate-50 rounded-xl p-4">
+                      <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                        <Hash className="w-5 h-5 mr-2 text-indigo-600" />
                         Proforma Information
                       </h3>
-                      <div className="space-y-5">
+                      <div className="space-y-3">
                         <div className="flex items-center">
-                          <span className="text-slate-500 w-40">Proforma #:</span>
-                          <span className="font-medium text-lg">{selectedProforma.proforma_number}</span>
+                          <span className="text-slate-500 w-32 text-sm">Proforma #:</span>
+                          <span className="font-medium text-black">{selectedProforma.proforma_number}</span>
                         </div>
                         <div className="flex items-center">
-                          <span className="text-slate-500 w-40">Date:</span>
-                          <span className="font-medium text-lg">{formatDate(selectedProforma.proforma_date)}</span>
+                          <span className="text-slate-500 w-32 text-sm">Date:</span>
+                          <span className="font-medium text-black">{formatDate(selectedProforma.proforma_date)}</span>
                         </div>
                         <div className="flex items-center">
-                          <span className="text-slate-500 w-40">Status:</span>
-                          <span className={`flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-medium ${getStatusConfig(selectedProforma.status).color}`}>
+                          <span className="text-slate-500 w-32 text-sm">Status:</span>
+                          <span className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusConfig(selectedProforma.status).color}`}>
                             {React.createElement(getStatusConfig(selectedProforma.status).icon, { className: "w-4 h-4" })}
                             <span>{selectedProforma.status}</span>
                           </span>
                         </div>
                         {selectedProforma.notes && (
                           <div className="flex items-start">
-                            <span className="text-slate-500 w-40">Notes:</span>
-                            <span className="font-medium text-lg">{selectedProforma.notes}</span>
+                            <span className="text-slate-500 w-32 text-sm">Notes:</span>
+                            <span className="font-medium text-black">{selectedProforma.notes}</span>
                           </div>
                         )}
                       </div>
                     </div>
+                   {/* Update the Financial Summary section in the modal */}
+<div className="bg-slate-50 rounded-xl p-4">
+  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+    <CreditCard className="w-5 h-5 mr-2 text-indigo-600" />
+    Financial Summary
+  </h3>
+  <div className="space-y-3">
+    <div className="flex justify-between">
+      <span className="text-slate-600">Subtotal:</span>
+      <span className="font-medium text-black">{formatCurrency(selectedProforma.subtotal)}</span>
+    </div>
+    <div className="flex justify-between">
+      <span className="text-slate-600">VAT (15%):</span>
+      <span className="font-medium text-black">{formatCurrency(selectedProforma.vat_amount)}</span>
+    </div>
+    <div className="flex justify-between pt-3 border-t-2 border-slate-300">
+      <span className="text-lg font-bold text-slate-800">Total:</span>
+      <span className="text-xl font-bold text-black">
+        {formatCurrency(selectedProforma.total)}
+      </span>
+    </div>
+  </div>
+</div>
+                  </div>
 
-                    <div className="bg-slate-50 rounded-2xl p-6">
-                      <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
-                        <CreditCard className="w-6 h-6 mr-3 text-indigo-600" />
-                        Financial Summary
-                      </h3>
-                      <div className="space-y-5">
-                        <div className="flex justify-between">
-                          <span className="text-slate-600 text-lg">Subtotal:</span>
-                          <span className="font-medium text-lg">{formatCurrency(selectedProforma.subtotal)}</span>
+                  {/* Customer Information */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                      <User className="w-5 h-5 mr-2 text-indigo-600" />
+                      Customer Information
+                    </h3>
+                    <div className="space-y-3">
+                      {selectedProforma.customer_name && (
+                        <div className="flex items-center">
+                          <span className="text-slate-500 w-32 text-sm">Name:</span>
+                          <span className="font-medium text-black">{selectedProforma.customer_name}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-600 text-lg">VAT (15%):</span>
-                          <span className="font-medium text-lg">{formatCurrency(selectedProforma.vat_amount)}</span>
-                        </div>
-                        <div className="flex justify-between pt-5 border-t border-slate-200">
-                          <span className="text-xl font-bold text-slate-800">Total:</span>
-                          <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-700">
-                            {formatCurrency(selectedProforma.total)}
-                          </span>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </div>
 
+                  {/* Company Information */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                      <Building className="w-5 h-5 mr-2 text-indigo-600" />
+                      Company Information
+                    </h3>
+                    <div className="space-y-3">
+                      {selectedProforma.company_name && (
+                        <div className="flex items-center">
+                          <span className="text-slate-500 w-32 text-sm">Name:</span>
+                          <span className="font-medium text-black">{selectedProforma.company_name}</span>
+                        </div>
+                      )}
+                      {selectedProforma.company_address && (
+                        <div className="flex items-start">
+                          <span className="text-slate-500 w-32 text-sm">Address:</span>
+                          <span className="font-medium text-black">{selectedProforma.company_address}</span>
+                        </div>
+                      )}
+                      {selectedProforma.company_phone && (
+                        <div className="flex items-center">
+                          <span className="text-slate-500 w-32 text-sm">Phone:</span>
+                          <span className="font-medium text-black">{selectedProforma.company_phone}</span>
+                        </div>
+                      )}
+                      {selectedProforma.company_vat_number && (
+                        <div className="flex items-center">
+                          <span className="text-slate-500 w-32 text-sm">VAT Number:</span>
+                          <span className="font-medium text-black">{selectedProforma.company_vat_number}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
              
-
                   {/* Items Table */}
                   {selectedProforma.items && selectedProforma.items.length > 0 && (
-                    <div className="bg-slate-50 rounded-2xl p-6">
-                      <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
-                        <Package className="w-6 h-6 mr-3 text-indigo-600" />
+                    <div className="bg-slate-50 rounded-xl p-4">
+                      <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                        <Package className="w-5 h-5 mr-2 text-indigo-600" />
                         Items
                       </h3>
                       <div className="overflow-x-auto">
-                        <table className="w-full border-collapse bg-white rounded-xl overflow-hidden">
+                        <table className="w-full border-collapse bg-white rounded-lg overflow-hidden">
                           <thead>
                             <tr className="bg-slate-100">
-                              <th className="text-left p-4 font-semibold text-slate-700">Description</th>
-                              <th className="text-left p-4 font-semibold text-slate-700">Size</th>
-                              <th className="text-right p-4 font-semibold text-slate-700">Quantity</th>
-                              <th className="text-right p-4 font-semibold text-slate-700">Unit Price</th>
-                              <th className="text-right p-4 font-semibold text-slate-700">Total</th>
+                              <th className="text-left p-3 font-semibold text-slate-700">Description</th>
+                              <th className="text-left p-3 font-semibold text-slate-700">Size</th>
+                              <th className="text-right p-3 font-semibold text-slate-700">Quantity</th>
+                              <th className="text-right p-3 font-semibold text-slate-700">Unit Price</th>
+                              <th className="text-right p-3 font-semibold text-slate-700">Total</th>
                             </tr>
                           </thead>
                           <tbody>
                             {selectedProforma.items.map((item, index) => (
                               <tr key={item.id || index} className="hover:bg-slate-50 border-b border-slate-100">
-                                <td className="p-4">{item.description}</td>
-                                <td className="p-4">{item.size || '-'}</td>
-                                <td className="p-4 text-right">{item.quantity}</td>
-                                <td className="p-4 text-right">{formatCurrency(item.unit_price)}</td>
-                                <td className="p-4 text-right font-medium">
+                                <td className="p-3 text-black">{item.description}</td>
+                                <td className="p-3 text-black">{item.size || '-'}</td>
+                                <td className="p-3 text-right text-black">{item.quantity}</td>
+                                <td className="p-3 text-right text-black">{formatCurrency(item.unit_price)}</td>
+                                <td className="p-3 text-right font-medium text-black">
                                   {formatCurrency(item.quantity * item.unit_price)}
                                 </td>
                               </tr>
@@ -842,16 +1038,19 @@ const Performa: React.FC = () => {
                 </div>
               )}
             </div>
-
+            
             {/* Modal Footer */}
-            <div className="bg-slate-50 p-6 border-t border-slate-200 flex justify-end space-x-4">
+            <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-end space-x-3">
               <button 
                 onClick={closeModal}
-                className="px-6 py-3 bg-white border border-slate-300 rounded-2xl text-slate-700 hover:bg-slate-100 transition"
+                className="px-5 py-2 bg-white border border-slate-300 rounded-xl text-slate-700 hover:bg-slate-100 transition"
               >
                 Close
               </button>
-              <button className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl hover:from-indigo-700 hover:to-violet-700 transition flex items-center">
+              <button 
+                onClick={handleDownloadPDF}
+                className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl hover:from-indigo-700 hover:to-violet-700 transition flex items-center"
+              >
                 <Download className="w-5 h-5 mr-2" />
                 Download PDF
               </button>
@@ -860,33 +1059,55 @@ const Performa: React.FC = () => {
         </div>
       )}
 
-      <style jsx>{`
-        @keyframes blob {
-          0% {
-            transform: translate(0px, 0px) scale(1);
-          }
-          33% {
-            transform: translate(30px, -50px) scale(1.1);
-          }
-          66% {
-            transform: translate(-20px, 20px) scale(0.9);
-          }
-          100% {
-            transform: translate(0px, 0px) scale(1);
-          }
-        }
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-      `}</style>
-
-    
+      {/* PerformaInvoice Modal */}
+      <PerformaInvoice
+        isOpen={showInvoiceModal}
+        onClose={() => setShowInvoiceModal(false)}
+        onSaveSuccess={() => {
+          refreshData();
+          setShowInvoiceModal(false);
+        }}
+      />
+  
+<style jsx>{`
+  @keyframes blob {
+    0% {
+      transform: translate(0px, 0px) scale(1);
+    }
+    33% {
+      transform: translate(30px, -50px) scale(1.1);
+    }
+    66% {
+      transform: translate(-20px, 20px) scale(0.9);
+    }
+    100% {
+      transform: translate(0px, 0px) scale(1);
+    }
+  }
+  .animate-blob {
+    animation: blob 7s infinite;
+  }
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+  .animation-delay-4000 {
+    animation-delay: 4s;
+  }
+  
+  /* Print-specific styles */
+  @media print {
+    .print-content {
+      color: black !important;
+      background: white !important;
+    }
+    .print-content * {
+      color: black !important;
+      background: white !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+`}</style>
     </div>
   );
 };
