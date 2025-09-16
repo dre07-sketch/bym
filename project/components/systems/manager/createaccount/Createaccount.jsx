@@ -36,7 +36,10 @@ const CreateAccount = () => {
     'Stockroom',
     'Inspection',
     'Finance/HR',
-    'Reception'
+    'Reception',
+    'communication',
+    'marketing',
+    
   ];
 
   const specialties = [

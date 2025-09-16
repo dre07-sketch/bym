@@ -31,6 +31,7 @@ const billRoutes = require('./routes/reception/bill'); // Importing bill routes
 const communicationRoutes = require('./routes/communication-center/communication-center.js'); // Importing communication routes
 const communicationstatsRoutes = require('./routes/communication-center/stats.js'); // Importing communication analytics routes
 const marketingRoutes = require('./routes/marketing-management-system/marketing-activity.js'); // Importing marketing routes
+const insuranceRoutes = require('./routes/reception/insurance'); // Importing insurance routes
 
 
 app.use(express.json());
@@ -126,6 +127,11 @@ app.use('/api/communication-stats', communicationstatsRoutes);
 
 //----------------marketing management system----------------
 app.use('/api/marketing', marketingRoutes);
+
+//----------------insurance----------------
+app.use('/api/insurance', insuranceRoutes);
+
+
 
 
 // Check MySQL before starting server

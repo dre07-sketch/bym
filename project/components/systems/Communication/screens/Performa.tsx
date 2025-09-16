@@ -66,7 +66,7 @@ interface Proforma {
   company_phone?: string;
   company_vat_number?: string;
   notes?: string;
-  status: 'Draft' | 'Awaiting Send' | 'Sent' | 'Accepted' | 'Cancelled';
+  status: 'Draft' | 'Awaiting Send' | 'Sent' | 'Accepted' | 'Cancelled' | 'Expired';
   subtotal: number;
   vat_rate?: number;
   vat_amount: number;
@@ -111,6 +111,19 @@ const Performa: React.FC = () => {
   const [modalError, setModalError] = useState<string | null>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState<boolean>(false);
   
+  // Status dropdown state
+  const [openStatusDropdown, setOpenStatusDropdown] = useState<number | null>(null);
+  
+  // Allowed statuses
+  const allowedStatuses = [
+    'Awaiting Send',
+    'Sent',
+    'Cancelled',
+    'Accepted',
+    'Expired',
+    'Draft'
+  ];
+  
   // Function to navigate to the PerformaInvoice page
   const handleNewProforma = () => {
     setShowInvoiceModal(true);
@@ -143,7 +156,7 @@ const Performa: React.FC = () => {
       setLoading(false);
     }
   };
-
+  
   // Fetch proformas from backend
   useEffect(() => {
     const fetchProformas = async () => {
@@ -170,7 +183,7 @@ const Performa: React.FC = () => {
     };
     fetchProformas();
   }, []);
-
+  
   // Apply filters and search
   useEffect(() => {
     const applyFilters = async () => {
@@ -206,24 +219,24 @@ const Performa: React.FC = () => {
     
     applyFilters();
   }, [searchTerm, filterStatus, dateRange]); // Removed pagination.limit from dependencies
-
+  
   // Handle pagination
   const handlePageChange = (page: number) => {
     setPagination(prev => ({ ...prev, page }));
   };
-
+  
   // Fetch proforma details when modal is opened
   useEffect(() => {
     if (selectedProformaId) {
       fetchProformaDetails(selectedProformaId);
     }
   }, [selectedProformaId]);
-
+  
   // Fetch proforma details for modal
   const fetchProformaDetails = async (id: number) => {
     setModalLoading(true);
     setModalError(null);
-    setSelectedProforma(null);
+    // Don't set selectedProforma to null here to preserve existing data
     
     try {
       const response = await fetch(`http://localhost:5001/api/communication-center/proformas/${id}`);
@@ -231,7 +244,18 @@ const Performa: React.FC = () => {
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
       
-      setSelectedProforma(result.data);
+      // Update selectedProforma while preserving customer info if it exists
+      setSelectedProforma(prev => {
+        if (prev && prev.id === id) {
+          // Preserve customer_name and company_name from previous state if they exist
+          return {
+            ...result.data,
+            customer_name: prev.customer_name || result.data.customer_name,
+            company_name: prev.company_name || result.data.company_name
+          };
+        }
+        return result.data;
+      });
     } catch (err) {
       console.error('Fetch proforma details error:', err);
       setModalError(err instanceof Error ? err.message : 'Failed to load proforma details.');
@@ -239,110 +263,149 @@ const Performa: React.FC = () => {
       setModalLoading(false);
     }
   };
-
+  
   // Handle view proforma
   const handleViewProforma = (id: number) => {
+    // First, set the selectedProforma to the one from the list
+    const proforma = proformas.find(p => p.id === id);
+    if (proforma) {
+      setSelectedProforma(proforma);
+    }
     setSelectedProformaId(id);
   };
-
+  
   // Close modal
   const closeModal = () => {
     setSelectedProformaId(null);
     setSelectedProforma(null);
     setModalError(null);
   };
-
-  // Download PDF for detail modal
- // Update the handleDownloadPDF function
-const handleDownloadPDF = async () => {
-  if (!selectedProforma) return;
   
-  try {
-    // Wait a bit to ensure all content is rendered
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const element = document.getElementById('proforma-detail-content');
-    if (!element) return;
-    
-    // Temporarily remove any animations or transitions that might interfere
-    const originalTransition = element.style.transition;
-    element.style.transition = 'none';
-    
-    const canvas = await html2canvas(element, {
-      scale: 3, // Increased scale for better quality
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      allowTaint: true,
-      // Ensure all text is rendered
-      onclone: (clonedDoc) => {
-        clonedDoc.querySelectorAll('*').forEach(el => {
-          const style = window.getComputedStyle(el);
-          el.style.fontFamily = style.fontFamily;
-          el.style.fontSize = style.fontSize;
-          el.style.fontWeight = style.fontWeight;
-          el.style.color = style.color;
-          el.style.backgroundColor = style.backgroundColor;
-        });
-        return clonedDoc;
-      }
-    });
-    
-    // Restore original transition
-    element.style.transition = originalTransition;
-    
-    const imgData = canvas.toDataURL('image/png', 1.0);
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-    
-    // Check if content fits on one page
-    if (pdfHeight <= pdf.internal.pageSize.getHeight()) {
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    } else {
-      // Multi-page PDF
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      let remainingHeight = canvas.height;
-      let position = 0;
+  // Update proforma status
+  const updateProformaStatus = async (id: number, newStatus: string) => {
+    try {
+      const response = await fetch(`http://localhost:5001/api/communication-center/proformas/${id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      if (!result.success) throw new Error(result.message);
+      // Update the proforma in the list
+      setProformas(prev => prev.map(p => p.id === id ? { ...p, status: newStatus as any } : p));
+      setFilteredProformas(prev => prev.map(p => p.id === id ? { ...p, status: newStatus as any } : p));
       
-      while (remainingHeight > 0) {
-        const pageCanvas = document.createElement('canvas');
-        const ctx = pageCanvas.getContext('2d');
-        
-        const sourceCanvas = document.createElement('canvas');
-        const sourceCtx = sourceCanvas.getContext('2d');
-        sourceCanvas.width = canvas.width;
-        sourceCanvas.height = canvas.height;
-        sourceCtx.drawImage(canvas, 0, 0);
-        
-        const sliceHeight = Math.min(pageHeight * (canvas.width / pdfWidth), remainingHeight);
-        
-        pageCanvas.width = canvas.width;
-        pageCanvas.height = sliceHeight;
-        ctx.drawImage(sourceCanvas, 0, position, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
-        
-        const sliceImgData = pageCanvas.toDataURL('image/png', 1.0);
-        const slicePdfHeight = (sliceHeight * pdfWidth) / canvas.width;
-        
-        if (position > 0) {
-          pdf.addPage();
-        }
-        
-        pdf.addImage(sliceImgData, 'PNG', 0, 0, pdfWidth, slicePdfHeight);
-        
-        remainingHeight -= sliceHeight;
-        position += sliceHeight;
+      // Update selected proforma if it's open in modal
+      if (selectedProforma && selectedProforma.id === id) {
+        setSelectedProforma({ ...selectedProforma, status: newStatus as any });
       }
+      
+      // Show success feedback
+      console.log(`Status updated to ${newStatus}`);
+    } catch (err) {
+      console.error('Error updating proforma status:', err);
+      alert(`Failed to update status: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
+  };
+  
+  // Download PDF for detail modal
+  const handleDownloadPDF = async () => {
+    if (!selectedProforma) return;
     
-    pdf.save(`proforma-${selectedProforma.proforma_number}.pdf`);
-  } catch (error) {
-    console.error('PDF generation error:', error);
-    alert('Failed to generate PDF. Please try again.');
-  }
-};
-
+    try {
+      // Wait a bit to ensure all content is rendered
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const element = document.getElementById('proforma-detail-content');
+      if (!element) return;
+      
+      // Temporarily remove any animations or transitions that might interfere
+      const originalTransition = (element as HTMLElement).style.transition;
+      (element as HTMLElement).style.transition = 'none';
+      
+      const canvas = await html2canvas(element, {
+        scale: 3, // Increased scale for better quality
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        allowTaint: true,
+        // Ensure all text is rendered
+        onclone: (clonedDoc) => {
+          clonedDoc.querySelectorAll('*').forEach((el) => {
+            const htmlElement = el as HTMLElement;
+            const style = window.getComputedStyle(htmlElement);
+            htmlElement.style.fontFamily = style.fontFamily;
+            htmlElement.style.fontSize = style.fontSize;
+            htmlElement.style.fontWeight = style.fontWeight;
+            htmlElement.style.color = style.color;
+            htmlElement.style.backgroundColor = style.backgroundColor;
+          });
+          return clonedDoc;
+        }
+      });
+      
+      // Restore original transition
+      (element as HTMLElement).style.transition = originalTransition;
+      
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      // Check if content fits on one page
+      if (pdfHeight <= pdf.internal.pageSize.getHeight()) {
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      } else {
+        // Multi-page PDF
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        let remainingHeight = canvas.height;
+        let position = 0;
+        
+        while (remainingHeight > 0) {
+          const pageCanvas = document.createElement('canvas');
+          const ctx = pageCanvas.getContext('2d');
+          
+          const sourceCanvas = document.createElement('canvas');
+          const sourceCtx = sourceCanvas.getContext('2d');
+          if (!sourceCtx) throw new Error('Failed to get 2D context for source canvas');
+          
+          sourceCanvas.width = canvas.width;
+          sourceCanvas.height = canvas.height;
+          sourceCtx.drawImage(canvas, 0, 0);
+          
+          const sliceHeight = Math.min(pageHeight * (canvas.width / pdfWidth), remainingHeight);
+          
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = sliceHeight;
+          
+          if (!ctx) throw new Error('Failed to get 2D context for page canvas');
+          ctx.drawImage(sourceCanvas, 0, position, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+          
+          const sliceImgData = pageCanvas.toDataURL('image/png', 1.0);
+          const slicePdfHeight = (sliceHeight * pdfWidth) / canvas.width;
+          
+          if (position > 0) {
+            pdf.addPage();
+          }
+          
+          pdf.addImage(sliceImgData, 'PNG', 0, 0, pdfWidth, slicePdfHeight);
+          
+          remainingHeight -= sliceHeight;
+          position += sliceHeight;
+        }
+      }
+      
+      pdf.save(`proforma-${selectedProforma.proforma_number}.pdf`);
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      alert('Failed to generate PDF. Please try again.');
+    }
+  };
+  
   // Status badge colors
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -386,6 +449,14 @@ const handleDownloadPDF = async () => {
           textColor: 'text-rose-600',
           ring: 'ring-rose-500/20'
         };
+      case 'Expired':
+        return { 
+          icon: Clock, 
+          color: 'bg-gradient-to-r from-purple-100 to-fuchsia-50 text-purple-700 border-purple-200',
+          bgColor: 'from-purple-500 to-fuchsia-600',
+          textColor: 'text-purple-600',
+          ring: 'ring-purple-500/20'
+        };
       default:
         return { 
           icon: MoreVertical, 
@@ -396,7 +467,37 @@ const handleDownloadPDF = async () => {
         };
     }
   };
-
+  
+  // Status change buttons component
+  const StatusChangeButtons: React.FC<{ 
+    proforma: Proforma; 
+    onUpdate: (status: string) => void;
+  }> = ({ proforma, onUpdate }) => {
+    // Filter out current status
+    const availableStatuses = allowedStatuses.filter(status => status !== proforma.status);
+    
+    return (
+      <div className="flex flex-wrap gap-2 mt-4">
+        <span className="text-sm font-medium text-slate-600 self-center">Change status to:</span>
+        {availableStatuses.map(status => {
+          const StatusIcon = getStatusConfig(status).icon;
+          const { color } = getStatusConfig(status);
+          
+          return (
+            <button
+              key={status}
+              onClick={() => onUpdate(status)}
+              className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 hover:shadow-md ${color} hover:scale-105`}
+            >
+              <StatusIcon className="w-3.5 h-3.5" />
+              <span>{status}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+  
   // Format currency
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -404,7 +505,7 @@ const handleDownloadPDF = async () => {
       currency: 'USD',
     }).format(amount);
   };
-
+  
   // Format date
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -413,19 +514,32 @@ const handleDownloadPDF = async () => {
       day: 'numeric'
     });
   };
-
+  
   // Reset filters
   const resetFilters = () => {
     setSearchTerm('');
     setFilterStatus('all');
     setDateRange({ start: '', end: '' });
   };
-
+  
   // Toggle sort order
   const toggleSortOrder = () => {
     setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
   };
-
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openStatusDropdown !== null) {
+        setOpenStatusDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [openStatusDropdown]);
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 p-4 md:p-8">
       {/* Decorative elements */}
@@ -434,7 +548,6 @@ const handleDownloadPDF = async () => {
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cyan-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
         <div className="absolute top-40 left-40 w-80 h-80 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
       </div>
-
       <div className="max-w-7xl mx-auto relative z-10">
         {/* Page Header */}
         <div className="mb-8">
@@ -469,16 +582,8 @@ const handleDownloadPDF = async () => {
           
           {/* Stats Summary */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-4 border border-indigo-50 relative overflow-hidden hover:shadow-lg transition-all duration-300">
-              <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-100 rounded-full -mr-8 -mt-8"></div>
-              <div className="flex items-center mb-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center mr-2">
-                  <Receipt className="w-4 h-4 text-indigo-600" />
-                </div>
-                <p className="text-slate-500 text-sm font-medium">Total</p>
-              </div>
-              <p className="text-2xl font-bold text-slate-800">{pagination.total}</p>
-            </div>
+           
+            
             
             <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-4 border border-amber-50 relative overflow-hidden hover:shadow-lg transition-all duration-300">
               <div className="absolute top-0 right-0 w-16 h-16 bg-amber-100 rounded-full -mr-8 -mt-8"></div>
@@ -578,6 +683,7 @@ const handleDownloadPDF = async () => {
                     <option value="sent">Sent</option>
                     <option value="accepted">Accepted</option>
                     <option value="cancelled">Cancelled</option>
+                    <option value="expired">Expired</option>
                   </select>
                 </div>
                 {/* Date Range Start */}
@@ -708,8 +814,9 @@ const handleDownloadPDF = async () => {
                     className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md overflow-hidden border border-slate-100 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 group"
                   >
                     <div className="p-4">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-                        <div className="flex items-center">
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
+                        {/* Left section: proforma info */}
+                        <div className="flex items-start">
                           <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mr-3 shadow-md">
                             <Receipt className="w-5 h-5 text-white" />
                           </div>
@@ -719,10 +826,27 @@ const handleDownloadPDF = async () => {
                               <Calendar className="w-4 h-4 text-slate-500 mr-1" />
                               <span className="text-slate-600 text-sm">{formatDate(p.proforma_date)}</span>
                             </div>
+                            
+                            {/* Customer name - always displayed if available */}
+                            {p.customer_name && (
+                              <div className="flex items-center mt-2">
+                                <User className="w-4 h-4 text-slate-500 mr-1" />
+                                <span className="text-slate-700 font-medium">{p.customer_name}</span>
+                              </div>
+                            )}
+                            
+                            {/* Company name - always displayed if available */}
+                            {p.company_name && (
+                              <div className="flex items-center mt-1">
+                                <Building className="w-4 h-4 text-slate-500 mr-1" />
+                                <span className="text-slate-700 font-medium">{p.company_name}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                         
-                        <div className="flex items-center space-x-4">
+                        {/* Right section: status and total */}
+                        <div className="flex flex-col items-end space-y-3">
                           <span className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-bold border ${color} shadow-sm ring-2 ${ring}`}>
                             <StatusIcon className="w-4 h-4" />
                             <span>{p.status}</span>
@@ -739,55 +863,73 @@ const handleDownloadPDF = async () => {
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
-                        {p.customer_name && (
-                          <div className="flex items-center text-slate-700">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center mr-2">
-                              <User className="w-4 h-4 text-emerald-600" />
-                            </div>
-                            <div>
-                              <span className="text-xs text-slate-500 font-medium block">CUSTOMER</span>
-                              <span className="font-medium text-sm">{p.customer_name}</span>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {p.company_name && (
-                          <div className="flex items-center text-slate-700">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-100 to-violet-100 flex items-center justify-center mr-2">
-                              <Building className="w-4 h-4 text-purple-600" />
-                            </div>
-                            <div>
-                              <span className="text-xs text-slate-500 font-medium block">COMPANY</span>
-                              <span className="font-medium text-sm">{p.company_name}</span>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {p.notes && (
+                      {/* Notes section at the bottom if exists */}
+                      {p.notes && (
+                        <div className="mt-4 pt-4 border-t border-slate-100">
                           <div className="flex items-start text-slate-700">
                             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center mr-2 mt-1">
                               <FileText className="w-4 h-4 text-amber-600" />
                             </div>
                             <div>
                               <span className="text-xs text-slate-500 font-medium block">NOTES</span>
-                              <p className="font-medium text-sm truncate">{p.notes}</p>
+                              <p className="font-medium text-sm">{p.notes}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="px-4 py-3 bg-slate-50 flex justify-end space-x-2 border-t border-slate-100">
+                      <div className="relative">
+                        <button 
+                          onClick={() => setOpenStatusDropdown(openStatusDropdown === p.id ? null : p.id)}
+                          className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all duration-300 group shadow-sm"
+                        >
+                          <MoreVertical className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+                        </button>
+                        
+                        {openStatusDropdown === p.id && (
+                          <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-slate-200 z-10 overflow-hidden">
+                            <div className="p-3 border-b border-slate-100">
+                              <p className="text-sm font-medium text-slate-700">Change Status</p>
+                            </div>
+                            <div className="py-1">
+                              {allowedStatuses
+                                .filter(status => status !== p.status)
+                                .map(status => {
+                                  const StatusIcon = getStatusConfig(status).icon;
+                                  const { color } = getStatusConfig(status);
+                                  
+                                  return (
+                                    <button
+                                      key={status}
+                                      onClick={() => {
+                                        updateProformaStatus(p.id, status);
+                                        setOpenStatusDropdown(null);
+                                      }}
+                                      className={`w-full text-left px-4 py-2.5 text-sm flex items-center space-x-2 hover:bg-slate-50 transition-colors ${color.replace('border-', 'hover:border-').replace('text-', 'hover:text-')}`}
+                                    >
+                                      <StatusIcon className="w-4 h-4" />
+                                      <span>{status}</span>
+                                    </button>
+                                  );
+                                })}
                             </div>
                           </div>
                         )}
                       </div>
-                    </div>
-                    
-                    <div className="px-4 py-3 bg-slate-50 flex justify-end space-x-2 border-t border-slate-100">
+                      
                       <button 
                         onClick={() => handleViewProforma(p.id)}
                         className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all duration-300 group shadow-sm"
                       >
                         <Eye className="w-5 h-5 group-hover:scale-110 transition-transform" />
                       </button>
+                      
                       <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 transition-all duration-300 group shadow-sm">
                         <Edit className="w-5 h-5 group-hover:scale-110 transition-transform" />
                       </button>
+                      
                       <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 transition-all duration-300 group shadow-sm">
                         <Trash2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
                       </button>
@@ -918,31 +1060,31 @@ const handleDownloadPDF = async () => {
                         )}
                       </div>
                     </div>
-                   {/* Update the Financial Summary section in the modal */}
-<div className="bg-slate-50 rounded-xl p-4">
-  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-    <CreditCard className="w-5 h-5 mr-2 text-indigo-600" />
-    Financial Summary
-  </h3>
-  <div className="space-y-3">
-    <div className="flex justify-between">
-      <span className="text-slate-600">Subtotal:</span>
-      <span className="font-medium text-black">{formatCurrency(selectedProforma.subtotal)}</span>
-    </div>
-    <div className="flex justify-between">
-      <span className="text-slate-600">VAT (15%):</span>
-      <span className="font-medium text-black">{formatCurrency(selectedProforma.vat_amount)}</span>
-    </div>
-    <div className="flex justify-between pt-3 border-t-2 border-slate-300">
-      <span className="text-lg font-bold text-slate-800">Total:</span>
-      <span className="text-xl font-bold text-black">
-        {formatCurrency(selectedProforma.total)}
-      </span>
-    </div>
-  </div>
-</div>
+                    
+                    <div className="bg-slate-50 rounded-xl p-4">
+                      <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                        <CreditCard className="w-5 h-5 mr-2 text-indigo-600" />
+                        Financial Summary
+                      </h3>
+                      <div className="space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Subtotal:</span>
+                          <span className="font-medium text-black">{formatCurrency(selectedProforma.subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">VAT (15%):</span>
+                          <span className="font-medium text-black">{formatCurrency(selectedProforma.vat_amount)}</span>
+                        </div>
+                        <div className="flex justify-between pt-3 border-t-2 border-slate-300">
+                          <span className="text-lg font-bold text-slate-800">Total:</span>
+                          <span className="text-xl font-bold text-black">
+                            {formatCurrency(selectedProforma.total)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-
+                  
                   {/* Customer Information */}
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
@@ -958,7 +1100,7 @@ const handleDownloadPDF = async () => {
                       )}
                     </div>
                   </div>
-
+                  
                   {/* Company Information */}
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
@@ -992,7 +1134,7 @@ const handleDownloadPDF = async () => {
                       )}
                     </div>
                   </div>
-             
+              
                   {/* Items Table */}
                   {selectedProforma.items && selectedProforma.items.length > 0 && (
                     <div className="bg-slate-50 rounded-xl p-4">
@@ -1040,25 +1182,37 @@ const handleDownloadPDF = async () => {
             </div>
             
             {/* Modal Footer */}
-            <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-end space-x-3">
-              <button 
-                onClick={closeModal}
-                className="px-5 py-2 bg-white border border-slate-300 rounded-xl text-slate-700 hover:bg-slate-100 transition"
-              >
-                Close
-              </button>
-              <button 
-                onClick={handleDownloadPDF}
-                className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl hover:from-indigo-700 hover:to-violet-700 transition flex items-center"
-              >
-                <Download className="w-5 h-5 mr-2" />
-                Download PDF
-              </button>
+            <div className="bg-slate-50 p-4 border-t border-slate-200">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="flex-1">
+                  {selectedProforma && (
+                    <StatusChangeButtons 
+                      proforma={selectedProforma} 
+                      onUpdate={(status) => updateProformaStatus(selectedProforma.id, status)} 
+                    />
+                  )}
+                </div>
+                <div className="flex justify-end space-x-3">
+                  <button 
+                    onClick={closeModal}
+                    className="px-5 py-2 bg-white border border-slate-300 rounded-xl text-slate-700 hover:bg-slate-100 transition"
+                  >
+                    Close
+                  </button>
+                  <button 
+                    onClick={handleDownloadPDF}
+                    className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl hover:from-indigo-700 hover:to-violet-700 transition flex items-center"
+                  >
+                    <Download className="w-5 h-5 mr-2" />
+                    Download PDF
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
-
+      
       {/* PerformaInvoice Modal */}
       <PerformaInvoice
         isOpen={showInvoiceModal}
@@ -1069,45 +1223,45 @@ const handleDownloadPDF = async () => {
         }}
       />
   
-<style jsx>{`
-  @keyframes blob {
-    0% {
-      transform: translate(0px, 0px) scale(1);
-    }
-    33% {
-      transform: translate(30px, -50px) scale(1.1);
-    }
-    66% {
-      transform: translate(-20px, 20px) scale(0.9);
-    }
-    100% {
-      transform: translate(0px, 0px) scale(1);
-    }
-  }
-  .animate-blob {
-    animation: blob 7s infinite;
-  }
-  .animation-delay-2000 {
-    animation-delay: 2s;
-  }
-  .animation-delay-4000 {
-    animation-delay: 4s;
-  }
-  
-  /* Print-specific styles */
-  @media print {
-    .print-content {
-      color: black !important;
-      background: white !important;
-    }
-    .print-content * {
-      color: black !important;
-      background: white !important;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-  }
-`}</style>
+      <style jsx>{`
+        @keyframes blob {
+          0% {
+            transform: translate(0px, 0px) scale(1);
+          }
+          33% {
+            transform: translate(30px, -50px) scale(1.1);
+          }
+          66% {
+            transform: translate(-20px, 20px) scale(0.9);
+          }
+          100% {
+            transform: translate(0px, 0px) scale(1);
+          }
+        }
+        .animate-blob {
+          animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+        
+        /* Print-specific styles */
+        @media print {
+          .print-content {
+            color: black !important;
+            background: white !important;
+          }
+          .print-content * {
+            color: black !important;
+            background: white !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+        }
+      `}</style>
     </div>
   );
 };

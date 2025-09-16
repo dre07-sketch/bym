@@ -13,6 +13,7 @@ import {
   BarChart3,
   Settings,
   DollarSign,
+  TicketPlus,
 } from 'lucide-react';
 
 import SidebarHeader from '../../layout/SidebarHeader';
@@ -26,6 +27,7 @@ import VehicleStatus from './pages/screens/VehicleStatus';
 import Reports from '../Stock manager/pages/screens/Reports';
 import Feedback from './pages/screens/Feedback';
 import FinancePage from './pages/screens/FinancePage';
+import Insurance from './pages/screens/insurance';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -40,10 +42,11 @@ const Render_CS: React.FC<DashboardProps> = ({ onLogout, userRole }) => {
     { id: 'tickets', label: 'Service Tickets', icon: Ticket },
     { id: 'sos', label: 'SOS Management', icon: AlertTriangle },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
+    { id: 'insurance', label: 'insurance', icon: TicketPlus },
     { id: 'customers', label: 'Customers', icon: Users },
     { id: 'employees', label: 'Employee Management', icon: UserCheck },
     { id: 'vehicle-status', label: 'Vehicle Status', icon: Car },
-    // { id: 'vin-search', label: 'VIN Search', icon: Search },
+    
     { id: 'finance', label: 'Finance', icon: DollarSign },
     { id: 'feedback', label: 'Feedback', icon: MessageSquare },
     // { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
@@ -90,6 +93,7 @@ const Render_CS: React.FC<DashboardProps> = ({ onLogout, userRole }) => {
       case 'tickets': return <ServiceTickets />;
       case 'sos': return <SOSManagement />;
       case 'appointments': return <AppointmentScheduler />;
+      case 'insurance': return <Insurance />;
       case 'customers': return <CustomerManagement />;
       case 'employees': return <Employees />;
       case 'vehicle-status': return <VehicleStatus />;

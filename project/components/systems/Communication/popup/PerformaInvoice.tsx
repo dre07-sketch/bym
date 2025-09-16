@@ -193,79 +193,79 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
     printWindow.close();
   };
 
-  const createPrintElement = () => {
-    // Create a temporary div element with the print content
+  // Create a compact version of the invoice for PDF generation
+  const createCompactPrintElement = () => {
     const printElement = document.createElement('div');
     printElement.innerHTML = `
-      <div class="p-8 bg-white max-w-4xl mx-auto">
-        <!-- Company Header -->
-        <div class="text-center mb-6">
-          <div class="flex justify-center mb-2">
-            <div class="w-16 h-16 border-2 border-black rounded-full flex items-center justify-center">
-              <img src="photo_1_2025-06-05_14-37-50.jpg" alt="Company Logo" class="w-12 h-12 object-contain" />
+      <div class="p-4 bg-white" style="width: 210mm; height: 297mm; overflow: hidden; box-sizing: border-box; font-size: 12px;">
+        <!-- Company Header - Compact -->
+        <div class="text-center mb-2">
+          <div class="flex justify-center mb-1">
+            <div class="w-10 h-10 border-2 border-black rounded-full flex items-center justify-center">
+              <img src="photo_1_2025-06-05_14-37-50.jpg" alt="Company Logo" class="w-8 h-8 object-contain" />
             </div>
           </div>
-          <h1 class="text-3xl font-bold text-black mb-1">BYM TRADING PLC</h1>
-          <p class="text-black mb-1">Addis Ababa, ETHIOPIA</p>
-          <p class="text-black">Phone: 0911-47-54-43</p>
+          <h1 class="text-xl font-bold text-black mb-1">BYM TRADING PLC</h1>
+          <p class="text-sm text-black mb-1">Addis Ababa, ETHIOPIA</p>
+          <p class="text-sm text-black">Phone: 0911-47-54-43</p>
         </div>
         
-        <!-- Proforma Invoice Title -->
-        <div class="border-t-2 border-b-2 border-black py-3 mb-6">
-          <h2 class="text-2xl font-bold text-center text-black">PROFORMA INVOICE</h2>
+        <!-- Proforma Invoice Title - Compact -->
+        <div class="border-t-2 border-b-2 border-black py-1 mb-2">
+          <h2 class="text-lg font-bold text-center text-black">PROFORMA INVOICE</h2>
         </div>
         
-        <!-- Invoice Details -->
-        <div class="grid grid-cols-3 gap-4 mb-6">
+        <!-- Invoice Details - Compact -->
+        <div class="grid grid-cols-3 gap-2 mb-2 text-sm">
           <div>
-            <p class="text-sm text-black">Proforma #</p>
+            <p class="text-black">Proforma #</p>
             <p class="font-semibold text-black">${formData.invoiceInfo.proformaNumber}</p>
           </div>
           <div>
-            <p class="text-sm text-black">Date</p>
+            <p class="text-black">Date</p>
             <p class="text-black">${formData.invoiceInfo.date}</p>
           </div>
           <div>
-            <p class="text-sm text-black">Valid Until</p>
+            <p class="text-black">Valid Until</p>
             <p class="text-black">${formData.invoiceInfo.validUntil || 'N/A'}</p>
           </div>
         </div>
         
-        <!-- Customer Info -->
-        <div class="mb-6">
-          <p class="text-sm text-black mb-1">To:</p>
+        <!-- Customer Info - Compact -->
+        <div class="mb-2 text-sm">
+          <p class="text-black mb-1">To:</p>
           <p class="font-semibold text-black">${formData.customerInfo.name}</p>
         </div>
         
-        <!-- Items Table -->
-        <div class="overflow-x-auto mb-6">
+        <!-- Items Table - Compact -->
+        <div class="overflow-x-auto mb-2 text-xs">
           <table class="w-full border-collapse border border-black">
             <thead>
               <tr class="border-b border-black">
-                <th class="border border-black px-4 py-2 text-left text-black">Description</th>
-                <th class="border border-black px-4 py-2 text-left text-black">Size</th>
-                <th class="border border-black px-4 py-2 text-center text-black">Quantity</th>
-                <th class="border border-black px-4 py-2 text-right text-black">Unit Price</th>
-                <th class="border border-black px-4 py-2 text-right text-black">Amount</th>
+                <th class="border border-black px-2 py-1 text-left text-black">Description</th>
+                <th class="border border-black px-2 py-1 text-left text-black">Size</th>
+                <th class="border border-black px-2 py-1 text-center text-black">Qty</th>
+                <th class="border border-black px-2 py-1 text-right text-black">Unit Price</th>
+                <th class="border border-black px-2 py-1 text-right text-black">Amount</th>
               </tr>
             </thead>
             <tbody>
               ${formData.items.map(item => `
                 <tr>
-                  <td class="border border-black px-4 py-2 text-black">${item.description}</td>
-                  <td class="border border-black px-4 py-2 text-black">${item.size}</td>
-                  <td class="border border-black px-4 py-2 text-center text-black">${item.quantity}</td>
-                  <td class="border border-black px-4 py-2 text-right text-black">${item.unitPrice}</td>
-                  <td class="border border-black px-4 py-2 text-right text-black">${item.amount}</td>
+                  <td class="border border-black px-2 py-1 text-black">${item.description}</td>
+                  <td class="border border-black px-2 py-1 text-black">${item.size}</td>
+                  <td class="border border-black px-2 py-1 text-center text-black">${item.quantity}</td>
+                  <td class="border border-black px-2 py-1 text-right text-black">${item.unitPrice}</td>
+                  <td class="border border-black px-2 py-1 text-right text-black">${item.amount}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
         </div>
         
-        <!-- Totals -->
-        <div class="flex justify-end mb-6">
-          <div class="w-64 border border-black rounded-lg p-4">
+        <!-- Totals - Compact -->
+        <div class="flex justify-end mb-2 text-sm">
+          <div class="w-48 border border-black rounded p-2">
             <div class="flex justify-between mb-1">
               <span class="text-black">Subtotal:</span>
               <span class="text-black">${formData.totals.subtotal}</span>
@@ -281,90 +281,90 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
           </div>
         </div>
         
-        <!-- Bottom Section -->
-        <div class="border-t border-black pt-4">
-          <div class="text-center mb-4">
-            <p class="text-lg font-bold text-black">የመኪናዎ ደህንነት ማእከል</p>
-            <p class="text-lg font-bold text-black">THE CAR SAFETY CENTER</p>
+        <!-- Bottom Section - Compact -->
+        <div class="border-t border-black pt-2 text-xs">
+          <div class="text-center mb-2">
+            <p class="font-bold text-black">የመኪናዎ ደህንነት ማእከል</p>
+            <p class="font-bold text-black">THE CAR SAFETY CENTER</p>
           </div>
           
-          <!-- Terms and Conditions -->
-          <div class="mb-6">
-            <div class="mb-3">
-              <p class="text-sm text-black mb-1">1. The offer provided is valid for ___________ days of the date submitted</p>
-              <p class="text-sm text-black mb-1">1. የተሰጠው ቅጥር በተሰጠበት ቀን ከዚያ በኋላ ________ ቀናት ውስጥ ይገባል</p>
+          <!-- Terms and Conditions - Compact -->
+          <div class="mb-2">
+            <div class="mb-1">
+              <p class="text-black mb-1">1. The offer provided is valid for ___________ days of the date submitted</p>
+              <p class="text-black mb-1">1. የተሰጠው ቅጥር በተሰጠበት ቀን ከዚያ በኋላ ________ ቀናት ውስጥ ይገባል</p>
             </div>
-            <div class="mb-3">
-              <p class="text-sm text-black mb-1">2. Payment mode is due ____________ in advance</p>
-              <p class="text-sm text-black mb-1">2. የክፍያ ዘዴ በመጀመሪያ ____________ ይከፈላል</p>
+            <div class="mb-1">
+              <p class="text-black mb-1">2. Payment mode is due ____________ in advance</p>
+              <p class="text-black mb-1">2. የክፍያ ዘዴ በመጀመሪያ ____________ ይከፈላል</p>
             </div>
-            <div class="mb-3">
-              <p class="text-sm text-black mb-1">3. Delivery time ___________</p>
-              <p class="text-sm text-black mb-1">3. የማስረከቢያ ጊዜ ___________</p>
-            </div>
-          </div>
-          
-          <div class="grid grid-cols-2 gap-6 mb-6">
-            <div>
-              <p class="text-sm font-semibold mb-2 text-black">Payment Method:</p>
-              <div class="flex items-center mb-1">
-                <div class="w-4 h-4 border border-black mr-2"></div>
-                <span class="text-sm text-black">Cash / በገንዘብ</span>
-              </div>
-              <div class="flex items-center mb-1">
-                <div class="w-4 h-4 border border-black mr-2"></div>
-                <span class="text-sm text-black">Bank Transfer / ባንክ ትራንስፈር</span>
-              </div>
-              <div class="flex items-center">
-                <div class="w-4 h-4 border border-black mr-2"></div>
-                <span class="text-sm text-black">Check / ቼክ</span>
-              </div>
-            </div>
-            <div>
-              <p class="text-sm font-semibold mb-2 text-black">Delivery Status:</p>
-              <div class="flex items-center mb-1">
-                <div class="w-4 h-4 border border-black mr-2"></div>
-                <span class="text-sm text-black">Partial Delivery / የከፊል ማስረከቢያ</span>
-              </div>
-              <div class="flex items-center">
-                <div class="w-4 h-4 border border-black mr-2"></div>
-                <span class="text-sm text-black">Full Delivery / ሙሉ ማስረከቢያ</span>
-              </div>
+            <div class="mb-1">
+              <p class="text-black mb-1">3. Delivery time ___________</p>
+              <p class="text-black mb-1">3. የማስረከቢያ ጊዜ ___________</p>
             </div>
           </div>
           
-          <div class="grid grid-cols-2 gap-6 mb-6">
+          <div class="grid grid-cols-2 gap-2 mb-2">
             <div>
-              <p class="text-sm font-semibold mb-2 text-black">Customer Confirmation:</p>
+              <p class="font-semibold mb-1 text-black">Payment Method:</p>
               <div class="flex items-center mb-1">
-                <div class="w-4 h-4 border border-black mr-2"></div>
-                <span class="text-sm text-black">I have read and agree to the terms</span>
+                <div class="w-3 h-3 border border-black mr-1"></div>
+                <span class="text-black">Cash / በገንዘብ</span>
+              </div>
+              <div class="flex items-center mb-1">
+                <div class="w-3 h-3 border border-black mr-1"></div>
+                <span class="text-black">Bank Transfer / ባንክ ትራንስፈር</span>
               </div>
               <div class="flex items-center">
-                <div class="w-4 h-4 border border-black mr-2"></div>
-                <span class="text-sm text-black">I accept the delivery schedule</span>
+                <div class="w-3 h-3 border border-black mr-1"></div>
+                <span class="text-black">Check / ቼክ</span>
               </div>
             </div>
             <div>
-              <p class="text-sm font-semibold mb-2 text-black">Additional Notes:</p>
+              <p class="font-semibold mb-1 text-black">Delivery Status:</p>
               <div class="flex items-center mb-1">
-                <div class="w-4 h-4 border border-black mr-2"></div>
-                <span class="text-sm text-black">Insurance Required / ዋስትና ያስፈልጋል</span>
+                <div class="w-3 h-3 border border-black mr-1"></div>
+                <span class="text-black">Partial Delivery / የከፊል ማስረከቢያ</span>
               </div>
               <div class="flex items-center">
-                <div class="w-4 h-4 border border-black mr-2"></div>
-                <span class="text-sm text-black">Special Instructions / ልዩ መመሪያዎች</span>
+                <div class="w-3 h-3 border border-black mr-1"></div>
+                <span class="text-black">Full Delivery / ሙሉ ማስረከቢያ</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-2 mb-2">
+            <div>
+              <p class="font-semibold mb-1 text-black">Customer Confirmation:</p>
+              <div class="flex items-center mb-1">
+                <div class="w-3 h-3 border border-black mr-1"></div>
+                <span class="text-black">I have read and agree to the terms</span>
+              </div>
+              <div class="flex items-center">
+                <div class="w-3 h-3 border border-black mr-1"></div>
+                <span class="text-black">I accept the delivery schedule</span>
+              </div>
+            </div>
+            <div>
+              <p class="font-semibold mb-1 text-black">Additional Notes:</p>
+              <div class="flex items-center mb-1">
+                <div class="w-3 h-3 border border-black mr-1"></div>
+                <span class="text-black">Insurance Required / ዋስትና ያስፈልጋል</span>
+              </div>
+              <div class="flex items-center">
+                <div class="w-3 h-3 border border-black mr-1"></div>
+                <span class="text-black">Special Instructions / ልዩ መመሪያዎች</span>
               </div>
             </div>
           </div>
         </div>
         
-        <!-- Signature Section -->
-        <div class="flex justify-end mt-6">
+        <!-- Signature Section - Compact -->
+        <div class="flex justify-end mt-2 text-xs">
           <div class="text-right">
-            <p class="text-sm text-black mb-1">Signature / ፊርማ:</p>
-            <div class="w-48 h-12 border-b border-black"></div>
-            <p class="text-sm text-black mt-2">Date / ቀን: _______________</p>
+            <p class="text-black mb-1">Signature / ፊርማ:</p>
+            <div class="w-32 h-8 border-b border-black"></div>
+            <p class="text-black mt-1">Date / ቀን: _______________</p>
           </div>
         </div>
       </div>
@@ -375,9 +375,11 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
     printElement.style.left = '-9999px';
     printElement.style.top = '0';
     printElement.style.width = '210mm'; // A4 width
+    printElement.style.height = '297mm'; // A4 height
     printElement.style.backgroundColor = '#ffffff';
     printElement.style.fontFamily = 'Georgia, Times New Roman, serif';
     printElement.style.color = 'black';
+    printElement.style.fontSize = '12px'; // Smaller base font size
     
     // Add to body temporarily
     document.body.appendChild(printElement);
@@ -392,7 +394,7 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
     // If printRef is not available, create a temporary element
     if (!element) {
       console.warn('Print reference is not available, creating temporary element');
-      tempElement = createPrintElement();
+      tempElement = createCompactPrintElement();
       element = tempElement;
     }
     
@@ -405,7 +407,7 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
       element.style.transition = 'none';
       
       const canvas = await html2canvas(element, {
-        scale: 3, // Increased scale for better quality
+        scale: 2, // Reduced scale because we are using a compact version
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
@@ -431,46 +433,10 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
       const pdf = new jsPDF('p', 'mm', 'a4');
       
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pdfHeight = pdf.internal.pageSize.getHeight();
       
-      // Check if content fits on one page
-      if (pdfHeight <= pdf.internal.pageSize.getHeight()) {
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      } else {
-        // Multi-page PDF
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        let remainingHeight = canvas.height;
-        let position = 0;
-        
-        while (remainingHeight > 0) {
-          const pageCanvas = document.createElement('canvas');
-          const ctx = pageCanvas.getContext('2d');
-          
-          const sourceCanvas = document.createElement('canvas');
-          const sourceCtx = sourceCanvas.getContext('2d');
-          sourceCanvas.width = canvas.width;
-          sourceCanvas.height = canvas.height;
-          sourceCtx.drawImage(canvas, 0, 0);
-          
-          const sliceHeight = Math.min(pageHeight * (canvas.width / pdfWidth), remainingHeight);
-          
-          pageCanvas.width = canvas.width;
-          pageCanvas.height = sliceHeight;
-          ctx.drawImage(sourceCanvas, 0, position, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
-          
-          const sliceImgData = pageCanvas.toDataURL('image/png', 1.0);
-          const slicePdfHeight = (sliceHeight * pdfWidth) / canvas.width;
-          
-          if (position > 0) {
-            pdf.addPage();
-          }
-          
-          pdf.addImage(sliceImgData, 'PNG', 0, 0, pdfWidth, slicePdfHeight);
-          
-          remainingHeight -= sliceHeight;
-          position += sliceHeight;
-        }
-      }
+      // Since we are using a compact version that fits in A4, we can add the image directly
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       
       pdf.save(`proforma-${formData.invoiceInfo.proformaNumber}.pdf`);
     } catch (error) {
@@ -1177,31 +1143,31 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
                     
                     {/* Bottom Section */}
                     <div className="border-t border-black pt-6">
-                      <div className="mb-6">
-                        <div className="mb-3">
-                          <p className="text-sm text-black mb-1">1. The offer provided is valid for ___________ days of the date submitted</p>
-                          <p className="text-sm text-black mb-1">. ዋጋው የሚያገለግለው ለ________ ቀን ብቻ ነው</p>
+                      <div class="mb-6">
+                        <div class="mb-3">
+                          <p class="text-sm text-black mb-1">1. The offer provided is valid for ___________ days of the date submitted</p>
+                          <p class="text-sm text-black mb-1">. ዋጋው የሚያገለግለው ለ________ ቀን ብቻ ነው</p>
                         </div>
-                        <div className="mb-3">
-                          <p className="text-sm text-black mb-1">2. Payment mode is due ____________ in advance</p>
-                          <p className="text-sm text-black mb-1">. የአከፋፈል ሁኔታ ____________ ቅድሚያ ነው</p>
+                        <div class="mb-3">
+                          <p class="text-sm text-black mb-1">2. Payment mode is due ____________ in advance</p>
+                          <p class="text-sm text-black mb-1">. የአከፋፈል ሁኔታ ____________ ቅድሚያ ነው</p>
                         </div>
-                        <div className="mb-3">
-                          <p className="text-sm text-black mb-1">3. Delivery time ___________</p>
-                          <p className="text-sm text-black mb-1">. የማስረከቢያ ጊዜ ___________</p>
+                        <div class="mb-3">
+                          <p class="text-sm text-black mb-1">3. Delivery time ___________</p>
+                          <p class="text-sm text-black mb-1">. የማስረከቢያ ጊዜ ___________</p>
                         </div>
                       </div>
                       
-                      <div className="flex justify-end mt-8">
-                        <div className="text-right">
-                          <p className="text-sm text-black mb-1">Signature / ፊርማ:</p>
-                          <div className="w-48 h-12 border-b border-black"></div>
-                          <p className="text-sm text-black mt-2">Date / ቀን: _______________</p>
+                      <div class="flex justify-end mt-8">
+                        <div class="text-right">
+                          <p class="text-sm text-black mb-1">Signature / ፊርማ:</p>
+                          <div class="w-48 h-12 border-b border-black"></div>
+                          <p class="text-sm text-black mt-2">Date / ቀን: _______________</p>
                         </div>
                       </div>
-                      <div className="text-center mb-6">
-                        <p className="text-lg font-bold text-black">የመኪናዎ ደህንነት ማእከል</p>
-                        <p className="text-lg font-bold text-black">THE CAR SAFETY CENTER</p>
+                      <div class="text-center mb-6">
+                        <p class="text-lg font-bold text-black">የመኪናዎ ደህንነት ማእከል</p>
+                        <p class="text-lg font-bold text-black">THE CAR SAFETY CENTER</p>
                       </div>
                     </div>
                   </div>

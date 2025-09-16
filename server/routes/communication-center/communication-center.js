@@ -216,10 +216,7 @@ router.get('/proformas', async (req, res) => {
 });
 
 
-  // GET /api/communication-center/proformas/:id
-  // Get single proforma with items
-  // GET /api/communication-center/proformas/:id
-// Get single proforma with items
+ 
 // GET /api/communication-center/proformas/:id
 router.get('/proformas/:id', async (req, res) => {
   const { id } = req.params;
@@ -284,9 +281,164 @@ router.get('/proformas/:id', async (req, res) => {
   }
 });
 
+
+router.put('/proformas/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  // Allowed statuses
+  const allowedStatuses = [
+    'Awaiting Send',
+    'Sent',
+    'Cancelled',
+    'Accepted',
+    'Expired',
+    'Draft'
+  ];
+
+  // Validation
+  if (!status || !allowedStatuses.includes(status)) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid status. Allowed values: ${allowedStatuses.join(', ')}`
+    });
+  }
+
+  try {
+    const [result] = await db
+      .promise()
+      .query(
+        `UPDATE proformas 
+         SET status = ?, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = ?`,
+        [status, id]
+      );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Proforma not found' });
+    }
+
+    res.json({
+      success: true,
+      message: `Proforma status updated to "${status}"`,
+      data: { id, status }
+    });
+  } catch (err) {
+    console.error('Error updating proforma status:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating proforma status'
+    });
+  }
+});
   // ====== STATS ENDPOINT ======
   // GET /api/communication-center/stats
-  router.get('/stats', async (req, res) => {
+// adjust path if needed
+
+// GET all "awaiting survey" tickets with related data
+router.get('/awaiting-survey', async (req, res) => {
+  try {
+    // Fetch tickets
+    const [tickets] = await db.promise().query(`
+      SELECT 
+        id,
+        ticket_number,
+        customer_id,
+        customer_name,
+        customer_type,
+        vehicle_id,
+        vehicle_info,
+        license_plate,
+        title,
+        description,
+        priority,
+        status,
+        inspector_assign,
+        
+        estimated_completion_date,
+        completion_date,
+        created_at,
+        updated_at
+      FROM service_tickets
+      WHERE status = 'awaiting survey'
+    `);
+
+    if (tickets.length === 0) {
+      return res.json({ message: "No tickets found with status 'awaiting survey'" });
+    }
+
+    // Attach related data
+    const results = await Promise.all(
+      tickets.map(async (ticket) => {
+        const ticketNumber = ticket.ticket_number;
+
+        const [disassembledParts] = await db.promise().query(`
+          SELECT id, ticket_number, part_name, condition, status, notes, logged_at
+          FROM disassembled_parts WHERE ticket_number = ?`, [ticketNumber]
+        );
+
+        const [inspections] = await db.promise().query(`
+          SELECT id, ticket_number, item, result, notes, inspected_at
+          FROM inspections WHERE ticket_number = ?`, [ticketNumber]
+        );
+
+        const [mechanicAssignments] = await db.promise().query(`
+          SELECT id, ticket_number, mechanic_id, mechanic_name, role, assigned_at
+          FROM mechanic_assignments WHERE ticket_number = ?`, [ticketNumber]
+        );
+
+        const [orderedParts] = await db.promise().query(`
+          SELECT id, ticket_number, part_name, quantity, cost, status, ordered_at
+          FROM ordered_parts WHERE ticket_number = ?`, [ticketNumber]
+        );
+
+        const [outsourceMechanics] = await db.promise().query(`
+          SELECT id, ticket_number, company_name, contact_person, phone, service_details, cost, status, assigned_at
+          FROM outsource_mechanics WHERE ticket_number = ?`, [ticketNumber]
+        );
+
+        const [outsourceStock] = await db.promise().query(`
+          SELECT id, ticket_number, item_name, quantity, supplier, cost, status, ordered_at
+          FROM outsource_stock WHERE ticket_number = ?`, [ticketNumber]
+        );
+
+        const [progressLogs] = await db.promise().query(`
+          SELECT id, ticket_number, action, status, notes, logged_at
+          FROM progress_logs WHERE ticket_number = ?`, [ticketNumber]
+        );
+
+        const [toolAssignments] = await db.promise().query(`
+          SELECT id, ticket_number, tool_name, duration, assigned_to, assigned_at
+          FROM tool_assignments WHERE ticket_number = ?`, [ticketNumber]
+        );
+
+        return {
+          ...ticket,
+          disassembledParts,
+          inspections,
+          mechanicAssignments,
+          orderedParts,
+          outsourceMechanics,
+          outsourceStock,
+          progressLogs,
+          toolAssignments,
+        };
+      })
+    );
+
+    res.json(results);
+
+  } catch (error) {
+    console.error("❌ Error fetching awaiting survey tickets:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+
+
+
+router.get('/stats', async (req, res) => {
     try {
       const [rows] = await db.promise().execute(`
         SELECT
@@ -315,7 +467,7 @@ router.get('/proformas/:id', async (req, res) => {
       console.error('❌ Fetch stats error:', error);
       return sendResponse(res, false, null, 'Could not retrieve statistics.', 500);
     }
-  });
+});
 
 
   // GET /api/communication-center/outsource-stock
@@ -334,11 +486,8 @@ router.get('/outsource-stock', async (req, res) => {
   const limitNum = Math.min(100, Math.max(1, parseInt(limit))) || 10;
   const offset = (pageNum - 1) * limitNum;
 
-  let connection;
   try {
-    connection = await db.promise().getConnection();
-
-    // Base query
+    // Base queries
     let query = `
       SELECT 
         id,
@@ -355,43 +504,39 @@ router.get('/outsource-stock', async (req, res) => {
       FROM outsource_stock
       WHERE 1=1
     `;
-    let countQuery = `SELECT COUNT(*) AS total FROM outsource_stock WHERE 1=1`;
-    const params = [];
-    const countParams = [];
 
-    // Apply filters
+    let countQuery = `SELECT COUNT(*) AS total FROM outsource_stock WHERE 1=1`;
+
+    // Shared filter params
+    const filterParams = [];
+
     if (search) {
       query += ` AND (name LIKE ? OR sku LIKE ? OR source_shop LIKE ?)`;
       countQuery += ` AND (name LIKE ? OR sku LIKE ? OR source_shop LIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
-      countParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      filterParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     if (status) {
       query += ` AND status = ?`;
       countQuery += ` AND status = ?`;
-      params.push(status);
-      countParams.push(status);
+      filterParams.push(status);
     }
 
     if (category) {
       query += ` AND category = ?`;
       countQuery += ` AND category = ?`;
-      params.push(category);
-      countParams.push(category);
+      filterParams.push(category);
     }
 
-    // Add sorting and pagination
+    // Add sorting (always DESC) and pagination
     query += ` ORDER BY requested_at DESC LIMIT ? OFFSET ?`;
-    params.push(limitNum, offset);
+    const params = [...filterParams, limitNum, offset];
 
-    // Execute both queries
-    const [rows] = await connection.execute(query, params);
-    const [[{ total }]] = await connection.execute(countQuery, countParams);
+    // Run queries
+    const [rows] = await db.promise().query(query, params);
+    const [[{ total }]] = await db.promise().query(countQuery, filterParams);
 
     const totalPages = Math.ceil(total / limitNum);
-
-    connection.release();
 
     return sendResponse(res, true, rows, 'Outsource stock list retrieved successfully.', 200, {
       page: pageNum,
@@ -401,11 +546,11 @@ router.get('/outsource-stock', async (req, res) => {
     });
 
   } catch (error) {
-    if (connection) connection.release();
     console.error('❌ Fetch outsource stock error:', error);
     return sendResponse(res, false, null, 'Could not retrieve outsource stock.', 500);
   }
 });
+
 
 
 // GET /api/communication-center/outsource-stock-stats

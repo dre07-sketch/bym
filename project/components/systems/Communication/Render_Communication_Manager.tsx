@@ -20,6 +20,8 @@ import ReportsAnalytics from './screens/ReportsAnalytics';
 import SettingsPage from './screens/SettingsPage';
 import PerformaDashboard from './screens/Performa';
 import OutsourceStocksPage from './screens/OutsourceStocksPage';
+import RequestSurveyor from './screens/RequestSurveyor';
+import RequestSalvage from './screens/RequestSalvage';
 import { Form } from 'react-hook-form';
 
 interface Render_Communication_ManagerDashboardProps {
@@ -79,9 +81,9 @@ const Render_Communication_Manager: React.FC<Render_Communication_ManagerDashboa
       case 'reports':
         return <ReportsAnalytics />;
       case 'request serveyor':
-        return <ReportsAnalytics />;
+        return <RequestSurveyor />;
       case 'request salvage':
-        return <ReportsAnalytics />;
+        return <RequestSalvage />;
       case 'request payment':
         return <ReportsAnalytics />;
       case 'settings':

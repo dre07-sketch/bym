@@ -8,95 +8,301 @@ function generateTicketNumber() {
   return `${prefix}-${randomNum}`;
 }
 
-// Routes
+function ensureCustomer(customer_type, customerData, callback) {
+  if (customer_type === 'company') {
+    db.query(
+      'SELECT id FROM company_customers WHERE customer_id = ?',
+      [customerData.customer_id],
+      (err, rows) => {
+        if (err) return callback(err);
+        if (rows.length > 0) return callback(null); // exists
 
+        const insertQuery = `
+          INSERT INTO company_customers (
+            customer_id, company_name, contact_person_name, email, phone,
+            emergency_contact, address, notes, image
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        db.query(insertQuery, [
+          customerData.customer_id,
+          customerData.company_name,
+          customerData.contact_person_name,
+          customerData.email,
+          customerData.phone,
+          customerData.emergency_contact || null,
+          customerData.address || null,
+          customerData.notes || null,
+          customerData.image || null
+        ], callback);
+      }
+    );
+  }
+
+  if (customer_type === 'individual') {
+    db.query(
+      'SELECT id FROM individual_customers WHERE customer_id = ?',
+      [customerData.customer_id],
+      (err, rows) => {
+        if (err) return callback(err);
+        if (rows.length > 0) return callback(null); // exists
+
+        const insertQuery = `
+          INSERT INTO individual_customers (
+            customer_id, name, email, phone, emergency_contact,
+            address, notes, image
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        db.query(insertQuery, [
+          customerData.customer_id,
+          customerData.name,
+          customerData.email,
+          customerData.phone,
+          customerData.emergency_contact || null,
+          customerData.address || null,
+          customerData.notes || null,
+          customerData.image || null
+        ], callback);
+      }
+    );
+  }
+}
+
+// Upsert vehicle
+function ensureVehicle(vehicleData, callback) {
+  db.query(
+    'SELECT id FROM vehicles WHERE license_plate = ? OR vin = ?',
+    [vehicleData.license_plate, vehicleData.vin],
+    (err, rows) => {
+      if (err) return callback(err);
+
+      if (rows.length > 0) {
+        const vehicleId = rows[0].id;
+        const updateQuery = `
+          UPDATE vehicles SET
+            customer_id = ?, make = ?, model = ?, year = ?, license_plate = ?,
+            vin = ?, color = ?, mileage = ?, image = ?
+          WHERE id = ?
+        `;
+        db.query(updateQuery, [
+          vehicleData.customer_id,
+          vehicleData.make,
+          vehicleData.model,
+          vehicleData.year,
+          vehicleData.license_plate,
+          vehicleData.vin,
+          vehicleData.color,
+          vehicleData.mileage,
+          vehicleData.image || null,
+          vehicleId
+        ], (err2) => {
+          if (err2) return callback(err2);
+          callback(null, vehicleId);
+        });
+      } else {
+        const insertQuery = `
+          INSERT INTO vehicles (
+            customer_id, make, model, year, license_plate,
+            vin, color, mileage, image
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        db.query(insertQuery, [
+          vehicleData.customer_id,
+          vehicleData.make,
+          vehicleData.model,
+          vehicleData.year,
+          vehicleData.license_plate,
+          vehicleData.vin,
+          vehicleData.color,
+          vehicleData.mileage,
+          vehicleData.image || null
+        ], (err3, result) => {
+          if (err3) return callback(err3);
+          callback(null, result.insertId);
+        });
+      }
+    }
+  );
+}
+
+// ==========================
+// Create Ticket Route
+// ==========================
 router.post('/', (req, res) => {
   const {
-    customer_type,
-    customer_id,
-    customer_name,
-    vehicle_id,
-    vehicle_info,
-    license_plate,
-    title,
-    description,
-    priority,
-    type,
-    urgency_level,
-    appointment_id
+    customer_type, customer_id, customer_name,
+    vehicle_info, license_plate,
+    title, description, priority, type,
+    urgency_level, appointment_id,
+
+    // Insurance
+    insurance_company, insurance_phone, accident_date,
+    owner_name, owner_phone, owner_email, insurance_description,
+
+    // Company
+    company_name, contact_person_name, company_email,
+    company_phone, emergency_contact, company_address,
+    company_notes, company_image,
+
+    // Individual
+    individual_name, individual_email, individual_phone,
+    individual_emergency_contact, individual_address,
+    individual_notes, individual_image,
+
+    // Proforma link
+    proforma_id
   } = req.body;
 
-  // Validate required fields
-  if (
-    !customer_type ||
-    !customer_id ||
-    !customer_name ||
-    !vehicle_id ||
-    !vehicle_info ||
-    !license_plate ||
-    !title ||
-    !description ||
-    !priority ||
-    !type
-  ) {
+  if (!customer_type || !customer_id || !customer_name ||
+      !vehicle_info || !license_plate || !title ||
+      !description || !priority || !type) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   const ticket_number = generateTicketNumber();
 
-  const insertQuery = `
-    INSERT INTO service_tickets (
-      ticket_number,
-      customer_type,
-      customer_id,
-      customer_name,
-      vehicle_id,
-      vehicle_info,
-      license_plate,
-      title,
-      description,
-      priority,
-      type,
-      urgency_level,
-      appointment_id,
-      status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-  `;
+  // If proforma provided, fetch it
+  const getProforma = proforma_id
+    ? new Promise((resolve, reject) => {
+        db.query(
+          'SELECT * FROM proformas WHERE id = ? AND status = "Accepted"',
+          [proforma_id],
+          (err, rows) => {
+            if (err) return reject(err);
+            if (rows.length === 0) return reject(new Error('Invalid proforma or not accepted'));
+            resolve(rows[0]);
+          }
+        );
+      })
+    : Promise.resolve(null);
 
-  const insertValues = [
-    ticket_number,
-    customer_type,
-    customer_id,
-    customer_name,
-    vehicle_id,
-    vehicle_info,
-    license_plate,
-    title,
-    description,
-    priority,
-    type,
-    urgency_level || null,
-    appointment_id || null
-  ];
+  getProforma
+    .then((proforma) => {
+      // Step 1: Ensure vehicle
+      ensureVehicle({
+        customer_id,
+        make: vehicle_info.make,
+        model: vehicle_info.model,
+        year: vehicle_info.year,
+        license_plate,
+        vin: vehicle_info.vin,
+        color: vehicle_info.color,
+        mileage: vehicle_info.mileage,
+        image: vehicle_info.image
+      }, (errVeh, vehicleId) => {
+        if (errVeh) {
+          console.error('Error handling vehicle:', errVeh);
+          return res.status(500).json({ error: 'Failed to process vehicle' });
+        }
 
-  db.query(insertQuery, insertValues, (err, result) => {
-    if (err) {
-      console.error('Error inserting ticket:', err);
-      return res.status(500).json({ error: 'Failed to create ticket' });
-    }
+        const vehicleInfoString = `${vehicle_info.make} ${vehicle_info.model} (${vehicle_info.year})`;
 
-    const insertedId = result.insertId;
+        // Step 2: Insert ticket
+        const insertQuery = `
+          INSERT INTO service_tickets (
+            ticket_number, customer_type, customer_id, customer_name,
+            vehicle_id, vehicle_info, license_plate, title,
+            description, priority, type, urgency_level,
+            appointment_id, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        `;
+        const insertValues = [
+          ticket_number, customer_type, customer_id, customer_name,
+          vehicleId, vehicleInfoString, license_plate, title,
+          description, priority, type,
+          urgency_level || null, appointment_id || null
+        ];
 
-    db.query('SELECT * FROM service_tickets WHERE id = ?', [insertedId], (err, rows) => {
-      if (err) {
-        console.error('Error fetching new ticket:', err);
-        return res.status(500).json({ error: 'Failed to fetch created ticket' });
-      }
+        db.query(insertQuery, insertValues, (errTicket, result) => {
+          if (errTicket) {
+            console.error('Error inserting ticket:', errTicket);
+            return res.status(500).json({ error: 'Failed to create ticket' });
+          }
 
-      res.status(201).json(rows[0]);
+          const insertedId = result.insertId;
+
+          // Step 3: Insurance extras
+          if (type === 'insurance') {
+            // Insurance info
+            const insuranceQuery = `
+              INSERT INTO insurance (
+                ticket_number, insurance_company, insurance_phone,
+                accident_date, owner_name, owner_phone, owner_email, description
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `;
+            db.query(insuranceQuery, [
+              ticket_number, insurance_company, insurance_phone,
+              accident_date || null, owner_name, owner_phone,
+              owner_email || null, insurance_description || null
+            ], (err2) => {
+              if (err2) console.error('Error inserting insurance:', err2);
+            });
+
+            // Upsert customer
+            if (customer_type === 'company') {
+              ensureCustomer('company', {
+                customer_id, company_name, contact_person_name,
+                email: company_email, phone: company_phone,
+                emergency_contact, address: company_address,
+                notes: company_notes, image: company_image
+              }, (err3) => { if (err3) console.error(err3); });
+            }
+            if (customer_type === 'individual') {
+              ensureCustomer('individual', {
+                customer_id, name: individual_name,
+                email: individual_email, phone: individual_phone,
+                emergency_contact: individual_emergency_contact,
+                address: individual_address, notes: individual_notes,
+                image: individual_image
+              }, (err4) => { if (err4) console.error(err4); });
+            }
+
+            // Bill (if proforma available)
+            if (proforma) {
+              const billQuery = `
+                INSERT INTO bills (
+                  ticket_number, proforma_number, customer_name, vehicle_info,
+                  labor_cost, parts_cost, outsourced_parts_cost, outsourced_labor_cost,
+                  subtotal, tax_rate, tax_amount, total, discount, final_total, status, notes
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+              `;
+              db.query(billQuery, [
+                ticket_number,
+                proforma.proforma_number || null,
+                proforma.customer_name,
+                vehicleInfoString,
+                0.00, 0.00, 0.00, 0.00, // placeholders
+                proforma.subtotal,
+                proforma.vat_rate,
+                proforma.vat_amount,
+                proforma.total,
+                0.00, // discount
+                proforma.total,
+                proforma.notes || null
+              ], (errBill) => {
+                if (errBill) console.error('Error inserting bill:', errBill);
+              });
+            }
+          }
+
+          // Step 4: Return ticket
+          db.query('SELECT * FROM service_tickets WHERE id = ?', [insertedId], (err6, rows) => {
+            if (err6) {
+              console.error('Error fetching ticket:', err6);
+              return res.status(500).json({ error: 'Failed to fetch ticket' });
+            }
+            res.status(201).json(rows[0]);
+          });
+        });
+      });
+    })
+    .catch((errP) => {
+      console.error('Proforma fetch error:', errP.message);
+      return res.status(400).json({ error: errP.message });
     });
-  });
 });
+
+
 
 router.get('/vehicles/:customerId', (req, res) => {
   const customerId = req.params.customerId;

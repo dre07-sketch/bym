@@ -94,27 +94,33 @@ export default function ServiceTickets() {
     fetchTickets();
   }, [addNotification]);
   
-  const fetchBill = async (ticketNumber) => {
-    try {
-      const response = await fetch(`http://localhost:5001/api/bill/car-bills/${ticketNumber}`);
-      if (!response.ok) {
-        if (response.status === 404) {
-          setBill(null);
-          return;
-        }
-        throw new Error('Failed to fetch bill');
-      }
-      const data = await response.json();
-      if (data.success) {
-        setBill(data.bill);
-      } else {
+ // First, update the fetchBill function to properly handle the API response
+const fetchBill = async (ticketNumber) => {
+  try {
+    const response = await fetch(`http://localhost:5001/api/bill/car-bills/${ticketNumber}`);
+    if (!response.ok) {
+      if (response.status === 404) {
         setBill(null);
+        return;
       }
-    } catch (err) {
-      console.error('Error fetching bill:', err);
+      throw new Error('Failed to fetch bill');
+    }
+    const data = await response.json();
+    if (data.success) {
+      // The API returns { success: true, bill: {...}, items: [...] }
+      // We need to combine bill and items into a single object for the UI
+      setBill({
+        ...data.bill,
+        items: data.items || []
+      });
+    } else {
       setBill(null);
     }
-  };
+  } catch (err) {
+    console.error('Error fetching bill:', err);
+    setBill(null);
+  }
+};
   
   const fetchTicketDetails = async (ticketNumber) => {
     try {
@@ -1351,140 +1357,187 @@ export default function ServiceTickets() {
               )}
               
               {/* Bill Tab */}
-              {activeTab === 'bill' && (
-                <Card className="shadow-md">
-                  <CardHeader>
-                    <CardTitle className="flex items-center text-lg">
-                      <Receipt className="w-4 h-4 mr-2 text-blue-600" />
-                      Bill Details
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {bill ? (
-                      <div className="space-y-6">
-                        {/* Bill Summary */}
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
-                          <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold text-gray-800">Invoice #{bill.id}</h3>
-                            <Badge className={`${bill.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'} px-3 py-1`}>
-                              {bill.status.charAt(0).toUpperCase() + bill.status.slice(1)}
-                            </Badge>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                              <p className="text-sm text-gray-600">Ticket Number</p>
-                              <p className="font-medium">{bill.ticket_number}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-600">Customer</p>
-                              <p className="font-medium">{bill.customer_name}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-600">Vehicle</p>
-                              <p className="font-medium">{bill.vehicle_info}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-600">Issue Date</p>
-                              <p className="font-medium">{formatDateTime(bill.created_at)}</p>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Cost Breakdown */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <Card className="shadow-sm">
-                            <CardHeader className="pb-3">
-                              <CardTitle className="text-lg">Cost Breakdown</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Labor Cost</span>
-                                <span className="font-medium">ETB {(parseFloat(bill.labor_cost) || 0).toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Parts Cost</span>
-                                <span className="font-medium">ETB {(parseFloat(bill.parts_cost) || 0).toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Outsourced Parts</span>
-                                <span className="font-medium">ETB {(parseFloat(bill.outsourced_parts_cost) || 0).toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Outsourced Labor</span>
-                                <span className="font-medium">ETB {(parseFloat(bill.outsourced_labor_cost) || 0).toFixed(2)}</span>
-                              </div>
-                              <div className="border-t pt-3 mt-3 flex justify-between font-semibold">
-                                <span>Subtotal</span>
-                                <span>ETB {(parseFloat(bill.subtotal) || 0).toFixed(2)}</span>
-                              </div>
-                            </CardContent>
-                          </Card>
-                          
-                          <Card className="shadow-sm">
-                            <CardHeader className="pb-3">
-                              <CardTitle className="text-lg">Tax & Discounts</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Tax Rate</span>
-                                <span className="font-medium">{bill.tax_rate || '0'}%</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Tax Amount</span>
-                                <span className="font-medium">ETB {(parseFloat(bill.tax_amount) || 0).toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Discount</span>
-                                <span className="font-medium text-green-600">-ETB {(parseFloat(bill.discount) || 0).toFixed(2)}</span>
-                              </div>
-                              <div className="border-t pt-3 mt-3 flex justify-between font-bold text-lg">
-                                <span>Total</span>
-                                <span className="text-blue-600">ETB {(parseFloat(bill.final_total) || 0).toFixed(2)}</span>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </div>
-                        
-                        {/* Notes */}
-                        {bill.notes && (
-                          <Card className="shadow-sm">
-                            <CardHeader className="pb-3">
-                              <CardTitle className="text-lg">Notes</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <p className="text-gray-700">{bill.notes}</p>
-                            </CardContent>
-                          </Card>
-                        )}
-                        
-                        {/* Action Buttons */}
-                        <div className="flex justify-end space-x-3 pt-4">
-                          <Button variant="outline" className="border-blue-300 hover:bg-blue-50">
-                            Print Invoice
-                          </Button>
-                          <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                            Send to Customer
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-12">
-                        <Receipt className="w-16 h-16 text-gray-400 mx-auto mb-4 opacity-70" />
-                        <h3 className="text-xl font-medium text-gray-700 mb-2">No Bill Available</h3>
-                        <p className="text-gray-500 max-w-md mx-auto">
-                          This ticket doesn't have an associated bill yet. Bills are typically generated when a service is completed.
-                        </p>
-                        {showTicketDetails.status === 'completed' && (
-                          <Button className="mt-6 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
-                            Generate Bill
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+              {/* Bill Tab */}
+{activeTab === 'bill' && (
+  <Card className="shadow-md">
+    <CardHeader>
+      <CardTitle className="flex items-center text-lg">
+        <Receipt className="w-4 h-4 mr-2 text-blue-600" />
+        Bill Details
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      {bill ? (
+        <div className="space-y-6">
+          {/* Bill Summary */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-800">
+                Invoice #{bill.id} {bill.proforma_number && `(Proforma: ${bill.proforma_number})`}
+              </h3>
+              <Badge className={`${bill.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'} px-3 py-1`}>
+                {bill.status.charAt(0).toUpperCase() + bill.status.slice(1)}
+              </Badge>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <p className="text-sm text-gray-600">Ticket Number</p>
+                <p className="font-medium">{bill.ticket_number}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Customer</p>
+                <p className="font-medium">{bill.customer_name}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Vehicle</p>
+                <p className="font-medium">{bill.vehicle_info}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Issue Date</p>
+                <p className="font-medium">{formatDateTime(bill.created_at)}</p>
+              </div>
+              {bill.proforma_date && (
+                <div>
+                  <p className="text-sm text-gray-600">Proforma Date</p>
+                  <p className="font-medium">{formatDateTime(bill.proforma_date)}</p>
+                </div>
               )}
+            </div>
+          </div>
+          
+          {/* Cost Breakdown */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Cost Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Labor Cost</span>
+                  <span className="font-medium">ETB {(parseFloat(bill.labor_cost) || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Parts Cost</span>
+                  <span className="font-medium">ETB {(parseFloat(bill.parts_cost) || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Outsourced Parts</span>
+                  <span className="font-medium">ETB {(parseFloat(bill.outsourced_parts_cost) || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Outsourced Labor</span>
+                  <span className="font-medium">ETB {(parseFloat(bill.outsourced_labor_cost) || 0).toFixed(2)}</span>
+                </div>
+                <div className="border-t pt-3 mt-3 flex justify-between font-semibold">
+                  <span>Subtotal</span>
+                  <span>ETB {(parseFloat(bill.subtotal) || 0).toFixed(2)}</span>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Tax & Discounts</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Tax Rate</span>
+                  <span className="font-medium">{bill.tax_rate || '0'}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Tax Amount</span>
+                  <span className="font-medium">ETB {(parseFloat(bill.tax_amount) || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Discount</span>
+                  <span className="font-medium text-green-600">-ETB {(parseFloat(bill.discount) || 0).toFixed(2)}</span>
+                </div>
+                <div className="border-t pt-3 mt-3 flex justify-between font-bold text-lg">
+                  <span>Total</span>
+                  <span className="text-blue-600">ETB {(parseFloat(bill.final_total) || 0).toFixed(2)}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          {/* Proforma Items Section */}
+          {bill.items && bill.items.length > 0 && (
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center">
+                  <PackagePlus className="w-4 h-4 mr-2 text-blue-600" />
+                  Proforma Items
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {bill.items.map((item, index) => (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.description}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.size || '-'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.quantity}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">ETB {parseFloat(item.unit_price).toFixed(2)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">ETB {parseFloat(item.amount).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* Notes */}
+          {bill.notes && (
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-700">{bill.notes}</p>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* Action Buttons */}
+          <div className="flex justify-end space-x-3 pt-4">
+            <Button variant="outline" className="border-blue-300 hover:bg-blue-50">
+              Print Invoice
+            </Button>
+            <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+              Send to Customer
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <Receipt className="w-16 h-16 text-gray-400 mx-auto mb-4 opacity-70" />
+          <h3 className="text-xl font-medium text-gray-700 mb-2">No Bill Available</h3>
+          <p className="text-gray-500 max-w-md mx-auto">
+            This ticket doesn't have an associated bill yet. Bills are typically generated when a service is completed.
+          </p>
+          {showTicketDetails.status === 'completed' && (
+            <Button className="mt-6 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
+              Generate Bill
+            </Button>
+          )}
+        </div>
+      )}
+    </CardContent>
+  </Card>
+)}
             </div>
             
             {/* Footer */}
