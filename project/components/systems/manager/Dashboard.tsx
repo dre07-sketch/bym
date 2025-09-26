@@ -11,6 +11,7 @@ import {
   Users,
   Wrench,
   CarFront,
+  ListOrdered,
 } from 'lucide-react';
 
 import Dashboard from '../manager/dashboard/main-dash/Dashboard';
@@ -20,6 +21,7 @@ import Createaccount from '../manager/createaccount/Createaccount';
 import Feedback from './feedback/Feedback';
 import CompletedCars from '../manager/compleated-cars/CompletedCars';
 import SidebarHeader from '../../layout/SidebarHeader';
+import PurchaseOrderpage from '../manager/Purchase Orders/PurchaseOrdersPage';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -34,8 +36,10 @@ const ManagerDashboard: React.FC<DashboardProps> = ({ onLogout, userRole }) => {
     { id: 'mechanics', label: 'Mechanics', icon: Wrench },
     { id: 'customers', label: 'Customers', icon: Users },
     { id: 'create-account', label: 'Create Account', icon: UserPlus },
+    {id: 'purchase-order', label: 'Purchase Order', icon: ListOrdered},
     { id: 'CompletedCars', label: 'Completed Cars', icon: CarFront },
     { id: 'feedback', label: 'Feedback', icon: Reply },
+
     
     
   ];
@@ -65,6 +69,7 @@ const ManagerDashboard: React.FC<DashboardProps> = ({ onLogout, userRole }) => {
       case 'mechanics': return <Mechanic />;
       case 'customers': return <Customer />;
       case 'create-account': return <Createaccount />;
+      case 'purchase-order': return <PurchaseOrderpage />;
       case 'CompletedCars': return <CompletedCars />;
       case 'feedback': return <Feedback />;
       

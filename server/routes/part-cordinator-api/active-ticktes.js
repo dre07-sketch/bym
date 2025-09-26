@@ -136,6 +136,9 @@ const allowedStatuses = [
   'inspection',
   'successful inspection',
   'inspection failed',
+  'awaiting bill',
+  'payment requested', 
+  'request payment', // Added this status
   'completed'
 ];
 

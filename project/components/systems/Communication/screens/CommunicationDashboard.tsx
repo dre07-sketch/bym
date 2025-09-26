@@ -86,7 +86,7 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/communication-center/stats');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/stats');
         if (!response.ok) throw new Error(`Failed to fetch stats: ${response.status}`);
         const result = await response.json();
         if (!result.success) throw new Error(result.message || 'Failed to load stats');
@@ -103,7 +103,7 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
   useEffect(() => {
     const fetchProformas = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/communication-center/proformas');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/proformas');
         if (!response.ok) throw new Error(`Failed to fetch proformas: ${response.status}`);
         const result = await response.json();
         if (!result.success) throw new Error(result.message || 'Failed to load proformas');
@@ -153,12 +153,12 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
     setLoading(true);
     try {
       // Fetch stats
-      const statsResponse = await fetch('http://localhost:5001/api/communication-center/stats');
+      const statsResponse = await fetch('https://ipasystem.bymsystem.com/api/communication-center/stats');
       const statsResult = await statsResponse.json();
       if (statsResult.success) setStats(statsResult.data);
       
       // Fetch proformas
-      const proformasResponse = await fetch('http://localhost:5001/api/communication-center/proformas');
+      const proformasResponse = await fetch('https://ipasystem.bymsystem.com/api/communication-center/proformas');
       const proformasResult = await proformasResponse.json();
       if (proformasResult.success) {
         const mappedRequests = proformasResult.data.map((item: ApiResponseItem): Request => {
@@ -384,16 +384,7 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
               </div>
             </div>
             {/* Draft */}
-            <div className="bg-gradient-to-br from-blue-400 to-blue-500 text-white rounded-2xl p-6 shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-blue-100">Draft</p>
-                  <p className="text-3xl font-bold">{stats.draft}</p>
-                  <p className="text-sm text-blue-200">Being prepared</p>
-                </div>
-                <FileText className="w-8 h-8 text-blue-200 animate-spin" />
-              </div>
-            </div>
+          
             {/* Accepted */}
             <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all">
               <div className="flex items-center justify-between">
@@ -485,7 +476,7 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
             )}
           </div>
         </div>
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg mb-32">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-semibold text-gray-800 flex items-center">
               <Activity className="w-5 h-5 text-gray-600 mr-2" />
@@ -515,43 +506,7 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
       </div>
 
       {/* Performance Metrics */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
-        <h3 className="text-xl font-semibold text-gray-800 mb-6">Performance Metrics</h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FileText className="w-8 h-8 text-blue-600" />
-            </div>
-            <h4 className="font-semibold text-gray-800">Invoice Volume</h4>
-            <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
-            <p className="text-sm text-gray-500 mt-1">Total this week</p>
-          </div>
-          <div className="text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-green-600" />
-            </div>
-            <h4 className="font-semibold text-gray-800">Acceptance Rate</h4>
-            <p className="text-2xl font-bold text-green-600">{stats.accepted > 0 ? Math.round((stats.accepted / stats.total) * 100) : 0}%</p>
-            <p className="text-sm text-gray-500 mt-1">Accepted by customers</p>
-          </div>
-          <div className="text-center">
-            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Clock className="w-8 h-8 text-yellow-600" />
-            </div>
-            <h4 className="font-semibold text-gray-800">Avg. Prep Time</h4>
-            <p className="text-2xl font-bold text-yellow-600">1.8h</p>
-            <p className="text-sm text-gray-500 mt-1">From draft to send</p>
-          </div>
-          <div className="text-center">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <X className="w-8 h-8 text-red-600" />
-            </div>
-            <h4 className="font-semibold text-gray-800">Cancellation Rate</h4>
-            <p className="text-2xl font-bold text-red-600">{stats.cancelled > 0 ? Math.round((stats.cancelled / stats.total) * 100) : 0}%</p>
-            <p className="text-sm text-gray-500 mt-1">Invoices cancelled</p>
-          </div>
-        </div>
-      </div>
+      
 
       {/* Filter Controls */}
  

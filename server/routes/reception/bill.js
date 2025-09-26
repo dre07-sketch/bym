@@ -81,6 +81,155 @@ router.get("/car-bills/:ticket_number", (req, res) => {
   });
 });
 
+router.post('/update-to-payment-requested', (req, res) => {
+  const { ticketNumber } = req.body;
+
+  if (!ticketNumber) {
+    return res.status(400).json({
+      success: false,
+      message: 'ticketNumber is required'
+    });
+  }
+
+  const query = `
+    UPDATE service_tickets
+    SET status = 'Payment Requested'
+    WHERE ticket_number = ? AND status = 'Request Payment'
+  `;
+
+  db.query(query, [ticketNumber], (err, result) => {
+    if (err) {
+      console.error('❌ Error updating ticket status:', err);
+      return res.status(500).json({
+        success: false,
+        message: 'Database update failed'
+      });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No ticket found with status "Request Payment" and given ticket number'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Ticket ${ticketNumber} status updated to "Payment Requested"`
+    });
+  });
+});
+
+router.post('/submit-payment', (req, res) => {
+  const { ticketNumber, paymentType, customerId } = req.body;
+
+  if (!ticketNumber || !paymentType || !customerId) {
+    return res.status(400).json({
+      success: false,
+      message: 'ticketNumber, paymentType, and customerId are required'
+    });
+  }
+
+  db.getConnection((err, connection) => {
+    if (err) {
+      console.error('❌ DB connection error:', err);
+      return res.status(500).json({ success: false, message: 'Database connection failed' });
+    }
+
+    connection.beginTransaction((err) => {
+      if (err) {
+        connection.release();
+        return res.status(500).json({ success: false, message: 'Transaction start failed' });
+      }
+
+      // 1️⃣ Update bill with payment type + mark as paid
+      const billQuery = `
+        UPDATE bills
+        SET payment_type = ?, status = 'paid'
+        WHERE ticket_number = ? AND status = 'pending'
+      `;
+      connection.query(billQuery, [paymentType, ticketNumber], (err, billResult) => {
+        if (err) {
+          return connection.rollback(() => {
+            connection.release();
+            console.error('❌ Error updating bill:', err);
+            res.status(500).json({ success: false, message: 'Failed to update bill' });
+          });
+        }
+
+        if (billResult.affectedRows === 0) {
+          return connection.rollback(() => {
+            connection.release();
+            return res.status(404).json({
+              success: false,
+              message: 'No pending bill found for given ticket number'
+            });
+          });
+        }
+
+        // 2️⃣ Update ticket status to Completed
+        const ticketQuery = `
+          UPDATE service_tickets
+          SET status = 'Completed'
+          WHERE ticket_number = ? AND status = 'Payment Requested'
+        `;
+        connection.query(ticketQuery, [ticketNumber], (err, ticketResult) => {
+          if (err) {
+            return connection.rollback(() => {
+              connection.release();
+              console.error('❌ Error updating ticket:', err);
+              res.status(500).json({ success: false, message: 'Failed to update ticket' });
+            });
+          }
+
+          if (ticketResult.affectedRows === 0) {
+            return connection.rollback(() => {
+              connection.release();
+              return res.status(404).json({
+                success: false,
+                message: 'No ticket found with status "Payment Requested" for given ticket number'
+              });
+            });
+          }
+
+          // 3️⃣ Add loyalty points (only for individual customers)
+          const loyaltyQuery = `
+            UPDATE individual_customers 
+            SET loyalty_points = COALESCE(loyalty_points, 0) + 5
+            WHERE customer_id = ?
+          `;
+          connection.query(loyaltyQuery, [customerId], (err, loyaltyResult) => {
+            if (err) {
+              return connection.rollback(() => {
+                connection.release();
+                console.error('❌ Error updating loyalty points:', err);
+                res.status(500).json({ success: false, message: 'Failed to update loyalty points' });
+              });
+            }
+
+            // ✅ Commit all updates
+            connection.commit((err) => {
+              if (err) {
+                return connection.rollback(() => {
+                  connection.release();
+                  console.error('❌ Transaction commit failed:', err);
+                  res.status(500).json({ success: false, message: 'Transaction commit failed' });
+                });
+              }
+
+              connection.release();
+              res.json({
+                success: true,
+                message: `Payment submitted for ticket ${ticketNumber}, bill marked as paid, ticket marked as Completed, loyalty points updated`
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
 
 
 module.exports = router;

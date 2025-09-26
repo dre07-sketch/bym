@@ -180,7 +180,7 @@ const LogActivityModal: React.FC<LogActivityModalProps> = ({
     setSubmitStatus('idle');
     setErrorMessage(null);
 
-    const API_BASE = 'http://localhost:5001';
+    const API_BASE = 'https://ipasystem.bymsystem.com';
 
     try {
       const url = isEditing && initialData?.id
@@ -209,7 +209,7 @@ const LogActivityModal: React.FC<LogActivityModalProps> = ({
     } catch (err) {
       console.error('Network error:', err);
       setErrorMessage(
-        'Failed to connect to server. Make sure the backend is running at http://localhost:5001'
+        'Failed to connect to server. Make sure the backend is running at https://ipasystem.bymsystem.com'
       );
       setSubmitStatus('error');
     } finally {

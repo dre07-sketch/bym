@@ -1,5 +1,6 @@
 {
   "name": "garage-management-system",
+  "homepage": "https://bymsystem.bymsystem.com/",
   "version": "0.1.0",
   "private": true,
   "scripts": {

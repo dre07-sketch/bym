@@ -40,7 +40,7 @@ const StockLevels: React.FC = () => {
   useEffect(() => {
     const fetchStockLevels = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/inventory/items');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/items');
         if (!response.ok) throw new Error('Failed to fetch inventory data');
         const result = await response.json();
 
@@ -150,7 +150,7 @@ const StockLevels: React.FC = () => {
     setIsLoading(true);
     const fetchStockLevels = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/inventory/items');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/items');
         if (!response.ok) throw new Error('Failed to fetch inventory data');
         const result = await response.json();
 

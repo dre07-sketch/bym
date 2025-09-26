@@ -36,11 +36,11 @@ const Render_Communication_Manager: React.FC<Render_Communication_ManagerDashboa
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'performa', label: 'Performa', icon: FileText },
     { id: 'outsource', label: 'OutsourceStock', icon: Users },
-    { id: 'reports', label: 'Reports', icon: BarChart3 },
-    { id: 'request serveyor', label: 'Request serveyor', icon: PersonStandingIcon },
+    { id: 'request surveyor', label: 'Request surveyor', icon: PersonStandingIcon },
     { id: 'request salvage', label: 'Request salvage', icon: FormInputIcon },
-    { id: 'request payment ', label: 'Request payment ', icon: DollarSignIcon },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    
+    { id: 'reports', label: 'Reports', icon: BarChart3 },
+    
   ];
 
   const notifications = [
@@ -80,7 +80,7 @@ const Render_Communication_Manager: React.FC<Render_Communication_ManagerDashboa
         return <OutsourceStocksPage />;
       case 'reports':
         return <ReportsAnalytics />;
-      case 'request serveyor':
+      case 'request surveyor':
         return <RequestSurveyor />;
       case 'request salvage':
         return <RequestSalvage />;

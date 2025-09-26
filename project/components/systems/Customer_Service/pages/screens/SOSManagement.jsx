@@ -31,44 +31,7 @@ import SOSPopup from '../pop up/SOSPopup';
 
 export default function SOSManagement() {
   const [sosRequests, setSOSRequests] = useState([]);
-  const [towTrucks, setTowTrucks] = useState([
-    {
-      id: 'TT001',
-      name: 'Tow Truck Alpha',
-      driver: 'John Doe',
-      phone: '+1 (555) 123-4567',
-      coverage: 'Downtown Area',
-      rating: 4.8,
-      eta: '12 mins',
-      capacity: '5 tons',
-      available: true,
-      currentLocation: 'Base Station'
-    },
-    {
-      id: 'TT002',
-      name: 'Tow Truck Beta',
-      driver: 'Jane Smith',
-      phone: '+1 (555) 987-6543',
-      coverage: 'North Side',
-      rating: 4.9,
-      eta: '18 mins',
-      capacity: '7 tons',
-      available: true,
-      currentLocation: 'Repair Shop'
-    },
-    {
-      id: 'TT003',
-      name: 'Tow Truck Gamma',
-      driver: 'Mike Johnson',
-      phone: '+1 (555) 456-7890',
-      coverage: 'South Side',
-      rating: 4.7,
-      eta: '25 mins',
-      capacity: '10 tons',
-      available: false,
-      currentLocation: 'En route to SOS-2023-001'
-    }
-  ]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [urgencyFilter, setUrgencyFilter] = useState('all');
@@ -139,7 +102,7 @@ ${sosRequest.description || 'No description provided in SOS.'}`,
 
       console.log("Sending Ticket Data:", ticketData);
 
-      const response = await fetch('http://localhost:5001/api/tickets', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ticketData),
@@ -163,7 +126,7 @@ ${sosRequest.description || 'No description provided in SOS.'}`,
 
       // Optional: Update backend status
       try {
-        await fetch(`http://localhost:5001/api/sos-request/update/${showSOSDetails.id}`, {
+        await fetch(`https://ipasystem.bymsystem.com/api/sos-request/update/${showSOSDetails.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'converted' }),
@@ -191,7 +154,7 @@ ${sosRequest.description || 'No description provided in SOS.'}`,
     const fetchSOSRequests = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:5001/api/sos-request/all-sos-request');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/sos-request/all-sos-request');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
 
@@ -600,62 +563,7 @@ ${sosRequest.description || 'No description provided in SOS.'}`,
       </div>
 
       {/* Tow Truck Directory */}
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Truck className="w-5 h-5 text-blue-600" />
-            <span>Tow Truck Directory</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {towTrucks.map(truck => (
-              <div key={truck.id} className="p-4 bg-white rounded-lg shadow-sm border hover:shadow-md transition-all">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h4 className="font-semibold text-gray-800">{truck.name}</h4>
-                    <p className="text-sm text-gray-600">{truck.driver}</p>
-                  </div>
-                  <Badge variant={truck.available ? 'default' : 'secondary'}>
-                    {truck.available ? 'Available' : 'Busy'}
-                  </Badge>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center space-x-2">
-                    <Phone className="w-3 h-3 text-gray-500" />
-                    <span>{truck.phone}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <MapPin className="w-3 h-3 text-gray-500" />
-                    <span>{truck.coverage}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Star className="w-3 h-3 text-yellow-500 fill-current" />
-                    <span>{truck.rating}/5</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Clock className="w-3 h-3 text-gray-500" />
-                    <span>ETA: {truck.eta}</span>
-                  </div>
-                </div>
-                <div className="mt-3 pt-3 border-t">
-                  <p className="text-xs text-gray-500 mb-2">Current: {truck.currentLocation}</p>
-                  <p className="text-xs text-gray-600">{truck.capacity}</p>
-                </div>
-                <Button
-                  size="sm"
-                  className="w-full mt-3"
-                  disabled={!truck.available}
-                  onClick={() => handleEmergencyCall(truck.phone)}
-                >
-                  <Phone className="w-3 h-3 mr-1" />
-                  Call Now
-                </Button>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      
 
       {/* Dispatch Modal */}
       {showDispatchModal && (

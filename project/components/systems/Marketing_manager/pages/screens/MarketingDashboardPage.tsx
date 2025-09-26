@@ -50,7 +50,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ userRole }) => {
   // Reusable fetch function
   const fetchActivities = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/marketing-activities');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/marketing-activities');
       if (!res.ok) throw new Error('Network response was not ok');
 
       const data = await res.json();

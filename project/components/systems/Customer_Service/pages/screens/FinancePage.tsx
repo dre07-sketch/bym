@@ -31,7 +31,7 @@ interface PaymentHistory {
   status: 'Completed' | 'Pending' | 'Failed';
 }
 
-const API_BASE_URL = 'http://localhost:5001/api';
+const API_BASE_URL = 'https://ipasystem.bymsystem.com/api';
 
 const FinancePage = () => {
   // State

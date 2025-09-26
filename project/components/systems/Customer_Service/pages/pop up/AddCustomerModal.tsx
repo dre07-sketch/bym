@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Phone, MapPin, Car, Plus, Save, Briefcase, CheckCircle, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { X, User, Mail, Phone, MapPin, Car, Plus, Save, Briefcase, CheckCircle, Image as ImageIcon, Trash2, Lock } from 'lucide-react';
 
 interface AddCustomerModalProps {
   isOpen: boolean;
@@ -13,7 +13,7 @@ interface Vehicle {
   licensePlate: string | null;
   vin: string | null;
   color: string | null;
-  mileage: string | null;
+  current_mileage: string | null;
   image: File | null;
   imagePreview: string | null;
 }
@@ -30,6 +30,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
     name: '',
     email: '',
     phone: '',
+    password: '', // Added password field
     address: '',
     emergencyContact: '',
     notes: '',
@@ -46,7 +47,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
       licensePlate: null,
       vin: null,
       color: null,
-      mileage: null,
+      current_mileage: null,
       image: null,
       imagePreview: null,
     },
@@ -70,7 +71,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
   useEffect(() => {
     const fetchCarModels = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/customers/car-models');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/customers/car-models');
         if (!response.ok) throw new Error('Failed to load car models');
         const data: Record<string, { model: string; serviceInterval: number }[]> = await response.json();
         setCarModelsByMake(data);
@@ -179,7 +180,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
         licensePlate: null,
         vin: null,
         color: null,
-        mileage: null,
+        current_mileage: null,
         image: null,
         imagePreview: null,
       },
@@ -198,6 +199,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
       name: '',
       email: '',
       phone: '',
+      password: '', // Reset password field
       address: '',
       emergencyContact: '',
       notes: '',
@@ -213,7 +215,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
         licensePlate: null,
         vin: null,
         color: null,
-        mileage: null,
+        current_mileage: null,
         image: null,
         imagePreview: null,
       },
@@ -244,6 +246,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
       if (!customerData.name.trim()) throw new Error('Name is required');
       if (!customerData.email.trim()) throw new Error('Email is required');
       if (!customerData.phone.trim()) throw new Error('Phone number is required');
+      if (!customerData.password.trim()) throw new Error('Password is required'); // Added password validation
       if (customerData.customerType === 'company' && !customerData.companyName.trim())
         throw new Error('Company name is required for business customers');
       if (vehicles.length === 0) throw new Error('At least one vehicle is required');
@@ -258,6 +261,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
       formData.append('name', customerData.name);
       formData.append('email', customerData.email);
       formData.append('phone', customerData.phone);
+      formData.append('password', customerData.password); // Added password to form data
       if (customerData.address) formData.append('address', customerData.address);
       if (customerData.emergencyContact)
         formData.append('emergencyContact', customerData.emergencyContact);
@@ -285,12 +289,12 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
         licensePlate: vehicle.licensePlate,
         vin: vehicle.vin,
         color: vehicle.color,
-        mileage: vehicle.mileage,
+        current_mileage: vehicle.current_mileage,
       }));
       formData.append('vehicles', JSON.stringify(vehiclesData));
 
       // Submit
-      const response = await fetch('http://localhost:5001/api/customers', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/customers', {
         method: 'POST',
         body: formData,
       });
@@ -515,6 +519,23 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
                     />
                   </div>
 
+                  {/* Password Field */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      <Lock className="w-4 h-4 mr-1" />
+                      Password *
+                    </label>
+                    <input
+                      type="password"
+                      value={customerData.password}
+                      onChange={(e) => handleCustomerChange('password', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter password"
+                      required
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Emergency Contact
@@ -675,11 +696,11 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Current Mileage</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">current mileage</label>
                           <input
                             type="number"
-                            value={vehicle.mileage || ''}
-                            onChange={(e) => handleVehicleChange(index, 'mileage', e.target.value)}
+                            value={vehicle.current_mileage || ''}
+                            onChange={(e) => handleVehicleChange(index, 'current_mileage', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             placeholder="50000"
                             min="0"

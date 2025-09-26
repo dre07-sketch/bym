@@ -100,7 +100,7 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
  
 
     try {
-      const response = await fetch('http://localhost:5001/api/inventory/items', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/items', {
         method: 'POST',
         body: payload,
       });

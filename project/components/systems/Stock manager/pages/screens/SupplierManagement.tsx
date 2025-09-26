@@ -22,12 +22,28 @@ const SupplierManagement = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    contactPerson: '',
+    email: '',
+    phone: '',
+    address: '',
+    paymentTerms: 'Cash',
+    leadTime: '',
+    categories: [] as string[]
+  });
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Fetch suppliers from backend
   const fetchSuppliers = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:5001/api/inventory/suppliers');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/suppliers');
       const result = await response.json();
       if (result.success) {
         setSuppliers(result.data);
@@ -43,6 +59,119 @@ const SupplierManagement = () => {
   useEffect(() => {
     fetchSuppliers();
   }, []);
+
+  // Reset form when modal is opened
+  useEffect(() => {
+    if (showAddModal) {
+      setFormData({
+        name: '',
+        contactPerson: '',
+        email: '',
+        phone: '',
+        address: '',
+        paymentTerms: 'Cash',
+        leadTime: '',
+        categories: []
+      });
+      setFormError('');
+      setSuccessMessage('');
+    }
+  }, [showAddModal]);
+
+  // Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Handle category checkbox changes
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { value, checked } = e.target;
+    setFormData(prev => {
+      if (checked) {
+        return { ...prev, categories: [...prev.categories, value] };
+      } else {
+        return { ...prev, categories: prev.categories.filter(cat => cat !== value) };
+      }
+    });
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setFormError('');
+    setSuccessMessage('');
+
+    console.log("Form submitted with data:", formData);
+
+    try {
+      // Validate form
+      if (!formData.name.trim()) {
+        setFormError('Company name is required');
+        setIsSubmitting(false);
+        return;
+      }
+      if (!formData.contactPerson.trim()) {
+        setFormError('Contact person is required');
+        setIsSubmitting(false);
+        return;
+      }
+      if (!formData.email.trim()) {
+        setFormError('Email is required');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Prepare data for submission
+      const newSupplier = {
+        name: formData.name.trim(),
+        contactPerson: formData.contactPerson.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        address: formData.address.trim(),
+        paymentTerms: formData.paymentTerms,
+        leadTime: parseInt(formData.leadTime) || 0,
+        categories: formData.categories,
+        // Add default values for fields not in the form
+        rating: 0,
+        totalOrders: 0,
+        totalValue: 0,
+        lastOrderDate: new Date().toISOString().split('T')[0],
+        status: 'active' as const
+      };
+
+      console.log("Sending data to API:", newSupplier);
+
+      // Send to backend
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/suppliers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newSupplier),
+      });
+
+      const result = await response.json();
+      console.log("API response:", result);
+
+      if (result.success) {
+        setSuccessMessage('✅ Supplier added successfully!');
+        // Refresh suppliers after a short delay
+        setTimeout(() => {
+          fetchSuppliers();
+          setShowAddModal(false);
+        }, 1500);
+      } else {
+        setFormError(result.message || 'Failed to add supplier');
+      }
+    } catch (err) {
+      console.error('Error adding supplier:', err);
+      setFormError('An error occurred while adding the supplier. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Compute dynamic stats
   const stats = {
@@ -272,33 +401,55 @@ const SupplierManagement = () => {
 
       {/* Add Supplier Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 text-black">
           <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-xl font-semibold text-gray-900">Add New Supplier</h3>
             </div>
-            <div className="p-6 space-y-6">
+            
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {formError && (
+                <div className="p-3 bg-red-50 text-red-700 rounded-lg">
+                  {formError}
+                </div>
+              )}
+              
+              {successMessage && (
+                <div className="p-3 bg-green-50 text-green-700 rounded-lg">
+                  {successMessage}
+                </div>
+              )}
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Company Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Company Name *</label>
                   <input
                     type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Enter company name"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person *</label>
                   <input
                     type="text"
+                    name="contactPerson"
+                    value={formData.contactPerson}
+                    onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Enter contact person name"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
                   <input
                     type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Enter email address"
                   />
@@ -307,60 +458,86 @@ const SupplierManagement = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
                   <input
                     type="tel"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Enter phone number"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Payment Terms</label>
-                  <select className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <option>Net 15</option>
-                    <option>Net 30</option>
-                    <option>Net 45</option>
-                    <option>Net 60</option>
-                    <option>COD</option>
+                  <select 
+                    name="paymentTerms"
+                    value={formData.paymentTerms}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Bank transfer">Bank transfer</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Lead Time (days)</label>
                   <input
                     type="number"
+                    name="leadTime"
+                    value={formData.leadTime}
+                    onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Enter lead time in days"
                   />
                 </div>
               </div>
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
                 <textarea
+                  name="address"
+                  value={formData.address}
+                  onChange={handleInputChange}
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter complete address"
                 ></textarea>
               </div>
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Categories</label>
                 <div className="grid grid-cols-2 gap-2">
                   {['Engine Parts', 'Brake System', 'Electrical', 'Filters', 'Fluids', 'Tools'].map(category => (
                     <label key={category} className="flex items-center space-x-2">
-                      <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      <input 
+                        type="checkbox" 
+                        value={category}
+                        checked={formData.categories.includes(category)}
+                        onChange={handleCategoryChange}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" 
+                      />
                       <span className="text-sm text-gray-700">{category}</span>
                     </label>
                   ))}
                 </div>
               </div>
-            </div>
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-4">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="px-6 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all duration-200">
-                Add Supplier
-              </button>
-            </div>
+              
+              <div className="flex justify-end space-x-4 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-6 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all duration-200 disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Adding...' : 'Add Supplier'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

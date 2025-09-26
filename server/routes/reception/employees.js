@@ -138,7 +138,10 @@ router.get('/getemployees', (req, res) => {
       salary, 
       working_hours, 
       image_url,
-      created_at
+      created_at,
+      status,
+      mechanic_status,
+      inspection_status
     FROM employees
   `;
 
@@ -178,13 +181,17 @@ router.get('/getemployees', (req, res) => {
         salary: item.salary,
         workingHours: item.working_hours,
         image: item.image_url ? `http://localhost:5001/uploads/${item.image_url}` : null,
-        createdAt: item.created_at // <-- Added created_at here
+        createdAt: item.created_at,
+        status: item.status,                   // new
+        mechanicStatus: item.mechanic_status,  // new
+        inspectionStatus: item.inspection_status // new
       };
     });
 
     res.json(formattedResults);
   });
 });
+
 
 
 router.get('/test', (req, res) => {

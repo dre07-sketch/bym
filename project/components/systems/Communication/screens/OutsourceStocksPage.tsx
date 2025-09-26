@@ -75,7 +75,7 @@ const OutsourceStocksPage = () => {
     const fetchStocks = async () => {
       setLoading(true);
       setError(null);
-      const API_BASE = 'http://localhost:5001';
+      const API_BASE = 'https://ipasystem.bymsystem.com';
       try {
         const response = await fetch(`${API_BASE}/api/communication-center/outsource-stock`);
         if (!response.ok) {
@@ -153,7 +153,7 @@ const OutsourceStocksPage = () => {
       )
     );
     try {
-      const response = await fetch(`http://localhost:5001/api/communication-center/outsource-stock/${id}/status`, {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/outsource-stock/${id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

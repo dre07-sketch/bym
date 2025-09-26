@@ -1,116 +1,81 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const db = require('../../db/connection');
+const db = require("../../db/connection");
 
-// =============================
-// GET Completed Ticket by ticket_number
-// =============================
-router.get('/completed/:ticket_number', (req, res) => {
-  const { ticket_number } = req.params;
-
-  // First get the ticket if completed
-  const ticketQuery = `
-    SELECT 
-      st.id,
-      st.ticket_number,
-      st.customer_name,
-      st.vehicle_info,
-      st.license_plate,
-      st.title,
-      st.description,
-      st.mechanic_assign,
-      st.priority,
-      st.type,
-      st.status,
-      st.created_at,
-      st.completion_date,
-      st.estimated_completion_date
-    FROM service_tickets st
-    WHERE st.ticket_number = ? AND st.status = 'completed'
+// ✅ GET all completed tickets with full details
+router.get("/completed-tickets", (req, res) => {
+  const ticketsQuery = `
+    SELECT *
+    FROM service_tickets
+    WHERE status = 'completed'
+    ORDER BY updated_at DESC
   `;
 
-  db.query(ticketQuery, [ticket_number], (err, ticketResults) => {
+  db.query(ticketsQuery, (err, tickets) => {
     if (err) {
-      console.error("Error fetching ticket:", err);
-      return res.status(500).json({ message: "Error fetching ticket" });
+      console.error("❌ Error fetching completed tickets:", err);
+      return res.status(500).json({ error: "Database error" });
     }
 
-    if (ticketResults.length === 0) {
-      return res.status(404).json({ message: "No completed ticket found" });
+    if (tickets.length === 0) {
+      return res.json([]);
     }
 
-    const ticket = ticketResults[0];
+    let results = [];
+    let remaining = tickets.length;
 
-    // Fetch inspection details
-    const inspectionQuery = `
-      SELECT 
-        main_issue_resolved,
-        reassembly_verified,
-        general_condition,
-        notes,
-        inspection_date,
-        inspection_status
-      FROM inspections
-      WHERE ticket_number = ?
-    `;
+    tickets.forEach(ticket => {
+      const { ticket_number } = ticket;
+      let details = {
+        disassembled_parts: [],
+        outsource_mechanics: [],
+        ordered_parts: [],
+        outsource_stock: [],
+        inspections: [],
+        progress_logs: [],
+        bills: [],
+        insurance: null
+      };
 
-    db.query(inspectionQuery, [ticket_number], (err, inspectionResults) => {
-      if (err) {
-        console.error("Error fetching inspection:", err);
-        return res.status(500).json({ message: "Error fetching inspection" });
-      }
+      const queries = {
+        disassembled_parts: "SELECT * FROM disassembled_parts WHERE ticket_number = ? ORDER BY logged_at",
+        outsource_mechanics: "SELECT * FROM outsource_mechanics WHERE ticket_number = ? ORDER BY created_at",
+        ordered_parts: "SELECT * FROM ordered_parts WHERE ticket_number = ? ORDER BY ordered_at",
+        outsource_stock: "SELECT * FROM outsource_stock WHERE ticket_number = ? ORDER BY requested_at",
+        inspections: "SELECT * FROM inspections WHERE ticket_number = ? ORDER BY created_at",
+        progress_logs: "SELECT * FROM progress_logs WHERE ticket_number = ? ORDER BY created_at",
+        bills: "SELECT * FROM bills WHERE ticket_number = ? ORDER BY created_at",
+        insurance: "SELECT * FROM insurance WHERE ticket_number = ? LIMIT 1"
+      };
 
-      // Fetch progress logs
-      const progressQuery = `
-        SELECT 
-          part_name,
-          condition,
-          status,
-          notes,
-          logged_at
-        FROM progress_logs
-        WHERE ticket_number = ?
-        ORDER BY logged_at ASC
-      `;
+      let pending = Object.keys(queries).length;
 
-      db.query(progressQuery, [ticket_number], (err, progressResults) => {
-        if (err) {
-          console.error("Error fetching progress logs:", err);
-          return res.status(500).json({ message: "Error fetching progress logs" });
-        }
-
-        // Fetch disassembled parts
-        const disassembledQuery = `
-          SELECT 
-            part_name,
-            condition,
-            status,
-            notes,
-            logged_at,
-            reassembly_verified
-          FROM disassembled_parts
-          WHERE ticket_number = ?
-        `;
-
-        db.query(disassembledQuery, [ticket_number], (err, disassembledResults) => {
+      Object.entries(queries).forEach(([key, sql]) => {
+        db.query(sql, [ticket_number], (err, rows) => {
           if (err) {
-            console.error("Error fetching disassembled parts:", err);
-            return res.status(500).json({ message: "Error fetching disassembled parts" });
+            console.error(`❌ Error fetching ${key} for ${ticket_number}:`, err);
+            details[key] = key === "insurance" ? null : [];
+          } else {
+            if (key === "insurance") {
+              details[key] = rows.length > 0 ? rows[0] : null;
+            } else {
+              details[key] = rows;
+            }
           }
 
-          // Build response
-          const response = {
-            ticket,
-            inspections: inspectionResults,
-            progress_logs: progressResults,
-            disassembled_parts: disassembledResults
-          };
-
-          res.json(response);
+          pending--;
+          if (pending === 0) {
+            results.push({ ...ticket, ...details });
+            remaining--;
+            if (remaining === 0) {
+              return res.json(results);
+            }
+          }
         });
       });
     });
   });
 });
+
 
 module.exports = router;

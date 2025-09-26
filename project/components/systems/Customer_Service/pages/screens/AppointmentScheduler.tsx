@@ -52,7 +52,7 @@ interface Appointment {
   licensePlate: string | null;
   vin: string | null;
   color: string | null;
-  mileage: number | null;
+  current_mileage: number | null;
   appointmentDate: string;
   appointmentTime: string;
   serviceType: string;
@@ -98,7 +98,7 @@ export default function AppointmentList() {
     const fetchAppointments = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:5001/api/appointments/getappointment');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/appointments/getappointment');
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data: Appointment[] = await response.json();
         // Filter out converted appointments from the list
@@ -176,7 +176,7 @@ export default function AppointmentList() {
       description: `Converted from Appointment
 Customer: ${apt.customerName} (${apt.customerType === 'individual' ? 'Individual' : 'Company'})
 Vehicle: ${apt.vehicleYear} ${apt.vehicleMake} ${apt.vehicleModel} (${apt.licensePlate || 'No Plate'})
-Mileage: ${apt.mileage ?? 'N/A'} miles
+current_mileage: ${apt.current_mileage ?? 'N/A'} miles
 Color: ${apt.color}
 Service Type: ${apt.serviceType}
 Duration: ${apt.durationMinutes} minutes
@@ -218,7 +218,7 @@ Notes: ${apt.notes || 'No additional notes.'}`,
         urgency_level: ticketFormData.urgencyLevel,
       };
 
-      const response = await fetch('http://localhost:5001/api/tickets', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ticketData),
@@ -232,7 +232,7 @@ Notes: ${apt.notes || 'No additional notes.'}`,
       const createdTicket = await response.json();
 
       // Update backend appointment status to 'converted'
-      const statusResponse = await fetch(`http://localhost:5001/api/appointments/${showDetailsModal.id}/status`, {
+      const statusResponse = await fetch(`https://ipasystem.bymsystem.com/api/appointments/${showDetailsModal.id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'converted' }),
@@ -464,8 +464,8 @@ Notes: ${apt.notes || 'No additional notes.'}`,
                   </div>
                   <div className="text-right space-y-3">
                     <div>
-                      <span className="text-sm text-gray-500">Mileage: </span>
-                      <span className="font-medium">{apt.mileage ?? 'N/A'}</span>
+                      <span className="text-sm text-gray-500">current_mileage: </span>
+                      <span className="font-medium">{apt.current_mileage ?? 'N/A'}</span>
                     </div>
                     <div className="space-x-2">
                       <Button size="sm" variant="outline" onClick={() => openDetails(apt)}>
@@ -562,8 +562,8 @@ Notes: ${apt.notes || 'No additional notes.'}`,
                       <span className="font-medium">{showDetailsModal.color}</span>
                     </div>
                     <div>
-                      <span className="text-sm text-gray-500">Mileage: </span>
-                      <span className="font-medium">{showDetailsModal.mileage ?? 'N/A'} miles</span>
+                      <span className="text-sm text-gray-500">current_mileage: </span>
+                      <span className="font-medium">{showDetailsModal.current_mileage ?? 'N/A'} miles</span>
                     </div>
                   </div>
                 </div>

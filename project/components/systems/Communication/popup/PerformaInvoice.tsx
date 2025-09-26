@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useRef } from 'react';
-import { Printer, Download, FileText, Plus, X, Building2, User, CheckCircle } from 'lucide-react';
+import { Printer, Download, FileText, Plus, X, Building2, User, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -32,8 +32,9 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [savedInvoiceNumber, setSavedInvoiceNumber] = useState('');
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   
-  // Generate a unique proforma number with a random component
   const generateProformaNumber = () => {
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1000);
@@ -193,7 +194,6 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
     printWindow.close();
   };
 
-  // Create a compact version of the invoice for PDF generation
   const createCompactPrintElement = () => {
     const printElement = document.createElement('div');
     printElement.innerHTML = `
@@ -370,18 +370,16 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
       </div>
     `;
     
-    // Apply styles to make it look like the original
     printElement.style.position = 'absolute';
     printElement.style.left = '-9999px';
     printElement.style.top = '0';
-    printElement.style.width = '210mm'; // A4 width
-    printElement.style.height = '297mm'; // A4 height
+    printElement.style.width = '210mm';
+    printElement.style.height = '297mm';
     printElement.style.backgroundColor = '#ffffff';
     printElement.style.fontFamily = 'Georgia, Times New Roman, serif';
     printElement.style.color = 'black';
-    printElement.style.fontSize = '12px'; // Smaller base font size
+    printElement.style.fontSize = '12px';
     
-    // Add to body temporarily
     document.body.appendChild(printElement);
     
     return printElement;
@@ -389,44 +387,41 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
 
   const handleDownloadPDF = async () => {
     let element = printRef.current;
-    let tempElement = null;
+    let tempElement: HTMLDivElement | null = null;
     
-    // If printRef is not available, create a temporary element
     if (!element) {
       console.warn('Print reference is not available, creating temporary element');
-      tempElement = createCompactPrintElement();
+      tempElement = createCompactPrintElement() as HTMLDivElement;
       element = tempElement;
     }
     
     try {
-      // Wait a bit to ensure all content is rendered
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Temporarily remove any animations or transitions that might interfere
       const originalTransition = element.style.transition;
       element.style.transition = 'none';
       
       const canvas = await html2canvas(element, {
-        scale: 2, // Reduced scale because we are using a compact version
+        scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
         allowTaint: true,
-        // Ensure all text is rendered
         onclone: (clonedDoc) => {
           clonedDoc.querySelectorAll('*').forEach(el => {
             const style = window.getComputedStyle(el);
-            el.style.fontFamily = style.fontFamily;
-            el.style.fontSize = style.fontSize;
-            el.style.fontWeight = style.fontWeight;
-            el.style.color = style.color;
-            el.style.backgroundColor = style.backgroundColor;
+            if (el instanceof HTMLElement) {
+              el.style.fontFamily = style.fontFamily;
+              el.style.fontSize = style.fontSize;
+              el.style.fontWeight = style.fontWeight;
+              el.style.color = style.color;
+              el.style.backgroundColor = style.backgroundColor;
+            }
           });
           return clonedDoc;
         }
       });
       
-      // Restore original transition
       element.style.transition = originalTransition;
       
       const imgData = canvas.toDataURL('image/png', 1.0);
@@ -435,7 +430,6 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
       
-      // Since we are using a compact version that fits in A4, we can add the image directly
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       
       pdf.save(`proforma-${formData.invoiceInfo.proformaNumber}.pdf`);
@@ -443,27 +437,13 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
       console.error('PDF generation error:', error);
       alert('Failed to generate PDF. Please try again.');
     } finally {
-      // Clean up temporary element if it was created
       if (tempElement && tempElement.parentNode) {
         tempElement.parentNode.removeChild(tempElement);
       }
     }
   };
 
-  const saveAndDownloadPDF = async (retryCount = 0) => {
-    if (!formData.customerInfo.name.trim()) {
-      alert('Customer Name is required.');
-      return;
-    }
-    if (formData.items.length === 0) {
-      alert('Please add at least one item.');
-      return;
-    }
-    
-    // Generate a new proforma number if this is a retry
-    const proformaNumber = retryCount > 0 ? generateProformaNumber() : formData.invoiceInfo.proformaNumber;
-    
-    // Updated payload to match new API requirements
+  const saveToLocalStorage = (proformaNumber: string) => {
     const payload = {
       proforma_number: proformaNumber,
       proforma_date: formData.invoiceInfo.date,
@@ -481,20 +461,74 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
       }))
     };
     
+    const savedInvoices = JSON.parse(localStorage.getItem('proformaInvoices') || '[]');
+    savedInvoices.push({
+      ...payload,
+      savedAt: new Date().toISOString(),
+      id: Date.now().toString()
+    });
+    localStorage.setItem('proformaInvoices', JSON.stringify(savedInvoices));
+    
+    return payload;
+  };
+
+  const saveAndDownloadPDF = async (currentRetryCount = 0) => {
+    if (!formData.customerInfo.name.trim()) {
+      alert('Customer Name is required.');
+      return;
+    }
+    if (formData.items.length === 0) {
+      alert('Please add at least one item.');
+      return;
+    }
+    
+    const proformaNumber = currentRetryCount > 0 ? generateProformaNumber() : formData.invoiceInfo.proformaNumber;
+    
+    const payload = {
+      proforma_number: proformaNumber,
+      proforma_date: formData.invoiceInfo.date,
+      notes: formData.invoiceInfo.validUntil ? `Valid until: ${formData.invoiceInfo.validUntil}` : null,
+      customer_name: formData.customerInfo.name,
+      company_name: formData.companyInfo.name,
+      company_address: formData.companyInfo.address,
+      company_phone: formData.companyInfo.phone,
+      company_vat_number: formData.companyInfo.vatNumber,
+      items: formData.items.map(item => ({
+        description: item.description || 'Item',
+        size: item.size || null,
+        quantity: item.quantity || 1,
+        unit_price: item.unitPrice || 0
+      }))
+    };
+    
+    console.log('Sending payload:', payload);
+    
     try {
       setIsGenerating(true);
-      // Updated API endpoint
-      const response = await fetch('http://localhost:5001/api/communication-center/proformas-post', {
+      setErrorDetails(null);
+      
+      const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/proformas-post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
       if (!response.ok) {
-        // Handle 409 Conflict specifically
-        if (response.status === 409 && retryCount < 3) {
-          console.log(`Conflict detected, retrying with new proforma number (attempt ${retryCount + 1})`);
-          // Update the form data with the new proforma number
+        let errorDetails = '';
+        try {
+          const errorData = await response.json();
+          errorDetails = JSON.stringify(errorData);
+          console.error('Error response:', errorData);
+        } catch (e) {
+          errorDetails = await response.text();
+          console.error('Error text:', errorDetails);
+        }
+        
+        if (response.status === 409 && currentRetryCount < 3) {
+          console.log(`Conflict detected, retrying with new proforma number (attempt ${currentRetryCount + 1})`);
           setFormData(prev => ({
             ...prev,
             invoiceInfo: {
@@ -502,15 +536,15 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
               proformaNumber: proformaNumber
             }
           }));
-          // Retry with a new proforma number
-          return saveAndDownloadPDF(retryCount + 1);
+          return saveAndDownloadPDF(currentRetryCount + 1);
         }
         
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        throw new Error(`HTTP ${response.status}: ${errorDetails}`);
       }
       
       const result = await response.json();
+      console.log('Save successful:', result);
+      
       setShowPreview(false);
       setSavedInvoiceNumber(payload.proforma_number);
       setToastMessage(`Proforma ${payload.proforma_number} saved successfully!`);
@@ -518,25 +552,36 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
       
       if (onSaveSuccess) onSaveSuccess();
       
-      // Wait a moment before generating PDF to ensure UI updates
       await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Now generate and download the PDF using the improved function
       await handleDownloadPDF();
       
     } catch (error) {
       console.error('Save error:', error);
+      
+      // Fallback to local storage
+      const localPayload = saveToLocalStorage(proformaNumber);
+      
       let errorMessage = 'An unknown error occurred';
       if (error instanceof Error) {
         errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      } else if (error && typeof error === 'object' && 'message' in error) {
-        errorMessage = (error as { message: string }).message;
       }
-      alert(`❌ Save failed: ${errorMessage}`);
+      
+      setErrorDetails(errorMessage);
+      setToastMessage(`Proforma saved locally (backend unavailable)`);
+      setShowToast(true);
+      
+      // Continue with PDF generation even if backend fails
+      setShowPreview(false);
+      setSavedInvoiceNumber(localPayload.proforma_number);
+      
+      if (onSaveSuccess) onSaveSuccess();
+      
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await handleDownloadPDF();
+      
     } finally {
       setIsGenerating(false);
+      setRetryCount(currentRetryCount);
     }
   };
 
@@ -558,6 +603,10 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
 
   const cancelAction = () => {
     onClose();
+  };
+
+  const retrySave = () => {
+    saveAndDownloadPDF();
   };
 
   if (!isOpen) return null;
@@ -781,7 +830,7 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
               <div className="border-2 border-black rounded-3xl p-8">
                 <div className="flex items-center space-x-3 mb-8">
                   <div className="p-3 border-2 border-black rounded-2xl">
-                    <img src="photo_1_2025-06-05_14-37-50.jpg" alt="Company Logo" className="w-32 h-auto" />;
+                    <img src="photo_1_2025-06-05_14-37-50.jpg" alt="Company Logo" className="w-32 h-auto" />
                   </div>
                   <h2 className="text-2xl font-bold text-black">Company Information</h2>
                 </div>
@@ -1143,31 +1192,31 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
                     
                     {/* Bottom Section */}
                     <div className="border-t border-black pt-6">
-                      <div class="mb-6">
-                        <div class="mb-3">
-                          <p class="text-sm text-black mb-1">1. The offer provided is valid for ___________ days of the date submitted</p>
-                          <p class="text-sm text-black mb-1">. ዋጋው የሚያገለግለው ለ________ ቀን ብቻ ነው</p>
+                      <div className="mb-6">
+                        <div className="mb-3">
+                          <p className="text-sm text-black mb-1">1. The offer provided is valid for ___________ days of the date submitted</p>
+                          <p className="text-sm text-black mb-1">. ዋጋው የሚያገለግለው ለ________ ቀን ብቻ ነው</p>
                         </div>
-                        <div class="mb-3">
-                          <p class="text-sm text-black mb-1">2. Payment mode is due ____________ in advance</p>
-                          <p class="text-sm text-black mb-1">. የአከፋፈል ሁኔታ ____________ ቅድሚያ ነው</p>
+                        <div className="mb-3">
+                          <p className="text-sm text-black mb-1">2. Payment mode is due ____________ in advance</p>
+                          <p className="text-sm text-black mb-1">. የአከፋፈል ሁኔታ ____________ ቅድሚያ ነው</p>
                         </div>
-                        <div class="mb-3">
-                          <p class="text-sm text-black mb-1">3. Delivery time ___________</p>
-                          <p class="text-sm text-black mb-1">. የማስረከቢያ ጊዜ ___________</p>
+                        <div className="mb-3">
+                          <p className="text-sm text-black mb-1">3. Delivery time ___________</p>
+                          <p className="text-sm text-black mb-1">. የማስረከቢያ ጊዜ ___________</p>
                         </div>
                       </div>
                       
-                      <div class="flex justify-end mt-8">
-                        <div class="text-right">
-                          <p class="text-sm text-black mb-1">Signature / ፊርማ:</p>
-                          <div class="w-48 h-12 border-b border-black"></div>
-                          <p class="text-sm text-black mt-2">Date / ቀን: _______________</p>
+                      <div className="flex justify-end mt-8">
+                        <div className="text-right">
+                          <p className="text-sm text-black mb-1">Signature / ፊርማ:</p>
+                          <div className="w-48 h-12 border-b border-black"></div>
+                          <p className="text-sm text-black mt-2">Date / ቀን: _______________</p>
                         </div>
                       </div>
-                      <div class="text-center mb-6">
-                        <p class="text-lg font-bold text-black">የመኪናዎ ደህንነት ማእከል</p>
-                        <p class="text-lg font-bold text-black">THE CAR SAFETY CENTER</p>
+                      <div className="text-center mb-6">
+                        <p className="text-lg font-bold text-black">የመኪናዎ ደህንነት ማእከል</p>
+                        <p className="text-lg font-bold text-black">THE CAR SAFETY CENTER</p>
                       </div>
                     </div>
                   </div>
@@ -1206,6 +1255,40 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
                 <button onClick={() => setShowToast(false)} className="text-black hover:text-gray-700">
                   <X className="w-5 h-5" />
                 </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Error Toast */}
+          {errorDetails && (
+            <div className="fixed bottom-6 right-6 z-50 animate-fade-in-up pointer-events-auto">
+              <div className="bg-red-50 shadow-2xl rounded-2xl p-4 min-w-80 border border-red-200 flex flex-col space-y-3 transform transition-all duration-300">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0 bg-red-100 border-2 border-red-300 w-10 h-10 rounded-xl flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6 text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-red-800">Backend Error</p>
+                    <p className="text-xs text-red-700">Invoice saved locally instead</p>
+                  </div>
+                  <button onClick={() => setErrorDetails(null)} className="text-red-500 hover:text-red-700">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="text-xs text-red-700 bg-red-100 p-2 rounded-lg max-h-20 overflow-y-auto">
+                  {errorDetails}
+                </div>
+                
+                <div className="flex justify-end">
+                  <button
+                    onClick={retrySave}
+                    className="px-3 py-1 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 flex items-center space-x-1"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Retry</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

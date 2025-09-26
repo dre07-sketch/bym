@@ -15,8 +15,8 @@ const Dashboard = () => {
     const fetchCounts = async () => {
       try {
         const [vehiclesRes, inspectionsRes] = await Promise.all([
-          fetch(`http://localhost:5001/api/manager-analytics/vehicles-in-service`),
-          fetch(`http://localhost:5001/api/manager-analytics/pending-inspections`)
+          fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/vehicles-in-service`),
+          fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/pending-inspections`)
         ]);
 
         const vehiclesData = await vehiclesRes.json();

@@ -18,14 +18,14 @@ import {
   Users,
   Wrench,
   DollarSign,
-  FileText,
   Building,
   ArrowRight,
   ArrowLeft,
   Save,
   Briefcase,
   Image as ImageIcon,
-  Trash2
+  Trash2,
+  FileText
 } from 'lucide-react';
 import ConversionModal from '../pop up/ConversionModal';
 
@@ -88,7 +88,7 @@ interface InsuranceForm {
 interface Vehicle {
   make: string;
   model: string;
-  year: number | null; // Changed from string | null to number | null
+  year: number | null;
   licensePlate: string | null;
   vin: string | null;
   color: string | null;
@@ -172,13 +172,32 @@ function Insurance() {
   const [carMakes, setCarMakes] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null); // Changed to string | null
+  const [error, setError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
   
   // New states for API integration
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isFetchingProforma, setIsFetchingProforma] = useState(false);
+  
+  // Function to refresh the converted proformas count
+  const refreshConvertedCount = async () => {
+    try {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/insurance/converted-proformas/count');
+      const data = await response.json();
+      
+      if (data.success) {
+        setAnalytics(prev => ({
+          ...prev,
+          acceptedProformas: data.convertedCount
+        }));
+      } else {
+        console.error('Failed to refresh converted count:', data.message);
+      }
+    } catch (error) {
+      console.error('Error refreshing converted count:', error);
+    }
+  };
   
   // Fetch accepted proformas from API
   useEffect(() => {
@@ -187,12 +206,17 @@ function Insurance() {
       setApiError(null);
       
       try {
-        const response = await fetch('http://localhost:5001/api/insurance/proformas/accepted'); // Adjust URL as needed
-        const data = await response.json();
+        // Fetch the list of accepted proformas
+        const listResponse = await fetch('https://ipasystem.bymsystem.com/api/insurance/proformas/accepted');
+        const listData = await listResponse.json();
         
-        if (data.success) {
+        // Fetch the count of converted proformas
+        const countResponse = await fetch('https://ipasystem.bymsystem.com/api/insurance/converted-proformas/count');
+        const countData = await countResponse.json();
+        
+        if (listData.success && countData.success) {
           // Transform API data to match Proforma interface
-          const transformedProformas: Proforma[] = data.data.map((item: any) => ({
+          const transformedProformas: Proforma[] = listData.data.map((item: any) => ({
             ...item,
             items: [] // API doesn't return items, so we initialize with empty array
           }));
@@ -202,7 +226,6 @@ function Insurance() {
           
           // Calculate analytics from API data
           const total = transformedProformas.length;
-          const accepted = transformedProformas.filter(p => p.status === 'Accepted').length;
           const revenue = transformedProformas.reduce((sum, p) => sum + p.total, 0);
           const avgValue = total > 0 ? revenue / total : 0;
           
@@ -211,13 +234,13 @@ function Insurance() {
             convertedToTickets: 0, // Will be updated when conversions happen
             conversionRate: 0,
             pendingProformas: 0, // Only accepted proformas are fetched
-            acceptedProformas: accepted,
+            acceptedProformas: countData.convertedCount, // Use the count from the API
             totalRevenue: revenue,
             averageValue: avgValue,
             customerSatisfaction: 92 // Default value
           });
         } else {
-          setApiError(data.message || 'Failed to fetch proformas');
+          setApiError(listData.message || countData.message || 'Failed to fetch proformas');
         }
       } catch (error) {
         console.error('Error fetching proformas:', error);
@@ -226,9 +249,10 @@ function Insurance() {
         setIsLoading(false);
       }
     };
+    
     fetchAcceptedProformas();
     
-    // Mock car models data (unchanged)
+    // Mock car models data
     setCarModelsByMake({
       'Toyota': [
         { model: 'Camry', serviceInterval: 10000 },
@@ -292,7 +316,7 @@ function Insurance() {
     
     try {
       // Fetch the full proforma details with items using proforma_number
-      const response = await fetch(`http://localhost:5001/api/insurance/proformas/${proforma.proforma_number}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/insurance/proformas/${proforma.proforma_number}`);
       const data = await response.json();
       
       if (data.success) {
@@ -353,7 +377,7 @@ function Insurance() {
         setCustomerImage(null);
         setCustomerImagePreview(null);
         setIsSubmitting(false);
-        setError(null); // Use null instead of empty string
+        setError(null);
         setIsSuccess(false);
         
         setShowTicketModal(true);
@@ -375,7 +399,7 @@ function Insurance() {
         setError('Title and description are required');
         return;
       }
-      setError(null); // Use null instead of empty string
+      setError(null);
       setCurrentStep(2);
     } else if (currentStep === 2) {
       // Validate insurance form
@@ -386,7 +410,7 @@ function Insurance() {
           return;
         }
       }
-      setError(null); // Use null instead of empty string
+      setError(null);
       setCurrentStep(3);
     }
   };
@@ -397,11 +421,11 @@ function Insurance() {
     }
   };
   
-  const handleTicketFormChange = (field: string, value: string) => { // Changed from keyof TicketForm to string
+  const handleTicketFormChange = (field: string, value: string) => {
     setTicketForm(prev => ({ ...prev, [field]: value }));
   };
   
-  const handleInsuranceFormChange = (field: string, value: string) => { // Changed from keyof InsuranceForm to string
+  const handleInsuranceFormChange = (field: string, value: string) => {
     setInsuranceForm(prev => ({ ...prev, [field]: value }));
   };
   
@@ -409,7 +433,7 @@ function Insurance() {
     setCustomerData((prev) => ({ ...prev, [field]: value }));
   };
   
-  const handleVehicleChange = (index: number, field: string, value: string) => { // Changed from keyof Vehicle to string
+  const handleVehicleChange = (index: number, field: string, value: string) => {
     setVehicles((prev) =>
       prev.map((vehicle, i) =>
         i === index
@@ -552,7 +576,7 @@ function Insurance() {
     setCustomerImage(null);
     setCustomerImagePreview(null);
     setIsSubmitting(false);
-    setError(null); // Use null instead of empty string
+    setError(null);
     setIsSuccess(false);
   };
   
@@ -564,7 +588,7 @@ function Insurance() {
   const handleGenerateTicket = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsSubmitting(true);
-    setError(null); // Use null instead of empty string
+    setError(null);
     
     try {
       // Validate customer form
@@ -591,6 +615,9 @@ function Insurance() {
           convertedToTickets: newConverted,
           conversionRate: Math.round((newConverted / proformas.length) * 100)
         }));
+        
+        // Refresh the accepted proformas count from the API
+        await refreshConvertedCount();
       }
       
       setIsSuccess(true);

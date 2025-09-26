@@ -47,7 +47,7 @@ const StockMovements: React.FC = () => {
   useEffect(() => {
     const fetchStockHistory = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/inventory/stock-history');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/stock-history');
         if (!response.ok) throw new Error('Failed to fetch stock history');
         const result = await response.json();
 

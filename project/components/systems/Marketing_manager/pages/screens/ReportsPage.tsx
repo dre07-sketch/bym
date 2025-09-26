@@ -57,7 +57,7 @@ const ReportsPage = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch('http://localhost:5001/api/marketing-activities');
+        const res = await fetch('https://ipasystem.bymsystem.com/api/marketing-activities');
         const result = await res.json();
         const activities: MarketingActivity[] = result.data || [];
 

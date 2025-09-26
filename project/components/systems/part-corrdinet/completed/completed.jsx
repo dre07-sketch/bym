@@ -12,7 +12,6 @@ const CompletedCars = () => {
     ticketNumber: '',
     status: 'All statuses',
   });
-  // Add state for active tab and sub-tab
   const [activeTab, setActiveTab] = useState('Overview');
   const [activeSubTab, setActiveSubTab] = useState('Ordered Parts');
 
@@ -44,7 +43,7 @@ const CompletedCars = () => {
   useEffect(() => {
     const fetchCompletedCars = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/active-tickets/completed-cars');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/active-tickets/completed-cars');
         if (!response.ok) throw new Error('Failed to fetch completed cars');
         const data = await response.json();
         const mappedData = data.map((car) => ({
@@ -53,11 +52,10 @@ const CompletedCars = () => {
           carName: car.vehicle_info,
           licensePlate: car.license_plate,
           clientName: car.customer_name,
-          mechanicName: car.mechanicName, // Mechanic name from API
+          mechanicName: car.mechanicName,
           startDate: car.startDate,
-          dueDate: car.estimatedCompletionDate,     // Estimated due date
-          completedDate: car.completedDate,         // Actual completion date
-          
+          dueDate: car.estimatedCompletionDate,
+          completedDate: car.completedDate,
           status: car.status,
         }));
         setCompletedCars(mappedData);
@@ -74,32 +72,29 @@ const CompletedCars = () => {
   const openModal = async (car) => {
     setSelectedCar(null);
     setIsModalOpen(true);
-    // Reset tabs when opening modal
     setActiveTab('Overview');
     setActiveSubTab('Ordered Parts');
     
     try {
-      const response = await fetch(`http://localhost:5001/api/active-tickets/completed-cars/${car.ticketNumber}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-tickets/completed-cars/${car.ticketNumber}`);
       if (!response.ok) throw new Error('Ticket not found');
       const detailedCar = await response.json();
-      // Map API response to UI format
       const mappedCar = {
         id: detailedCar.ticket_number,
         ticketNumber: detailedCar.ticket_number,
         carName: detailedCar.vehicle_info,
         licensePlate: detailedCar.license_plate,
         clientName: detailedCar.customer_name,
-        mechanicName: detailedCar.mechanicName, // Mechanic name from API
+        mechanicName: detailedCar.mechanicName,
         startDate: detailedCar.startDate,
-        dueDate: detailedCar.estimatedDueDate || detailedCar.estimatedCompletionDate, // Estimated
-        completedDate: detailedCar.actualCompletionDate || detailedCar.dueDate,       // Actual completion
-        
+        dueDate: detailedCar.estimatedDueDate || detailedCar.estimatedCompletionDate,
+        completedDate: detailedCar.actualCompletionDate || detailedCar.dueDate,
         status: detailedCar.status,
         description: detailedCar.description,
         toolsUsed: Array.isArray(detailedCar.toolsUsed) ? detailedCar.toolsUsed : [],
         activityLogs: detailedCar.activityLogs.map((log) => ({
           date: log.date || log.created_at,
-          activity: log.description, // assuming description is the activity
+          activity: log.description,
           notes: log.notes,
         })),
         disassembledParts: detailedCar.disassembledParts.map((part) => ({
@@ -112,12 +107,12 @@ const CompletedCars = () => {
         outsourceStock: detailedCar.outsourceStock || [],
         orderedParts: detailedCar.orderedParts || [],
         outsourceMechanics: detailedCar.outsourceMechanics || [],
+        checklist: detailedCar.checklist || {}
       };
       setSelectedCar(mappedCar);
     } catch (err) {
       console.error(err);
       alert('Failed to load vehicle details.');
-      // Fallback with safe values
       setSelectedCar({
         ...car,
         description: 'No description available.',
@@ -127,6 +122,7 @@ const CompletedCars = () => {
         outsourceStock: [],
         orderedParts: [],
         outsourceMechanics: [],
+        checklist: {}
       });
     }
   };
@@ -154,6 +150,20 @@ const CompletedCars = () => {
       (filters.status === 'All statuses' || car.status === filters.status)
     );
   });
+
+  // Checklist labels mapping
+  const checklistLabels = {
+    oilLeaks: "Oil Leaks",
+    engineAirFilterOilCoolant: "Engine/Air Filter/Oil/Coolant",
+    brakeFluidLevels: "Brake Fluid Levels",
+    glutenFluidLevels: "Gluten Fluid Levels",
+    batteryTimingBelt: "Battery & Timing Belt",
+    tire: "Tire Condition",
+    tirePressureRotation: "Tire Pressure & Rotation",
+    lightsWiperHorn: "Lights, Wiper & Horn",
+    doorLocksCentralLocks: "Door Locks & Central Locks",
+    customerWorkOrderReceptionBook: "Customer Work Order & Reception Book"
+  };
 
   if (loading) {
     return (
@@ -279,7 +289,6 @@ const CompletedCars = () => {
               onClick={() => openModal(car)}
               className="group bg-white border border-gray-200 rounded-2xl shadow-md hover:shadow-xl hover:border-indigo-200 transition-all duration-300 cursor-pointer transform hover:-translate-y-1 overflow-hidden"
             >
-              {/* Gradient Top Bar */}
               <div className="h-2 bg-gradient-to-r from-indigo-500 to-purple-600"></div>
               <div className="p-5">
                 <div className="flex flex-col md:flex-row md:justify-between md:items-start">
@@ -288,7 +297,6 @@ const CompletedCars = () => {
                       {car.clientName}
                     </h3>
                     <p className="text-indigo-600 font-semibold mt-1">{car.carName}</p>
-                    {/* Added mechanic name here */}
                     <p className="text-gray-600 text-sm mt-1">Mechanic: {car.mechanicName}</p>
                   </div>
                   <div className="text-right mt-2 md:mt-0">
@@ -414,7 +422,7 @@ const CompletedCars = () => {
               
               {/* Navigation Tabs */}
               <div className="flex border-b border-gray-200 bg-gray-50">
-                {['Overview', 'Progress Logs', 'Disassembled Parts', 'Used Tools', 'Ordered Parts', ].map((tab) => (
+                {['Overview', 'Progress Logs', 'Disassembled Parts', 'Used Tools', 'Ordered Parts', 'Inspection'].map((tab) => (
                   <button
                     key={tab}
                     className={`px-4 py-3 font-medium text-sm ${
@@ -682,7 +690,48 @@ const CompletedCars = () => {
                 )}
                 
                 {/* Inspection Tab */}
-                
+                {activeTab === 'Inspection' && (
+                  <div>
+                    <h3 className="font-bold text-lg text-black mb-3">Inspection Checklist</h3>
+                    <div className="bg-gray-50 rounded-xl p-5">
+                      {selectedCar.checklist && Object.keys(selectedCar.checklist).length > 0 ? (
+                        <div className="space-y-3">
+                          {Object.entries(selectedCar.checklist).map(([key, value]) => (
+                            <div key={key} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                              <span className="text-gray-700 font-medium">{checklistLabels[key] || key}</span>
+                              <div className="flex items-center">
+                                {value === true ? (
+                                  <span className="text-green-600 font-bold flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                    Yes
+                                  </span>
+                                ) : value === false ? (
+                                  <span className="text-red-600 font-bold flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                    </svg>
+                                    No
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-500 flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    N/A
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 italic">No inspection data available.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               
               {/* Footer */}

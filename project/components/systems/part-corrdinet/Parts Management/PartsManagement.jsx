@@ -3,7 +3,7 @@ import {
   Search, Filter, Eye, Wrench, User, Car, Calendar,
   Clock, CheckCircle, AlertTriangle, X, Phone,
   Mail, Settings, FileText, Package, Save, Ticket,
-  Loader2, CheckSquare, ShoppingCart, ExternalLink
+  Loader2, CheckSquare, ShoppingCart, ExternalLink, Tag
 } from 'lucide-react';
 
 const PartsManagement = () => {
@@ -45,7 +45,7 @@ const PartsManagement = () => {
   });
   
   // API endpoint configuration
-  const API_BASE_URL = 'http://localhost:5001/api';
+  const API_BASE_URL = 'https://ipasystem.bymsystem.com/api';
   
   // Fetch active tickets
   useEffect(() => {
@@ -84,6 +84,7 @@ const PartsManagement = () => {
             outsourceStock: ticket.outsource_stock || [],
             orderedParts: ticket.ordered_parts || [],
             notes: ticket.notes || 'No additional notes.',
+            type: ticket.type || 'Standard', // Added type field
           };
         });
         
@@ -214,6 +215,17 @@ const PartsManagement = () => {
       case 'on-hold': return <AlertTriangle className="w-4 h-4" />;
       case 'ready-for-inspection': return <FileText className="w-4 h-4" />;
       default: return <Clock className="w-4 h-4" />;
+    }
+  };
+
+  // Type styling function
+  const getTypeColor = (type) => {
+    switch (type?.toLowerCase()) {
+      case 'maintenance': return 'bg-green-100 text-green-800';
+      case 'repair': return 'bg-blue-100 text-blue-800';
+      case 'inspection': return 'bg-purple-100 text-purple-800';
+      case 'emergency': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
   
@@ -477,9 +489,12 @@ const PartsManagement = () => {
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(vehicle.status)}`}>
                         {vehicle.status.charAt(0).toUpperCase() + vehicle.status.slice(1).replace('-', ' ')}
                       </span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeColor(vehicle.type)}`}>
+                        {vehicle.type}
+                      </span>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-600 mb-3">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-sm text-gray-600 mb-3">
                       <div className="flex items-center space-x-2">
                         <Ticket className="w-4 h-4" />
                         <span>{vehicle.ticketNumber}</span>
@@ -492,15 +507,13 @@ const PartsManagement = () => {
                         <Wrench className="w-4 h-4 text-green-500" />
                         <span>{vehicle.mechanicName}</span>
                       </div>
-                      <div className="flex flex-col space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <Clock className="w-4 h-4 text-orange-500" />
-                          <span title="Estimated completion date">Est: {vehicle.dueDate}</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <CheckCircle className="w-4 h-4 text-red-500" />
-                          <span title="Final completion deadline">Deadline: {vehicle.completionDeadline}</span>
-                        </div>
+                      <div className="flex items-center space-x-2">
+                        <Clock className="w-4 h-4 text-orange-500" />
+                        <span title="Estimated completion date">Est: {vehicle.dueDate}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="w-4 h-4 text-red-500" />
+                        <span title="Final completion deadline">Deadline: {vehicle.completionDeadline}</span>
                       </div>
                     </div>
                     
@@ -621,6 +634,13 @@ const PartsManagement = () => {
                         <div>
                           <p className="text-sm text-gray-600">Mechanic</p>
                           <p className="font-semibold">{selectedVehicle.mechanicName}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3 p-4 bg-indigo-50 rounded-xl">
+                        <Tag className="w-6 h-6 text-indigo-600" />
+                        <div>
+                          <p className="text-sm text-gray-600">Type</p>
+                          <p className="font-semibold">{selectedVehicle.type}</p>
                         </div>
                       </div>
                     </div>

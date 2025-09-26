@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import {
   Search,
@@ -17,6 +15,7 @@ import {
   Key,
   RefreshCw
 } from 'lucide-react';
+
 const Employees = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('All');
@@ -29,21 +28,39 @@ const Employees = () => {
   const [attendanceData, setAttendanceData] = useState([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceError, setAttendanceError] = useState(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  
+  // Password reset states
+  const [resetRequests, setResetRequests] = useState([]);
+  const [showResetRequests, setShowResetRequests] = useState(false);
+  const [resetRequestsLoading, setResetRequestsLoading] = useState(false);
+  const [resetRequestsError, setResetRequestsError] = useState(null);
+  
+  // Password input states
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentEmployeeId, setCurrentEmployeeId] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+
   const roles = ['All', 'Mechanic', 'Part Coordinator', 'Stockroom', 'Inspection', 'Finance/HR', 'Reception'];
   const departments = ['All', 'Engine Repair', 'Diagnostics', 'Brake Systems', 'Electrical'];
+
   const getImageUrl = (imagePath) => {
     if (!imagePath) {
-      return 'http://localhost:5001/uploads/default-profile.png';
+      return 'https://ipasystem.bymsystem.com/uploads/default-profile.png';
     }
     const normalizedPath = imagePath.replace(/\\/g, '/');
     const parts = normalizedPath.split('/');
     const filename = parts[parts.length - 1];
-    return `http://localhost:5001/uploads/${filename}`;
+    return `https://ipasystem.bymsystem.com/uploads/${filename}`;
   };
+
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/employees/getemployees');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/employees/getemployees');
         if (!response.ok) {
           throw new Error('Failed to fetch employees');
         }
@@ -57,13 +74,14 @@ const Employees = () => {
     };
     fetchEmployees();
   }, []);
+
   useEffect(() => {
     const fetchAttendance = async () => {
       if (!showAttendance || !selectedEmployee) return;
       setAttendanceLoading(true);
       setAttendanceError(null);
       try {
-        const response = await fetch(`http://localhost:5001/api/employeeattendance/getempsattendance?employeeId=${selectedEmployee.id}`);
+        const response = await fetch(`https://ipasystem.bymsystem.com/api/employeeattendance/getempsattendance?employeeId=${selectedEmployee.id}`);
         if (!response.ok) {
           throw new Error('Failed to fetch attendance data');
         }
@@ -77,6 +95,126 @@ const Employees = () => {
     };
     fetchAttendance();
   }, [showAttendance, selectedEmployee]);
+
+  const handleStatusUpdate = async (newStatus) => {
+    if (!selectedEmployee) return;
+    
+    setStatusUpdating(true);
+    try {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/auth/${selectedEmployee.id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update status');
+      }
+
+      const data = await response.json();
+      
+      // Update the selected employee in state
+      setSelectedEmployee(prev => ({
+        ...prev,
+        status: newStatus
+      }));
+
+      // Update the employee in the employees array
+      setEmployees(prev => prev.map(emp => 
+        emp.id === selectedEmployee.id ? { ...emp, status: newStatus } : emp
+      ));
+      
+      alert(`Employee status updated to ${newStatus}`);
+    } catch (err) {
+      console.error('Error updating status:', err);
+      alert(`Error updating status: ${err.message}`);
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  // Fetch password reset requests
+  const fetchResetRequests = async () => {
+    setResetRequestsLoading(true);
+    setResetRequestsError(null);
+    try {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/auth-rest/get-reset-requests');
+      if (!response.ok) {
+        throw new Error('Failed to fetch reset requests');
+      }
+      const data = await response.json();
+      setResetRequests(data);
+    } catch (err) {
+      setResetRequestsError(err.message);
+    } finally {
+      setResetRequestsLoading(false);
+    }
+  };
+
+  // Open password modal
+  const openPasswordModal = (employeeId) => {
+    setCurrentEmployeeId(employeeId);
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError('');
+    setShowPasswordModal(true);
+  };
+
+  // Handle password reset
+  const handleResetPassword = async () => {
+    // Validate passwords
+    if (!newPassword) {
+      setPasswordError('Please enter a new password');
+      return;
+    }
+    
+    if (newPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters long');
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match');
+      return;
+    }
+    
+    setResettingPassword(true);
+    setPasswordError('');
+    
+    try {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/auth-rest/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ employeeId: currentEmployeeId, newPassword }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to reset password');
+      }
+
+      const data = await response.json();
+      alert('Password reset successfully');
+      
+      // Close modal and reset form
+      setShowPasswordModal(false);
+      setNewPassword('');
+      setConfirmPassword('');
+      
+      // Refresh the reset requests list if modal is open
+      if (showResetRequests) {
+        fetchResetRequests();
+      }
+    } catch (err) {
+      setPasswordError(err.message);
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
   const filteredEmployees = employees.filter(employee => {
     const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          employee.role.toLowerCase().includes(searchTerm.toLowerCase());
@@ -86,12 +224,14 @@ const Employees = () => {
                        employee.role.toLowerCase().includes(selectedRole.toLowerCase());
     return matchesSearch && matchesDepartment && matchesRole;
   });
+
   if (loading) {
     return <div className="p-6 text-center">Loading employees...</div>;
   }
   if (error) {
     return <div className="p-6 text-center text-red-500">Error: {error}</div>;
   }
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -100,7 +240,18 @@ const Employees = () => {
           <h1 className="text-2xl font-bold text-gray-900">Employee Directory</h1>
           <p className="text-gray-500 mt-1">Manage and view all employee information</p>
         </div>
+        <button
+          onClick={() => {
+            setShowResetRequests(true);
+            fetchResetRequests();
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+        >
+          <Key size={18} />
+          Password Reset Requests
+        </button>
       </div>
+      
       {/* Role Tabs */}
       <div className="flex flex-wrap gap-3 mb-6">
         {roles.map(role => (
@@ -119,6 +270,7 @@ const Employees = () => {
           </button>
         ))}
       </div>
+      
       {/* Search and Filter */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="flex-1 relative">
@@ -145,6 +297,7 @@ const Employees = () => {
           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
         </div>
       </div>
+      
       {/* Employee List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredEmployees.map(employee => (
@@ -168,16 +321,26 @@ const Employees = () => {
                 <UserCog size={24} className="text-gray-400" />
               </div>
             )}
-            <div>
-              <h3 className="font-semibold text-gray-900">{employee.name}</h3>
-              <p className="text-gray-600 text-sm">{employee.role}</p>
-              {employee.specialty && (
-                <p className="text-gray-500 text-xs mt-1">{employee.specialty}</p>
-              )}
+            <div className="flex-1">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-semibold text-gray-900">{employee.name}</h3>
+                  <p className="text-gray-600 text-sm">{employee.role}</p>
+                  {employee.specialty && (
+                    <p className="text-gray-500 text-xs mt-1">{employee.specialty}</p>
+                  )}
+                </div>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  employee.status === 'activated' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                }`}>
+                  {employee.status || 'activated'}
+                </span>
+              </div>
             </div>
           </div>
         ))}
       </div>
+      
       {/* Employee Details Modal */}
       {selectedEmployee && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -219,15 +382,20 @@ const Employees = () => {
               {/* Status Section */}
               <div className="flex items-center justify-between">
                 <span
-                  className="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800"
+                  className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    selectedEmployee.status === 'activated' 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-red-100 text-red-800'
+                  }`}
                 >
-                  Available
+                  {selectedEmployee.status === 'activated' ? 'Activated' : 'Deactivated'}
                 </span>
                 <div className="flex items-center gap-2 text-gray-600">
                   <Briefcase size={18} />
-                  <span>Active</span>
+                  <span>{selectedEmployee.status === 'activated' ? 'Active' : 'Inactive'}</span>
                 </div>
               </div>
+              
               {/* Contact Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-3 text-gray-600">
@@ -247,67 +415,25 @@ const Employees = () => {
                   <span>Joined {new Date(selectedEmployee.joinDate).toLocaleDateString()}</span>
                 </div>
               </div>
-              {/* Password Change Grant Section */}
-              <div className="border-t border-gray-200 pt-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <Key className="text-purple-500 animate-bounce" size={20} />
-            Password Reset
-          </h3>
-          
-          <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 rounded-lg mb-4 border border-purple-100">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <p className="text-gray-600 text-sm mb-1">Last request:</p>
-                <div className="flex items-center gap-2">
-                  {selectedEmployee.passwordRequestTime ? (
-                    <>
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium animate-pulse">
-                        Pending
-                      </span>
-                      <span className="text-sm font-medium">
-                        {new Date(selectedEmployee.passwordRequestTime).toLocaleString()}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-sm text-gray-500 italic">No recent requests</span>
-                  )}
-                </div>
-              </div>
               
-              <button
-                onClick={() => {
-                  // Update request time
-                  const updatedEmployee = {
-                    ...selectedEmployee,
-                    passwordRequestTime: new Date().toISOString()
-                  };
-                  setSelectedEmployee(updatedEmployee);
-                  
-                  // Trigger animations
-                  const button = document.getElementById('grant-password-btn');
-                  button.classList.add('animate-blink');
-                  setTimeout(() => button.classList.remove('animate-blink'), 1000);
-                  
-                  // Show confirmation
-                  const timeString = new Date().toLocaleTimeString();
-                  alert(`Password reset granted at ${timeString}\n${selectedEmployee.name} will receive instructions.`);
-                }}
-                id="grant-password-btn"
-                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full font-medium hover:from-purple-700 hover:to-blue-700 shadow-lg transition-all transform hover:scale-105 flex items-center gap-2 relative overflow-hidden"
-              >
-                <span className="relative z-10 flex items-center gap-2">
-                  <RefreshCw size={16} className="animate-spin-once" />
-                  Grant Password Reset
-                </span>
-                <span className="absolute inset-0 bg-white opacity-0 hover:opacity-10 transition-opacity"></span>
-              </button>
-            </div>
-
-            <p className="text-gray-500 text-xs mt-3 italic">
-              Request expires in 24 hours. Employee will receive email instructions.
-            </p>
-          </div>
-        </div>
+              {/* Password Reset Section */}
+              <div className="border-t border-gray-200 pt-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Key className="text-purple-500" size={20} />
+                  Password Reset
+                </h3>
+                
+                <button
+                  onClick={() => openPasswordModal(selectedEmployee.id)}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full font-medium hover:from-purple-700 hover:to-blue-700 shadow-lg transition-all transform hover:scale-105 flex items-center gap-2"
+                >
+                  <RefreshCw size={16} />
+                  Reset Password
+                </button>
+                <p className="text-gray-500 text-xs mt-3 italic">
+                  Click to set a new password for this employee.
+                </p>
+              </div>
               
               {/* Expertise */}
               {selectedEmployee.expertise && selectedEmployee.expertise.length > 0 && (
@@ -328,19 +454,32 @@ const Employees = () => {
                   </div>
                 </div>
               )}
+              
               {/* Action Buttons */}
               <div className="text-center space-y-4">
                 <h3 className="text-xl font-semibold text-gray-800">Manage Account</h3>
                 <div className="flex justify-center flex-wrap gap-4">
                   <button
-                    className="px-6 py-2 bg-green-600 text-white rounded-full font-semibold hover:bg-green-700 shadow-md transition"
+                    onClick={() => handleStatusUpdate('activated')}
+                    disabled={selectedEmployee.status === 'activated' || statusUpdating}
+                    className={`px-6 py-2 rounded-full font-semibold shadow-md transition ${
+                      selectedEmployee.status === 'activated'
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-green-600 text-white hover:bg-green-700'
+                    }`}
                   >
-                    Activate
+                    {statusUpdating ? 'Updating...' : 'Activate'}
                   </button>
                   <button
-                    className="px-6 py-2 bg-red-600 text-white rounded-full font-semibold hover:bg-red-700 shadow-md transition"
+                    onClick={() => handleStatusUpdate('deactivated')}
+                    disabled={selectedEmployee.status === 'deactivated' || statusUpdating}
+                    className={`px-6 py-2 rounded-full font-semibold shadow-md transition ${
+                      selectedEmployee.status === 'deactivated'
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-red-600 text-white hover:bg-red-700'
+                    }`}
                   >
-                    Deactivate
+                    {statusUpdating ? 'Updating...' : 'Deactivate'}
                   </button>
                   <button
                     onClick={() => setShowAttendance(true)}
@@ -354,6 +493,121 @@ const Employees = () => {
           </div>
         </div>
       )}
+      
+      {/* Password Reset Requests Modal */}
+      {showResetRequests && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 text-black">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-xl font-semibold">Password Reset Requests</h3>
+              <button onClick={() => setShowResetRequests(false)}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-4">
+              {resetRequestsLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                  <p className="mt-4 text-gray-600">Loading reset requests...</p>
+                </div>
+              ) : resetRequestsError ? (
+                <div className="text-center py-8 text-red-500">
+                  <p>Error: {resetRequestsError}</p>
+                  <button onClick={fetchResetRequests} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded">
+                    Retry
+                  </button>
+                </div>
+              ) : resetRequests.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No pending password reset requests</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {resetRequests.map(request => (
+                    <div key={request.id} className="border rounded-lg p-4 flex justify-between items-center">
+                      <div>
+                        <h4 className="font-semibold">{request.full_name}</h4>
+                        <p className="text-gray-600">{request.email}</p>
+                        <p className="text-sm text-gray-500">Requested: {new Date(request.requested_at).toLocaleString()}</p>
+                      </div>
+                      <button
+                        onClick={() => openPasswordModal(request.employee_id)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                      >
+                        Reset Password
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Password Reset Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 text-black">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full animate-fade-in">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center ">
+              <h3 className="text-xl font-semibold">Reset Password</h3>
+              <button onClick={() => setShowPasswordModal(false)}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter new password"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Confirm new password"
+                />
+              </div>
+              
+              {passwordError && (
+                <div className="text-red-500 text-sm">{passwordError}</div>
+              )}
+              
+              <button
+                onClick={handleResetPassword}
+                disabled={resettingPassword}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+              >
+                {resettingPassword ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Resetting Password...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={16} />
+                    Reset Password
+                  </>
+                )}
+              </button>
+              
+              <p className="text-gray-500 text-xs text-center">
+                Password must be at least 6 characters long.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Attendance Modal */}
       {showAttendance && selectedEmployee && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -436,4 +690,5 @@ const Employees = () => {
     </div>
   );
 };
+
 export default Employees;

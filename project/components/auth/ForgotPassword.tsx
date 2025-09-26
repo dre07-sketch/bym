@@ -12,15 +12,32 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onSendOtp }) =>
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSendOtp = (e: React.FormEvent) => {
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/auth-rest/request-password-reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Server error');
+      }
+
+      // Simulate the original delay behavior
+      setTimeout(() => {
+        setIsLoading(false);
+        onSendOtp();
+      }, 1500);
+    } catch (error) {
+      console.error('Password reset request failed:', error);
       setIsLoading(false);
-      onSendOtp();
-    }, 1500);
+    }
   };
 
   return (
@@ -51,9 +68,6 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onSendOtp }) =>
 
       {/* Main Container */}
       <div className="relative z-10 w-full max-w-md">
-        {/* Back Button */}
-        
-
         {/* Main Card */}
         <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 overflow-hidden">
           {/* Header Section */}
@@ -77,7 +91,6 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onSendOtp }) =>
 
           {/* Form Section */}
           <div className="p-8">
-          
             <form onSubmit={handleSendOtp} className="space-y-6">
               {/* Email Field */}
               <div className="space-y-2">
@@ -85,17 +98,16 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onSendOtp }) =>
                   Email Address
                 </label>
                 <div className="relative group">
-  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5 group-hover:text-blue-500 transition-colors duration-200" />
-  <input
-    type="email"
-    value={email}
-    onChange={(e) => setEmail(e.target.value)}
-    className="w-full pl-12 pr-4 py-2 border-2 border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-300 bg-white/70 hover:bg-white text-slate-800 placeholder-slate-400 backdrop-blur-sm"
-    placeholder="Enter your email address"
-    required
-  />
-</div>
-
+                  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5 group-hover:text-blue-500 transition-colors duration-200" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-12 pr-4 py-2 border-2 border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-300 bg-white/70 hover:bg-white text-slate-800 placeholder-slate-400 backdrop-blur-sm"
+                    placeholder="Enter your email address"
+                    required
+                  />
+                </div>
               </div>
 
               {/* Send Button */}
@@ -119,7 +131,18 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onSendOtp }) =>
             </form>
 
             {/* Security Note */}
-          
+            <div className="mt-8 pt-6 border-t border-slate-200">
+              <div className="flex items-start">
+                <Shield className="w-5 h-5 text-blue-500 mr-3 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">Security Notice</h3>
+                  <p className="text-sm text-slate-600">
+                    For your security, we won't confirm if an email exists in our system. 
+                    If you don't receive a reset link, please contact your administrator.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

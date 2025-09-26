@@ -4,6 +4,7 @@ const db = require('../../db/connection');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const JWT_SECRET = 'f9b3d8c2a1e74f0d9b6c5a8e3f7d1c0b'; 
 
 // Ensure upload directory exists
 const uploadDir = path.join(__dirname, '../../uploads/inventory');
@@ -839,31 +840,51 @@ router.get('/report/sales-trend', async (req, res) => {
 });
 
 
+// GET /purchase-orders
+// ideally from process.env
+
+// 🔓 helper to extract user id from Authorization header
+function getUserIdFromToken(req) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return null;
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    return decoded.id;
+  } catch (err) {
+    return null;
+  }
+}
+
+// GET all purchase orders
 router.get('/purchase-orders', async (req, res) => {
   try {
     const [rows] = await db.promise().execute(`
       SELECT 
-        po_number AS poNumber,
-        supplier,
-        status,
-        order_date AS orderDate,
-        expected_date AS expectedDate,
-        received_date AS receivedDate,
-        total_amount AS totalAmount,
-        item_count AS itemCount,
-        created_by AS createdBy,
-        notes,
-        priority,
-        created_at AS createdAt
-      FROM purchase_orders
-      ORDER BY created_at DESC
+        po.po_number AS poNumber,
+        po.supplier,
+        po.status,
+        po.order_date AS orderDate,
+        po.expected_date AS expectedDate,
+        po.received_date AS receivedDate,
+        po.total_amount AS totalAmount,
+        po.item_count AS itemCount,
+        e.full_name AS createdBy,   -- join employees
+        po.notes,
+        po.priority,
+        po.created_at AS createdAt
+      FROM purchase_orders po
+      LEFT JOIN employees e ON po.created_by = e.id
+      ORDER BY po.created_at DESC
     `);
 
-    // Fetch items for each PO
+    // fetch items for each PO
     const formattedRows = await Promise.all(
       rows.map(async (row) => {
         const [items] = await db.promise().execute(
-          `SELECT id, name, quantity, price FROM purchase_order_items WHERE po_number = ?`,
+          `SELECT id, name, quantity, price 
+           FROM purchase_order_items 
+           WHERE po_number = ?`,
           [row.poNumber]
         );
 
@@ -871,7 +892,7 @@ router.get('/purchase-orders', async (req, res) => {
           ...row,
           totalAmount: parseFloat(row.totalAmount) || 0,
           itemCount: parseInt(row.itemCount) || 0,
-          createdAt: row.createdAt.toISOString().split('T')[0],
+          createdAt: row.createdAt?.toISOString().split('T')[0],
           expectedDate: row.expectedDate || null,
           receivedDate: row.receivedDate ? row.receivedDate.toISOString().split('T')[0] : null,
           notes: row.notes || '',
@@ -885,161 +906,51 @@ router.get('/purchase-orders', async (req, res) => {
       })
     );
 
-    res.status(200).json({
-      success: true,
-      data: formattedRows
-    });
+    res.json({ success: true, data: formattedRows });
   } catch (error) {
-    console.error('Error fetching POs:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch purchase orders'
-    });
+    console.error('❌ Error fetching POs:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch purchase orders' });
   }
 });
 
+// POST new purchase order
 router.post('/purchase-orders', async (req, res) => {
-  const {
-    supplier,
-    orderDate,
-    expectedDate,
-    totalAmount,
-    requestedBy,
-    notes,
-    priority,
-    items
-  } = req.body;
-
-  let connection;
   try {
-    // Validate
-    if (!supplier || !orderDate || !items || !Array.isArray(items)) {
+    const userId = getUserIdFromToken(req); // 👈 get logged-in user id
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: No or invalid token' });
+    }
+
+    const { supplier, orderDate, expectedDate, totalAmount, itemCount, notes, priority, items } = req.body;
+
+    if (!supplier || !orderDate || !totalAmount || !itemCount || !items?.length) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    connection = await db.promise().getConnection();
-    await connection.beginTransaction();
+    // generate PO number
+    const poNumber = `PO-${Date.now().toString().slice(-6)}`;
 
-    // --- Generate Unique PO Number ---
-    let poNumber;
-    let attempts = 0;
-    const maxAttempts = 5;
-    const dateStr = orderDate.replace(/-/g, '');
+    // insert purchase order
+    await db.promise().execute(
+      `INSERT INTO purchase_orders 
+        (po_number, supplier, status, order_date, expected_date, total_amount, item_count, created_by, notes, priority) 
+       VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+      [poNumber, supplier, orderDate, expectedDate, totalAmount, itemCount, userId, notes || '', priority || 'medium']
+    );
 
-    while (!poNumber && attempts < maxAttempts) {
-      const [rows] = await connection.execute(
-        `SELECT MAX(CAST(SUBSTRING(po_number, 10) AS UNSIGNED)) AS maxNum 
-         FROM purchase_orders 
-         WHERE po_number LIKE ? 
-         FOR UPDATE`,
-        [`PO${dateStr}%`]
+    // insert items
+    for (const item of items) {
+      await db.promise().execute(
+        `INSERT INTO purchase_order_items (po_number, name, quantity, price)
+         VALUES (?, ?, ?, ?)`,
+        [poNumber, item.name, item.quantity, item.price]
       );
-
-      const maxNum = rows[0]?.maxNum || 0;
-      const nextNum = maxNum + 1;
-      const candidate = `PO${dateStr}-${String(nextNum).padStart(3, '0')}`;
-
-      const [[existing]] = await connection.execute(
-        'SELECT 1 FROM purchase_orders WHERE po_number = ?',
-        [candidate]
-      );
-
-      if (!existing) {
-        poNumber = candidate;
-      } else {
-        attempts++;
-      }
     }
 
-    if (!poNumber) {
-      poNumber = `PO${Date.now()}`; // Fallback
-    }
-
-    // --- Insert Purchase Order ---
-    const insertPoSql = `
-      INSERT INTO purchase_orders 
-      (po_number, supplier, order_date, expected_date, total_amount, item_count, created_by, notes, priority)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    await connection.execute(insertPoSql, [
-      poNumber,
-      supplier,
-      orderDate,
-      expectedDate || null,
-      parseFloat(totalAmount),
-      items.length,
-      requestedBy || 'Admin',
-      notes || null,
-      priority || 'medium'
-    ]);
-
-    // --- Insert Items (if any) ---
-    // - Insert Items (if any) -
-if (items.length > 0) {
-  const placeholders = items.map(() => '(?, ?, ?, ?)').join(',');
-  const itemSql = `
-    INSERT INTO purchase_order_items (po_number, name, quantity, price)
-    VALUES ${placeholders}
-  `;
-
-  const flatValues = items.flatMap(item => [
-    poNumber,
-    item.name,
-    parseInt(item.quantity),
-    parseFloat(item.price)
-  ]);
-
-  await connection.execute(itemSql, flatValues); // ✅ Works in transactions
-}
-
-    await connection.commit();
-    connection.release();
-
-    res.status(201).json({
-      success: true,
-      message: 'Purchase order created successfully',
-      data: {
-        poNumber,
-        supplier,
-        orderDate,
-        expectedDate,
-        totalAmount: parseFloat(totalAmount),
-        itemCount: items.length,
-        createdBy: requestedBy || 'Admin',
-        notes,
-        priority: priority || 'medium',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        items
-      }
-    });
+    res.json({ success: true, message: 'Purchase order created successfully', poNumber });
   } catch (error) {
-    if (connection) {
-      await connection.rollback().catch(console.error);
-      connection.release();
-    }
-
-    if (error.code === 'ER_DUP_ENTRY') {
-      console.warn('PO number conflict:', error.sqlMessage);
-      return res.status(409).json({
-        success: false,
-        message: 'A purchase order with this number already exists. Please retry.'
-      });
-    }
-
-    if (error.code === 'ER_PARSE_ERROR') {
-      console.error('SQL syntax error:', error.sql);
-      return res.status(500).json({
-        success: false,
-        message: 'Database query error. Check SQL syntax.'
-      });
-    }
-
-    console.error('Unexpected error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create purchase order'
-    });
+    console.error('❌ Error creating PO:', error);
+    res.status(500).json({ success: false, message: 'Failed to create purchase order' });
   }
 });
 
@@ -1518,7 +1429,76 @@ router.get('/order-history', (req, res) => {
   });
 });
 
+router.post("/outsource-parts-get", (req, res) => {
+  const { ticketNumbers } = req.body;
 
+  // Validate request
+  if (!ticketNumbers || !Array.isArray(ticketNumbers) || ticketNumbers.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "ticketNumbers (array) is required",
+    });
+  }
 
+  const outsourceStockQuery = `
+    SELECT 
+      id,
+      ticket_number,
+      name,
+      category,
+      sku,
+      price,
+      quantity,
+      source_shop,
+      status,
+      requested_at,
+      received_at,
+      notes,
+      updated_at,
+      (quantity * price) AS total_cost
+    FROM outsource_stock 
+    WHERE ticket_number IN (?) 
+    ORDER BY requested_at DESC
+  `;
+
+  db.query(outsourceStockQuery, [ticketNumbers], (err, results) => {
+    if (err) {
+      console.error("❌ Error fetching outsource stock:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Database error while fetching outsource stock",
+      });
+    }
+
+    return res.json({
+      success: true,
+      count: results.length,
+      data: results,
+    });
+  });
+});
+
+router.get('/names', (req, res) => {
+  const query = `
+    SELECT id, name 
+    FROM suppliers 
+    ORDER BY name ASC
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('❌ Error fetching supplier names:', err);
+      return res.status(500).json({
+        success: false,
+        message: 'Error fetching supplier names'
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: results
+    });
+  });
+});
 
 module.exports = router;

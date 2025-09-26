@@ -112,7 +112,7 @@ const AddToolModal: React.FC<AddToolModalProps> = ({
     docFiles.forEach((file) => formData.append('documents', file));
 
     try {
-      const res = await fetch('http://localhost:5001/api/tools', {
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools', {
         method: 'POST',
         body: formData,
       });

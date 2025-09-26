@@ -33,17 +33,17 @@ const Employees = () => {
   const departments = ['All', 'Engine Repair', 'Diagnostics', 'Brake Systems', 'Electrical'];
   const getImageUrl = (imagePath) => {
     if (!imagePath) {
-      return 'http://localhost:5001/uploads/default-profile.png';
+      return 'https://ipasystem.bymsystem.com/uploads/default-profile.png';
     }
     const normalizedPath = imagePath.replace(/\\/g, '/');
     const parts = normalizedPath.split('/');
     const filename = parts[parts.length - 1];
-    return `http://localhost:5001/uploads/${filename}`;
+    return `https://ipasystem.bymsystem.com/uploads/${filename}`;
   };
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/employees/getemployees');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/employees/getemployees');
         if (!response.ok) {
           throw new Error('Failed to fetch employees');
         }
@@ -63,7 +63,7 @@ const Employees = () => {
       setAttendanceLoading(true);
       setAttendanceError(null);
       try {
-        const response = await fetch(`http://localhost:5001/api/employeeattendance/getempsattendance?employeeId=${selectedEmployee.id}`);
+        const response = await fetch(`https://ipasystem.bymsystem.com/api/employeeattendance/getempsattendance?employeeId=${selectedEmployee.id}`);
         if (!response.ok) {
           throw new Error('Failed to fetch attendance data');
         }
@@ -270,18 +270,9 @@ const Employees = () => {
               )}
               {/* Action Buttons */}
               <div className="text-center space-y-4">
-                <h3 className="text-xl font-semibold text-gray-800">Manage Account</h3>
+               
                 <div className="flex justify-center flex-wrap gap-4">
-                  <button
-                    className="px-6 py-2 bg-green-600 text-white rounded-full font-semibold hover:bg-green-700 shadow-md transition"
-                  >
-                    Activate
-                  </button>
-                  <button
-                    className="px-6 py-2 bg-red-600 text-white rounded-full font-semibold hover:bg-red-700 shadow-md transition"
-                  >
-                    Deactivate
-                  </button>
+                
                   <button
                     onClick={() => setShowAttendance(true)}
                     className="px-6 py-2 bg-blue-600 text-white rounded-full font-semibold hover:bg-blue-700 shadow-md transition"

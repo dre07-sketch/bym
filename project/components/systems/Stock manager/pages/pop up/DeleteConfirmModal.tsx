@@ -23,7 +23,7 @@ const DeleteConfirmModal = ({ isOpen, onClose, item, onItemDeleted }: DeleteConf
     setIsDeleting(true);
 
     try {
-      const response = await fetch(`http://localhost:5001/api/inventory/items/${item.id}`, {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/inventory/items/${item.id}`, {
         method: 'DELETE',
       });
 
@@ -85,7 +85,7 @@ const DeleteConfirmModal = ({ isOpen, onClose, item, onItemDeleted }: DeleteConf
                 <div className="w-12 h-12 bg-gradient-to-r from-blue-100 to-purple-100 rounded-lg flex items-center justify-center">
                   {item.imageUrl ? (
                     <img 
-                      src={`http://localhost:5001${item.imageUrl}`} 
+                      src={`https://ipasystem.bymsystem.com${item.imageUrl}`} 
                       alt={item.name} 
                       className="w-full h-full object-cover rounded-lg" 
                     />

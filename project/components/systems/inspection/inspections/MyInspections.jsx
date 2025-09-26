@@ -58,7 +58,7 @@ const MyInspections = () => {
     const fetchInspections = async () => {
       try {
         setLoading(true);
-        const url = new URL('http://localhost:5001/api/inspection-endpoint/fetch-inspection', window.location.origin);
+        const url = new URL('https://ipasystem.bymsystem.com/api/inspection-endpoint/fetch-inspection', window.location.origin);
         if (statusFilter !== 'all') url.searchParams.append('status', statusFilter);
         const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to fetch inspections');
@@ -140,7 +140,7 @@ const MyInspections = () => {
     };
 
     try {
-      const response = await fetch('http://localhost:5001/api/inspection-endpoint/update-inspection', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inspection-endpoint/update-inspection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -652,7 +652,7 @@ const MyInspections = () => {
               <button
                 onClick={async () => {
                   try {
-                    const response = await fetch('http://localhost:5001/api/inspection-endpoint/update-inspection-status', {
+                    const response = await fetch('https://ipasystem.bymsystem.com/api/inspection-endpoint/update-inspection-status', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
@@ -691,7 +691,7 @@ const MyInspections = () => {
               <button
                 onClick={async () => {
                   try {
-                    const response = await fetch('http://localhost:5001/api/inspection-endpoint/update-inspection-status', {
+                    const response = await fetch('https://ipasystem.bymsystem.com/api/inspection-endpoint/update-inspection-status', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({

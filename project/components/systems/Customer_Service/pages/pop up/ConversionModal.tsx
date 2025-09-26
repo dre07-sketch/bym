@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileText, X, ArrowRight, ArrowLeft, Save, Plus, Trash2, ImageIcon, User, Mail, Phone, MapPin, Briefcase, Car, Building, CheckCircle, Search, Receipt
 } from 'lucide-react';
+
 // Add these interfaces at the top of your file
 interface ProformaItem {
   id: number;
@@ -11,6 +12,7 @@ interface ProformaItem {
   unit_price: number;
   amount: number;
 }
+
 interface Proforma {
   proforma_number: string;
   customer_name: string;
@@ -22,6 +24,35 @@ interface Proforma {
   total: number;
   items: ProformaItem[];
 }
+
+interface Vehicle {
+  id: number;
+  make: string;
+  model: string;
+  year: number | null;
+  licensePlate: string | null;
+  vin: string | null;
+  color: string | null;
+  mileage: number | null;
+  imageUrl: string | null;
+}
+
+interface Customer {
+  customerId: number;
+  customerType: 'individual' | 'company';
+  name: string;
+  companyName: string | null;
+  email: string;
+  phone: string;
+  emergencyContact: string;
+  address: string;
+  notes: string;
+  registrationDate: string;
+  totalServices: number;
+  customerImage: string | null;
+  vehicles: Vehicle[];
+}
+
 interface ConversionModalProps {
   showTicketModal: boolean;
   selectedProforma: any; // Replace with proper type if available
@@ -74,9 +105,6 @@ interface ConversionModalProps {
   setCustomerImage: (image: File | null) => void;
   customerImagePreview: string | null;
   setCustomerImagePreview: (preview: string | null) => void;
-  carModelsByMake: Record<string, Array<{ model: string; serviceInterval: number }>>;
-  carMakes: string[];
-  loadingModels: boolean;
   isSubmitting: boolean;
   error: string | null;
   setError: (error: string | null) => void;
@@ -94,9 +122,9 @@ interface ConversionModalProps {
   removeImage: (index: number) => void;
   addVehicle: () => void;
   removeVehicle: (index: number) => void;
-  getModelsForMake: (make: string) => Array<{ model: string; serviceInterval: number }>;
   formatCurrency: (amount: number) => string;
 }
+
 const ConversionModal: React.FC<ConversionModalProps> = ({
   showTicketModal,
   selectedProforma,
@@ -114,9 +142,6 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
   setCustomerImage,
   customerImagePreview,
   setCustomerImagePreview,
-  carModelsByMake,
-  carMakes,
-  loadingModels,
   isSubmitting,
   error,
   setError,
@@ -134,12 +159,33 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
   removeImage,
   addVehicle,
   removeVehicle,
-  getModelsForMake,
   formatCurrency
 }) => {
   // Local state for submitting and success status
   const [localIsSubmitting, setLocalIsSubmitting] = useState(false);
   const [localIsSuccess, setLocalIsSuccess] = useState(false);
+  
+  // Customer search state
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<Customer[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [showVehicleSelection, setShowVehicleSelection] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  
+  // New state for fetching proforma details
+  const [fullProforma, setFullProforma] = useState<Proforma | null>(null);
+  const [isLoadingProformaDetails, setIsLoadingProformaDetails] = useState(false);
+  
+  // Car models state
+  const [carModelsData, setCarModelsData] = useState<Record<string, Array<{ model: string; serviceInterval: number }>>>({});
+  const [carMakesList, setCarMakesList] = useState<string[]>([]);
+  const [isLoadingCarModels, setIsLoadingCarModels] = useState(false);
+  
+  // Customers state
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+  
   const getStepLabel = () => {
     switch (currentStep) {
       case 1: return 'Simple Form';
@@ -149,59 +195,58 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
     }
   };
   
-  // Customer search state
-  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
-  const [showVehicleSelection, setShowVehicleSelection] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  
-  // New state for fetching proforma details
-  const [fullProforma, setFullProforma] = useState<Proforma | null>(null);
-  const [isLoadingProformaDetails, setIsLoadingProformaDetails] = useState(false);
-  
-  // Mock customer data
-  const mockCustomers = [
-    {
-      id: 1,
-      name: 'John Smith',
-      email: 'john@example.com',
-      phone: '+251-91-123-4567',
-      address: '123 Main St, Addis Ababa',
-      customerType: 'individual',
-      companyName: '',
-      vehicles: [
-        { id: 1, make: 'Toyota', model: 'Camry', year: '2020', licensePlate: 'AA-123-456', vin: '1234567890', color: 'Silver', mileage: '45000' },
-        { id: 2, make: 'Honda', model: 'CR-V', year: '2019', licensePlate: 'AA-789-012', vin: '9876543210', color: 'Blue', mileage: '32000' }
-      ]
-    },
-    {
-      id: 2,
-      name: 'Sarah Johnson',
-      email: 'sarah@company.com',
-      phone: '+251-91-987-6543',
-      address: '456 Business Ave, Addis Ababa',
-      customerType: 'company',
-      companyName: 'ABC Enterprises',
-      vehicles: [
-        { id: 3, make: 'Ford', model: 'Ranger', year: '2021', licensePlate: 'AA-345-678', vin: '1122334455', color: 'Black', mileage: '15000' }
-      ]
-    },
-    {
-      id: 3,
-      name: 'Mike Wilson',
-      email: 'mike@example.com',
-      phone: '+251-91-555-0123',
-      address: '789 Residential Rd, Addis Ababa',
-      customerType: 'individual',
-      companyName: '',
-      vehicles: [
-        { id: 4, make: 'Nissan', model: 'Patrol', year: '2018', licensePlate: 'AA-901-234', vin: '5566778899', color: 'White', mileage: '67000' },
-        { id: 5, make: 'Toyota', model: 'Hilux', year: '2022', licensePlate: 'AA-567-890', vin: '2468135790', color: 'Gray', mileage: '8000' }
-      ]
+  // Fetch customers when modal opens
+  useEffect(() => {
+    if (showTicketModal) {
+      const fetchCustomers = async () => {
+        setIsLoadingCustomers(true);
+        try {
+          const response = await fetch('http://localhost:5001/api/customers/fetch');
+          const data = await response.json();
+          
+          if (response.ok) {
+            setCustomers(data);
+          } else {
+            setError('Failed to fetch customers');
+          }
+        } catch (error) {
+          console.error('Error fetching customers:', error);
+          setError('Network error or server unavailable');
+        } finally {
+          setIsLoadingCustomers(false);
+        }
+      };
+
+      fetchCustomers();
     }
-  ];
+  }, [showTicketModal, setError]);
+  
+  // Fetch car models when modal opens
+  useEffect(() => {
+    if (showTicketModal) {
+      const fetchCarModels = async () => {
+        setIsLoadingCarModels(true);
+        try {
+          const response = await fetch('http://localhost:5001/api/customers/car-models');
+          const data = await response.json();
+          
+          if (response.ok) {
+            setCarModelsData(data);
+            setCarMakesList(Object.keys(data));
+          } else {
+            setError('Failed to fetch car models');
+          }
+        } catch (error) {
+          console.error('Error fetching car models:', error);
+          setError('Network error or server unavailable');
+        } finally {
+          setIsLoadingCarModels(false);
+        }
+      };
+
+      fetchCarModels();
+    }
+  }, [showTicketModal, setError]);
   
   // Fetch proforma details when modal opens
   useEffect(() => {
@@ -272,19 +317,20 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
     
     // Simulate API call delay
     const timer = setTimeout(() => {
-      const results = mockCustomers.filter(customer =>
+      const results = customers.filter(customer =>
         customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
         customer.email.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-        customer.phone.includes(customerSearchTerm)
+        customer.phone.includes(customerSearchTerm) ||
+        (customer.companyName && customer.companyName.toLowerCase().includes(customerSearchTerm.toLowerCase()))
       );
       setSearchResults(results);
       setIsSearching(false);
     }, 500);
     return () => clearTimeout(timer);
-  }, [customerSearchTerm]);
+  }, [customerSearchTerm, customers]);
   
   // Handle customer selection
-  const handleSelectCustomer = (customer: any) => {
+  const handleSelectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     setCustomerData({
       ...customerData,
@@ -302,7 +348,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
   };
   
   // Handle vehicle selection
-  const handleSelectVehicle = (vehicle: any) => {
+  const handleSelectVehicle = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle);
     setVehicles([{
       make: vehicle.make,
@@ -313,7 +359,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
       color: vehicle.color,
       mileage: vehicle.mileage,
       image: null,
-      imagePreview: null,
+      imagePreview: vehicle.imageUrl || null,
     }]);
   };
   
@@ -363,6 +409,11 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
     });
   };
   
+  // Helper function to get models for a make
+  const getModelsForMake = (make: string) => {
+    return carModelsData[make] || [];
+  };
+  
   // Updated handleGenerateTicket function
   const handleGenerateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -372,7 +423,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
     try {
       // Generate customer_id if not exists
       const customerId = selectedCustomer 
-        ? selectedCustomer.id.toString() 
+        ? selectedCustomer.customerId.toString() 
         : Date.now().toString();
       // Convert images to base64 if they exist
       let customerImageBase64 = null;
@@ -808,7 +859,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
                         <input
                           type="text"
                           className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Search by name, email, or phone..."
+                          placeholder="Search by name, email, phone, or company..."
                           value={customerSearchTerm}
                           onChange={(e) => setCustomerSearchTerm(e.target.value)}
                         />
@@ -821,7 +872,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
                         <div className="mt-2 bg-white border border-gray-200 rounded-lg shadow-sm max-h-60 overflow-y-auto">
                           {searchResults.map(customer => (
                             <div 
-                              key={customer.id} 
+                              key={customer.customerId} 
                               className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center"
                               onClick={() => handleSelectCustomer(customer)}
                             >
@@ -830,7 +881,10 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
                               </div>
                               <div>
                                 <div className="font-medium">{customer.name}</div>
-                                <div className="text-sm text-gray-500">{customer.email} • {customer.phone}</div>
+                                <div className="text-sm text-gray-500">
+                                  {customer.email} • {customer.phone}
+                                  {customer.companyName && ` • ${customer.companyName}`}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -848,14 +902,13 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
                             <h5 className="font-medium text-gray-900 flex items-center">
                               <User className="w-4 h-4 mr-2" />
                               {selectedCustomer.name}
+                              {selectedCustomer.companyName && ` - ${selectedCustomer.companyName}`}
                             </h5>
                             <div className="text-sm text-gray-600 mt-1">
                               <p>{selectedCustomer.email}</p>
                               <p>{selectedCustomer.phone}</p>
                               <p>{selectedCustomer.address}</p>
-                              {selectedCustomer.customerType === 'company' && (
-                                <p className="font-medium">{selectedCustomer.companyName}</p>
-                              )}
+                              <p>Customer Type: {selectedCustomer.customerType}</p>
                             </div>
                           </div>
                           <button
@@ -1006,7 +1059,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
                         type="button"
                         onClick={addVehicle}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-sm flex items-center transition-colors"
-                        disabled={localIsSubmitting || loadingModels}
+                        disabled={localIsSubmitting || isLoadingCarModels}
                       >
                         <Plus className="w-4 h-4 mr-1" />
                         Add Vehicle
@@ -1029,7 +1082,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
                         
                         {showVehicleSelection && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {selectedCustomer.vehicles.map((vehicle: any) => (
+                            {selectedCustomer.vehicles.map((vehicle: Vehicle) => (
                               <div 
                                 key={vehicle.id} 
                                 className={`p-3 rounded-lg border cursor-pointer transition-colors ${
@@ -1055,8 +1108,11 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
                       </div>
                     )}
                     
-                    {loadingModels ? (
-                      <p className="text-center text-black">Loading car models...</p>
+                    {isLoadingCarModels ? (
+                      <div className="text-center py-8">
+                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
+                        <p className="text-gray-600">Loading car models...</p>
+                      </div>
                     ) : (
                       vehicles.map((vehicle, index) => (
                         <div key={index} className="bg-white rounded-lg p-4 mb-4 border border-blue-200">
@@ -1083,10 +1139,10 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
                                 onChange={(e) => handleVehicleChange(index, 'make', e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                 required
-                                disabled={localIsSubmitting || carMakes.length === 0}
+                                disabled={localIsSubmitting || carMakesList.length === 0}
                               >
                                 <option value="">Select Make</option>
-                                {carMakes.map((make: string) => (
+                                {carMakesList.map((make: string) => (
                                   <option key={make} value={make}>
                                     {make}
                                   </option>
@@ -1293,4 +1349,5 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
     </div>
   );
 };
+
 export default ConversionModal;

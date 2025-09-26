@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ReactNode } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus,
   Search, 
@@ -17,7 +17,9 @@ import {
   ThumbsUp,
   ThumbsDown,
   Trash2,
-  User
+  User,
+  Loader,
+  ChevronDown
 } from 'lucide-react';
 
 interface OrderItem {
@@ -47,6 +49,11 @@ interface PurchaseOrder {
   }>;
 }
 
+interface Supplier {
+  id: number;
+  name: string;
+}
+
 const PurchaseOrders: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'ordered' | 'received'>('all');
@@ -62,27 +69,37 @@ const PurchaseOrders: React.FC = () => {
   }, []);
 
   const fetchPurchaseOrders = async () => {
-  try {
-    const response = await fetch('http://localhost:5001/api/inventory/purchase-orders');
-    if (!response.ok) throw new Error('Failed to fetch POs');
-    const result = await response.json();
-    
-    const poList = Array.isArray(result.data) 
-      ? result.data.map((po: { totalAmount: string; orderDate: any; expectedDate: any; }) => ({
-          ...po,
-          totalAmount: parseFloat(po.totalAmount) || 0,  // Ensure it's a number
-          orderDate: po.orderDate || 'N/A',
-          expectedDate: po.expectedDate || 'N/A'
-        }))
-      : [];
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        alert('❌ Session expired. Please log in again.');
+        return;
+      }
 
-    setPurchaseOrders(poList);
-  } catch (err) {
-    console.error('Error:', err);
-    setPurchaseOrders([]);
-    alert('❌ Failed to load purchase orders');
-  }
-};
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/purchase-orders', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch POs');
+      const result = await response.json();
+      
+      const poList = Array.isArray(result.data) 
+        ? result.data.map((po: { totalAmount: string; orderDate: any; expectedDate: any; }) => ({
+            ...po,
+            totalAmount: parseFloat(po.totalAmount) || 0,
+            orderDate: po.orderDate || 'N/A',
+            expectedDate: po.expectedDate || 'N/A'
+          }))
+        : [];
+
+      setPurchaseOrders(poList);
+    } catch (err) {
+      console.error('Error:', err);
+      setPurchaseOrders([]);
+      alert('❌ Failed to load purchase orders');
+    }
+  };
 
   const handleRefresh = () => {
     setIsLoading(true);
@@ -94,9 +111,18 @@ const PurchaseOrders: React.FC = () => {
     if (!window.confirm(`Are you sure you want to ${status} this PO?`)) return;
 
     try {
-      const response = await fetch(`http://localhost:5001/api/inventory/purchase-orders/${poNumber}`, {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        alert('❌ Not logged in.');
+        return;
+      }
+
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/inventory/purchase-orders/${poNumber}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ status })
       });
 
@@ -104,7 +130,7 @@ const PurchaseOrders: React.FC = () => {
 
       if (response.ok) {
         alert(`✅ PO ${status} successfully!`);
-        fetchPurchaseOrders(); // Refresh list
+        fetchPurchaseOrders();
         if (viewingPO?.poNumber === poNumber) {
           setViewingPO(prev => {
             if (!prev) return prev;
@@ -154,7 +180,10 @@ const PurchaseOrders: React.FC = () => {
   const filteredOrders = purchaseOrders.filter(order => {
     const matchesSearch = order.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           order.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          order.createdBy.toLowerCase().includes(searchTerm.toLowerCase());
+                          order.createdBy.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (order.items && order.items.some(item => 
+                            item.name.toLowerCase().includes(searchTerm.toLowerCase())
+                          ));
     
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
 
@@ -207,7 +236,7 @@ const PurchaseOrders: React.FC = () => {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by PO number, supplier, or requester..."
+            placeholder="Search by PO number, supplier, requester, or item name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -288,59 +317,78 @@ const PurchaseOrders: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-  <table className="min-w-full divide-y divide-gray-200">
-    <thead className="bg-gray-50">
-      <tr>
-        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PO Number</th>
-        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Name</th>
-        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
-        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Date</th>
-        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recived Date</th>
-        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
-        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-      </tr>
-    </thead>
-    <tbody className="bg-white divide-y divide-gray-200">
-      {filteredOrders.map((order) => (
-        <tr key={order.poNumber} className="hover:bg-gray-50 transition-colors">
-          <td className="px-4 py-3 text-sm font-medium text-blue-600">{order.poNumber}</td>
-          <td className="px-4 py-3 text-sm text-gray-900">{order.supplier}</td>
-          <td className="px-4 py-3 text-sm text-gray-900">{order.orderDate}</td>
-          <td className="px-4 py-3 text-sm text-gray-900">{order.receivedDate || '-'}</td>
-          <td className="px-4 py-3 text-sm text-gray-900">{order.itemCount}</td>
-          <td className="px-4 py-3 text-sm font-bold text-gray-900">${order.totalAmount.toFixed(2)}</td>
-          <td className="px-4 py-3 text-sm">
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-              {getStatusIcon(order.status)}
-              <span className="ml-1 capitalize">{order.status}</span>
-            </span>
-          </td>
-          <td className="px-4 py-3 text-sm">
-            <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(order.priority)}`}>
-              {order.priority}
-            </span>
-          </td>
-          <td className="px-4 py-3 text-sm">
-            <button
-              onClick={() => setViewingPO(order)}
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-            >
-              View
-            </button>
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PO Number</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Received Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredOrders.map((order) => (
+                    <tr key={order.poNumber} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 text-sm font-medium text-blue-600">{order.poNumber}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{order.supplier}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        <div className="max-w-xs">
+                          {order.items && order.items.length > 0 ? (
+                            <div className="flex flex-col">
+                              {order.items.slice(0, 2).map((item, index) => (
+                                <div key={item.id} className="flex justify-between">
+                                  <span className="truncate">{item.name}</span>
+                                  <span className="ml-2 text-gray-500">x{item.quantity}</span>
+                                </div>
+                              ))}
+                              {order.items.length > 2 && (
+                                <div className="text-gray-500 text-xs mt-1">
+                                  +{order.items.length - 2} more items
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-500">No items</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{order.orderDate}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{order.receivedDate || '-'}</td>
+                      <td className="px-4 py-3 text-sm font-bold text-gray-900">${order.totalAmount.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                          {getStatusIcon(order.status)}
+                          <span className="ml-1 capitalize">{order.status}</span>
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(order.priority)}`}>
+                          {order.priority}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <button
+                          onClick={() => setViewingPO(order)}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
 
-      {/* === Request PO Modal (Beautiful UI) === */}
+      {/* Request PO Modal */}
       {showRequestModal && (
         <RequestPOModal
           onClose={() => setShowRequestModal(false)}
@@ -348,7 +396,7 @@ const PurchaseOrders: React.FC = () => {
         />
       )}
 
-      {/* === View PO Modal === */}
+      {/* View PO Modal */}
       {viewingPO && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-slide-up">
@@ -364,9 +412,7 @@ const PurchaseOrders: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Status</p>
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(viewingPO.status)}`}
-                  >
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(viewingPO.status)}`}>
                     {getStatusIcon(viewingPO.status)}
                     <span className="ml-1 capitalize">{viewingPO.status}</span>
                   </span>
@@ -380,9 +426,9 @@ const PurchaseOrders: React.FC = () => {
                   <p className="font-semibold">{viewingPO.expectedDate || '-'}</p>
                 </div>
                 <div>
-    <p className="text-sm text-gray-500">Received Date</p>
-    <p className="font-semibold text-green-700">{viewingPO.receivedDate}</p>
-  </div>
+                  <p className="text-sm text-gray-500">Received Date</p>
+                  <p className="font-semibold text-green-700">{viewingPO.receivedDate}</p>
+                </div>
                 <div>
                   <p className="text-sm text-gray-500">Total Amount</p>
                   <p className="font-bold">${viewingPO.totalAmount.toFixed(2)}</p>
@@ -393,11 +439,7 @@ const PurchaseOrders: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Priority</p>
-                  <p
-                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(
-                      viewingPO.priority
-                    )}`}
-                  >
+                  <p className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(viewingPO.priority)}`}>
                     {viewingPO.priority.toUpperCase()}
                   </p>
                 </div>
@@ -411,36 +453,34 @@ const PurchaseOrders: React.FC = () => {
                   <p className="text-sm text-gray-500">Notes</p>
                   <p className="font-medium text-gray-900">{viewingPO.notes}</p>
                 </div>
-                
               )}
+              
               {/* Item Details Table */}
-<div className="mt-6">
-  <h4 className="text-lg font-semibold text-gray-900 mb-3">Order Items</h4>
-  <div className="overflow-x-auto">
-    <table className="min-w-full divide-y divide-gray-200">
-      <thead className="bg-gray-50">
-        <tr>
-          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Item Name</th>
-          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-        </tr>
-      </thead>
-      <tbody className="bg-white divide-y divide-gray-200 text-sm">
-        {viewingPO.items?.map((item) => (
-          <tr key={item.id}>
-            <td className="px-3 py-2 font-medium">{item.name}</td>
-            <td className="px-3 py-2">{item.quantity}</td>
-            <td className="px-3 py-2">${item.price.toFixed(2)}</td>
-            <td className="px-3 py-2 font-bold">${(item.quantity * item.price).toFixed(2)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-</div>
-              
-              
+              <div className="mt-6">
+                <h4 className="text-lg font-semibold text-gray-900 mb-3">Order Items</h4>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Item Name</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200 text-sm">
+                      {viewingPO.items?.map((item) => (
+                        <tr key={item.id}>
+                          <td className="px-3 py-2 font-medium">{item.name}</td>
+                          <td className="px-3 py-2">{item.quantity}</td>
+                          <td className="px-3 py-2">${item.price.toFixed(2)}</td>
+                          <td className="px-3 py-2 font-bold">${(item.quantity * item.price).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
 
             {/* Action Buttons */}
@@ -491,7 +531,7 @@ const PurchaseOrders: React.FC = () => {
   );
 };
 
-// === RequestPOModal using your uploaded UI ===
+// RequestPOModal Component with Supplier Dropdown
 const RequestPOModal = ({ onClose, onPOCreated }: { onClose: () => void; onPOCreated: () => void }) => {
   const [formData, setFormData] = useState({
     supplier: '',
@@ -502,6 +542,38 @@ const RequestPOModal = ({ onClose, onPOCreated }: { onClose: () => void; onPOCre
     { id: '1', name: '', quantity: 0, price: 0 }
   ]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(true);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          setIsLoadingSuppliers(false);
+          return;
+        }
+
+        const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/names', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+          setSuppliers(result.data);
+        } else {
+          console.error('Failed to fetch suppliers:', result.message);
+        }
+      } catch (err) {
+        console.error('Error fetching suppliers:', err);
+      } finally {
+        setIsLoadingSuppliers(false);
+      }
+    };
+
+    fetchSuppliers();
+  }, []);
 
   const addItem = () => {
     const newItem: OrderItem = {
@@ -535,49 +607,67 @@ const RequestPOModal = ({ onClose, onPOCreated }: { onClose: () => void; onPOCre
     }));
   };
 
+  const handleSupplierSelect = (supplierName: string) => {
+    setFormData(prev => ({
+      ...prev,
+      supplier: supplierName
+    }));
+    setIsDropdownOpen(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!formData.supplier || orderItems.some(item => !item.name)) {
-    alert('Please fill all required fields');
-    return;
-  }
-  setIsSubmitting(true);
-  try {
-    const payload = {
-  supplier: formData.supplier,
-  orderDate: new Date().toISOString().split('T')[0],
-  expectedDate: formData.expectedDate,
-  totalAmount,
-  itemCount: orderItems.length,
-  requestedBy: 'Admin',
-  notes: formData.notes,
-  priority: 'medium',
-  items: orderItems // ← This is correct
-};
+    e.preventDefault();
 
-    const response = await fetch('http://localhost:5001/api/inventory/purchase-orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (response.ok) {
-      alert('✅ Purchase request submitted for approval!');
-      onPOCreated();
-      onClose();
-    } else {
-      const result = await response.json();
-      alert(`❌ Error: ${result.message}`);
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      alert('❌ You are not logged in. Please log in again.');
+      return;
     }
-  } catch (err) {
-    alert('❌ Network error. Check if backend is running.');
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+
+    if (!formData.supplier || orderItems.some(item => !item.name)) {
+      alert('Please fill all required fields');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        supplier: formData.supplier,
+        orderDate: new Date().toISOString().split('T')[0],
+        expectedDate: formData.expectedDate,
+        totalAmount,
+        itemCount: orderItems.length,
+        notes: formData.notes,
+        priority: 'medium',
+        items: orderItems
+      };
+
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/purchase-orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // ✅ CRITICAL: Sends token so backend knows who created the PO
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        alert('✅ Purchase request submitted for approval!');
+        onPOCreated();
+        onClose();
+      } else {
+        const result = await response.json();
+        alert(`❌ Error: ${result.message}`);
+      }
+    } catch (err) {
+      alert('❌ Network error. Check if backend is running.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fade-in">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fade-in text-black">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-slide-up">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-2xl">
           <div className="flex items-center justify-between">
@@ -605,15 +695,45 @@ const RequestPOModal = ({ onClose, onPOCreated }: { onClose: () => void; onPOCre
               </label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  name="supplier"
-                  value={formData.supplier}
-                  onChange={handleChange}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                  placeholder="Enter supplier name"
-                  required
-                />
+                <div className="relative">
+                  <div
+                    className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all cursor-pointer bg-white"
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  >
+                    {formData.supplier ? (
+                      <div className="text-gray-900">{formData.supplier}</div>
+                    ) : (
+                      <div className="text-gray-500">Enter supplier name</div>
+                    )}
+                  </div>
+                  <ChevronDown 
+                    className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} 
+                  />
+                  {isDropdownOpen && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                      {isLoadingSuppliers ? (
+                        <div className="flex items-center justify-center p-4">
+                          <Loader className="w-5 h-5 text-gray-400 animate-spin" />
+                          <span className="ml-2 text-gray-500">Loading suppliers...</span>
+                        </div>
+                      ) : suppliers.length > 0 ? (
+                        suppliers.map(supplier => (
+                          <div
+                            key={supplier.id}
+                            className="px-4 py-3 hover:bg-purple-50 cursor-pointer transition-colors text-black"
+                            onClick={() => handleSupplierSelect(supplier.name)}
+                          >
+                            {supplier.name}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-4 py-3 text-gray-500">
+                          No suppliers available
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div>

@@ -72,7 +72,7 @@ const DamageReportPage = () => {
 const fetchDamageReports = async () => {
   setLoading(true);
   try {
-    const res = await fetch('http://localhost:5001/api/damage-reports');
+    const res = await fetch('https://ipasystem.bymsystem.com/api/damage-reports');
     const data = await res.json();
     if (data.success && Array.isArray(data.data)) {
       const reports: DamageReport[] = data.data.map((r: any) => ({
@@ -107,7 +107,7 @@ const fetchDamageReports = async () => {
 
   const fetchAvailableTools = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/tools');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools');
       const data = await res.json();
       if (data.success) {
         const available = data.data
@@ -133,7 +133,7 @@ const fetchDamageReports = async () => {
   const fetchMechanics = async () => {
   try {
     // ✅ Correct URL based on your server.js mount path
-    const res = await fetch('http://localhost:5001/api/mechanic/mechanics-fetch');
+    const res = await fetch('https://ipasystem.bymsystem.com/api/mechanic/mechanics-fetch');
     
     if (!res.ok) {
       throw new Error(`HTTP error! status: ${res.status}`);
@@ -203,7 +203,7 @@ const fetchDamageReports = async () => {
 
     setReporting(true);
     try {
-      const res = await fetch('http://localhost:5001/api/tools/damage', {
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/damage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -237,7 +237,7 @@ const fetchDamageReports = async () => {
     if (!window.confirm(`Mark "${report.name}" as repaired and set to Available?`)) return;
 
     try {
-      const res = await fetch(`http://localhost:5001/api/tools/${report.id}`, {
+      const res = await fetch(`https://ipasystem.bymsystem.com/api/tools/${report.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

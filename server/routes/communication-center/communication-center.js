@@ -336,106 +336,346 @@ router.put('/proformas/:id/status', async (req, res) => {
 // adjust path if needed
 
 // GET all "awaiting survey" tickets with related data
-router.get('/awaiting-survey', async (req, res) => {
-  try {
-    // Fetch tickets
-    const [tickets] = await db.promise().query(`
+router.get('/awaiting-survey', (req, res) => {
+  // 1. Fetch tickets with awaiting survey status
+  const ticketsQuery = `
+    SELECT 
+      id,
+      ticket_number,
+      customer_id,
+      customer_name,
+      customer_type,
+      vehicle_id,
+      vehicle_info,
+      license_plate,
+      title,
+      description,
+      priority,
+      type,
+      urgency_level,
+      status,
+      inspector_assign,
+      estimated_completion_date,
+      completion_date,
+      created_at,
+      updated_at
+    FROM service_tickets
+    WHERE status = 'awaiting survey'
+    ORDER BY created_at DESC
+  `;
+
+  db.query(ticketsQuery, (err, tickets) => {
+    if (err) {
+      console.error('Error fetching tickets:', err);
+      return res.status(500).json({ success: false, message: 'Database error' });
+    }
+
+    if (tickets.length === 0) {
+      return res.json({ success: true, tickets: [] });
+    }
+
+    const ticketNumbers = tickets.map(t => t.ticket_number);
+
+    // Helper function for running related queries
+    const runQuery = (query, cb) => db.query(query, [ticketNumbers], cb);
+
+    // Related queries
+    const disassembledQuery = `
+      SELECT id, ticket_number, part_name, \`condition\` AS part_condition, status, notes, logged_at, reassembly_verified
+      FROM disassembled_parts WHERE ticket_number IN (?) ORDER BY logged_at DESC
+    `;
+    const logsQuery = `
+      SELECT id, ticket_number, date, time, status, description, created_at
+      FROM progress_logs WHERE ticket_number IN (?) ORDER BY created_at DESC
+    `;
+    const inspectionsQuery = `
+      SELECT id, ticket_number, main_issue_resolved, reassembly_verified, general_condition, notes,
+             inspection_date, inspection_status, created_at, updated_at,
+             check_oil_leaks, check_engine_air_filter_oil_coolant_level,
+             check_brake_fluid_levels, check_gluten_fluid_levels,
+             check_battery_timing_belt, check_tire, check_tire_pressure_rotation,
+             check_lights_wiper_horn, check_door_locks_central_locks,
+             check_customer_work_order_reception_book
+      FROM inspections WHERE ticket_number IN (?) ORDER BY created_at DESC
+    `;
+    const mechanicsQuery = `
+      SELECT id, ticket_number, mechanic_name, phone, payment, payment_method, work_done, notes, created_at
+      FROM outsource_mechanics WHERE ticket_number IN (?) ORDER BY created_at DESC
+    `;
+    const toolsQuery = `
+      SELECT id, tool_id, tool_name, ticket_id, ticket_number, assigned_quantity, assigned_by, status, assigned_at, returned_at, updated_at
+      FROM tool_assignments WHERE ticket_number IN (?) ORDER BY assigned_at DESC
+    `;
+    const orderedPartsQuery = `
+      SELECT item_id, ticket_number, name, category, sku, price, quantity, status, ordered_at
+      FROM ordered_parts WHERE ticket_number IN (?) ORDER BY ordered_at DESC
+    `;
+    const outsourceStockQuery = `
+      SELECT id, ticket_number, name, category, sku, price, quantity, source_shop, status, requested_at, received_at, notes, updated_at,
+             (quantity * price) AS total_cost
+      FROM outsource_stock WHERE ticket_number IN (?) ORDER BY requested_at DESC
+    `;
+
+    // Run all queries in parallel
+    let results = {};
+    let completed = 0;
+    let hasError = false;
+
+    const queries = {
+      disassembled_parts: disassembledQuery,
+      progress_logs: logsQuery,
+      inspections: inspectionsQuery,
+      outsource_mechanics: mechanicsQuery,
+      tool_assignments: toolsQuery,
+      ordered_parts: orderedPartsQuery,
+      outsource_stock: outsourceStockQuery,
+    };
+
+    Object.entries(queries).forEach(([key, query]) => {
+      runQuery(query, (err, rows) => {
+        if (hasError) return; // prevent multiple responses
+        if (err) {
+          console.error(`Error fetching ${key}:`, err);
+          hasError = true;
+          return res.status(500).json({ success: false, message: `Database error on ${key}` });
+        }
+        results[key] = rows;
+        completed++;
+
+        if (completed === Object.keys(queries).length) {
+          // Enrich tickets with related data
+          const enrich = (ticket_number, source) =>
+            source.filter(r => r.ticket_number === ticket_number);
+
+          const enrichedTickets = tickets.map(t => ({
+            ...t,
+            disassembled_parts: enrich(t.ticket_number, results.disassembled_parts),
+            progress_logs: enrich(t.ticket_number, results.progress_logs),
+            inspections: enrich(t.ticket_number, results.inspections),
+            outsource_mechanics: enrich(t.ticket_number, results.outsource_mechanics),
+            tool_assignments: enrich(t.ticket_number, results.tool_assignments),
+            ordered_parts: enrich(t.ticket_number, results.ordered_parts),
+            outsource_stock: enrich(t.ticket_number, results.outsource_stock),
+          }));
+
+          res.json({ success: true, tickets: enrichedTickets });
+        }
+      });
+    });
+  });
+});
+
+// ✅ API: Mark survey as completed -> move ticket to "awaiting salvage form"
+router.put('/tickets/:ticketNumber/complete-survey', (req, res) => {
+  const { ticketNumber } = req.params;
+
+  const query = `
+    UPDATE service_tickets
+    SET status = 'awaiting salvage form',
+        updated_at = CURRENT_TIMESTAMP
+    WHERE ticket_number = ? AND status = 'awaiting survey'
+  `;
+
+  db.query(query, [ticketNumber], (err, result) => {
+    if (err) {
+      console.error("❌ Error updating ticket status:", err);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ 
+        message: "Ticket not found or not in 'awaiting survey' status" 
+      });
+    }
+
+    res.json({ 
+      success: true,
+      message: `Ticket ${ticketNumber} moved to 'awaiting salvage form'`
+    });
+  });
+});
+
+router.get('/awaiting-salvage-form', (req, res) => {
+  // Step 1: Fetch tickets with status 'awaiting salvage form'
+  const ticketsQuery = `
+    SELECT 
+      id,
+      ticket_number,
+      customer_type,
+      customer_id,
+      customer_name,
+      vehicle_id,
+      vehicle_info,
+      license_plate,
+      title,
+      outsource_mechanic,
+      inspector_assign,
+      description,
+      priority,
+      type,
+      urgency_level,
+      status,
+      appointment_id,
+      created_at,
+      updated_at,
+      completion_date,
+      estimated_completion_date
+    FROM service_tickets
+    WHERE status = 'awaiting salvage form'
+    ORDER BY created_at DESC
+  `;
+
+  db.query(ticketsQuery, (err, tickets) => {
+    if (err) return res.status(500).json({ success: false, message: 'Error fetching tickets', error: err });
+
+    const ticketNumbers = tickets.map(t => t.ticket_number);
+    if (ticketNumbers.length === 0) {
+      return res.json({ success: true, tickets: [], disassembledParts: [], logs: [], inspections: [], mechanics: [], tools: [], orderedParts: [], outsourceStock: [] });
+    }
+
+    // Related queries
+    const disassembledQuery = `
+      SELECT id, ticket_number, part_name, \`condition\` AS part_condition, status, notes, logged_at, reassembly_verified
+      FROM disassembled_parts WHERE ticket_number IN (?) ORDER BY logged_at DESC
+    `;
+    const logsQuery = `
+      SELECT id, ticket_number, date, time, status, description, created_at
+      FROM progress_logs WHERE ticket_number IN (?) ORDER BY created_at DESC
+    `;
+    const inspectionsQuery = `
       SELECT 
         id,
         ticket_number,
-        customer_id,
-        customer_name,
-        customer_type,
-        vehicle_id,
-        vehicle_info,
-        license_plate,
-        title,
-        description,
-        priority,
-        status,
-        inspector_assign,
-        
-        estimated_completion_date,
-        completion_date,
+        main_issue_resolved,
+        reassembly_verified,
+        general_condition,
+        notes,
+        inspection_date,
+        inspection_status,
         created_at,
-        updated_at
-      FROM service_tickets
-      WHERE status = 'awaiting survey'
-    `);
+        updated_at,
+        check_oil_leaks,
+        check_engine_air_filter_oil_coolant_level,
+        check_brake_fluid_levels,
+        check_gluten_fluid_levels,
+        check_battery_timing_belt,
+        check_tire,
+        check_tire_pressure_rotation,
+        check_lights_wiper_horn,
+        check_door_locks_central_locks,
+        check_customer_work_order_reception_book
+      FROM inspections
+      WHERE ticket_number IN (?)
+      ORDER BY created_at DESC
+    `;
+    const mechanicsQuery = `
+      SELECT id, ticket_number, mechanic_name, phone, payment, payment_method, work_done, notes, created_at
+      FROM outsource_mechanics WHERE ticket_number IN (?) ORDER BY created_at DESC
+    `;
+    const toolsQuery = `
+      SELECT id, tool_id, tool_name, ticket_id, ticket_number, assigned_quantity, assigned_by, status, assigned_at, returned_at, updated_at
+      FROM tool_assignments WHERE ticket_number IN (?) ORDER BY assigned_at DESC
+    `;
+    const orderedPartsQuery = `
+      SELECT item_id, ticket_number, name, category, sku, price, quantity, status, ordered_at
+      FROM ordered_parts WHERE ticket_number IN (?) ORDER BY ordered_at DESC
+    `;
+    const outsourceStockQuery = `
+      SELECT 
+        id,
+        ticket_number,
+        name,
+        category,
+        sku,
+        price,
+        quantity,
+        source_shop,
+        status,
+        requested_at,
+        received_at,
+        notes,
+        updated_at,
+        (quantity * price) AS total_cost
+      FROM outsource_stock 
+      WHERE ticket_number IN (?) 
+      ORDER BY requested_at DESC
+    `;
 
-    if (tickets.length === 0) {
-      return res.json({ message: "No tickets found with status 'awaiting survey'" });
-    }
+    // Execute all related queries
+    db.query(disassembledQuery, [ticketNumbers], (err, disassembledParts) => {
+      if (err) return res.status(500).json({ success: false, message: 'Error fetching disassembled parts', error: err });
 
-    // Attach related data
-    const results = await Promise.all(
-      tickets.map(async (ticket) => {
-        const ticketNumber = ticket.ticket_number;
+      db.query(logsQuery, [ticketNumbers], (err, logs) => {
+        if (err) return res.status(500).json({ success: false, message: 'Error fetching logs', error: err });
 
-        const [disassembledParts] = await db.promise().query(`
-          SELECT id, ticket_number, part_name, condition, status, notes, logged_at
-          FROM disassembled_parts WHERE ticket_number = ?`, [ticketNumber]
-        );
+        db.query(inspectionsQuery, [ticketNumbers], (err, inspections) => {
+          if (err) return res.status(500).json({ success: false, message: 'Error fetching inspections', error: err });
 
-        const [inspections] = await db.promise().query(`
-          SELECT id, ticket_number, item, result, notes, inspected_at
-          FROM inspections WHERE ticket_number = ?`, [ticketNumber]
-        );
+          db.query(mechanicsQuery, [ticketNumbers], (err, mechanics) => {
+            if (err) return res.status(500).json({ success: false, message: 'Error fetching mechanics', error: err });
 
-        const [mechanicAssignments] = await db.promise().query(`
-          SELECT id, ticket_number, mechanic_id, mechanic_name, role, assigned_at
-          FROM mechanic_assignments WHERE ticket_number = ?`, [ticketNumber]
-        );
+            db.query(toolsQuery, [ticketNumbers], (err, tools) => {
+              if (err) return res.status(500).json({ success: false, message: 'Error fetching tools', error: err });
 
-        const [orderedParts] = await db.promise().query(`
-          SELECT id, ticket_number, part_name, quantity, cost, status, ordered_at
-          FROM ordered_parts WHERE ticket_number = ?`, [ticketNumber]
-        );
+              db.query(orderedPartsQuery, [ticketNumbers], (err, orderedParts) => {
+                if (err) return res.status(500).json({ success: false, message: 'Error fetching ordered parts', error: err });
 
-        const [outsourceMechanics] = await db.promise().query(`
-          SELECT id, ticket_number, company_name, contact_person, phone, service_details, cost, status, assigned_at
-          FROM outsource_mechanics WHERE ticket_number = ?`, [ticketNumber]
-        );
+                db.query(outsourceStockQuery, [ticketNumbers], (err, outsourceStock) => {
+                  if (err) return res.status(500).json({ success: false, message: 'Error fetching outsource stock', error: err });
 
-        const [outsourceStock] = await db.promise().query(`
-          SELECT id, ticket_number, item_name, quantity, supplier, cost, status, ordered_at
-          FROM outsource_stock WHERE ticket_number = ?`, [ticketNumber]
-        );
-
-        const [progressLogs] = await db.promise().query(`
-          SELECT id, ticket_number, action, status, notes, logged_at
-          FROM progress_logs WHERE ticket_number = ?`, [ticketNumber]
-        );
-
-        const [toolAssignments] = await db.promise().query(`
-          SELECT id, ticket_number, tool_name, duration, assigned_to, assigned_at
-          FROM tool_assignments WHERE ticket_number = ?`, [ticketNumber]
-        );
-
-        return {
-          ...ticket,
-          disassembledParts,
-          inspections,
-          mechanicAssignments,
-          orderedParts,
-          outsourceMechanics,
-          outsourceStock,
-          progressLogs,
-          toolAssignments,
-        };
-      })
-    );
-
-    res.json(results);
-
-  } catch (error) {
-    console.error("❌ Error fetching awaiting survey tickets:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
+                  // ✅ Final response
+                  res.json({
+                    success: true,
+                    tickets,
+                    disassembledParts,
+                    logs,
+                    inspections,
+                    mechanics,
+                    tools,
+                    orderedParts,
+                    outsourceStock
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+  });
 });
 
+// Update service ticket status from "awaiting salvage form" to "request payment"
+router.post('/service-tickets/request-payment', (req, res) => {
+  const { ticket_number } = req.body;
 
+  if (!ticket_number) {
+    return res.status(400).json({ message: "ticket_number is required" });
+  }
 
+  const sql = `
+    UPDATE service_tickets
+    SET status = 'request payment', updated_at = NOW()
+    WHERE ticket_number = ? AND status = 'awaiting salvage form'
+  `;
+
+  db.query(sql, [ticket_number], (err, result) => {
+    if (err) {
+      console.error("❌ Error updating ticket status:", err);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        message: `No ticket found with ticket_number ${ticket_number} and status 'awaiting salvage form'`
+      });
+    }
+
+    res.json({
+      message: `Ticket ${ticket_number} status updated to 'request payment'`
+    });
+  });
+});
 
 
 router.get('/stats', async (req, res) => {
@@ -468,6 +708,130 @@ router.get('/stats', async (req, res) => {
       return sendResponse(res, false, null, 'Could not retrieve statistics.', 500);
     }
 });
+
+router.get('/status-counts', (req, res) => {
+  const query = `
+    SELECT status, COUNT(*) AS count
+    FROM proformas
+    WHERE status IN ('Converted', 'Awaiting Send', 'Sent', 'Accepted', 'Cancelled')
+    GROUP BY status
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("❌ Error fetching status counts:", err);
+      return res.status(500).json({ error: "Database query failed" });
+    }
+
+    // Initialize all statuses with 0
+    const counts = {
+      Converted: 0,
+      "Awaiting Send": 0,
+      Sent: 0,
+      Accepted: 0,
+      Cancelled: 0,
+    };
+
+    // Fill in actual counts from DB
+    results.forEach(row => {
+      counts[row.status] = row.count;
+    });
+
+    res.json({ success: true, counts });
+  });
+});
+
+// ✅ Fetch all cancelled proformas
+// ✅ Request Volume Trend (per month)
+
+router.get('/analytics', (req, res) => {
+  const analyticsQuery = `
+    SELECT
+      COUNT(*) AS totalRequests,
+      ROUND(
+        (SUM(CASE WHEN status = 'Accepted' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2
+      ) AS completionRate,
+      AVG(TIMESTAMPDIFF(HOUR, created_at, NOW())) AS avgResponseTime,
+      SUM(CASE WHEN status = 'Urgent' THEN 1 ELSE 0 END) AS urgentRequests,
+      (
+        SELECT status
+        FROM proformas
+        GROUP BY status
+        ORDER BY COUNT(*) DESC
+        LIMIT 1
+      ) AS topType,
+      (
+        SELECT 
+          ROUND(
+            (
+              (SELECT COUNT(*) FROM proformas WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY))
+              -
+              (SELECT COUNT(*) FROM proformas WHERE created_at BETWEEN DATE_SUB(NOW(), INTERVAL 60 DAY) AND DATE_SUB(NOW(), INTERVAL 30 DAY))
+            ) / 
+            NULLIF(
+              (SELECT COUNT(*) FROM proformas WHERE created_at BETWEEN DATE_SUB(NOW(), INTERVAL 60 DAY) AND DATE_SUB(NOW(), INTERVAL 30 DAY)),
+              0
+            ) * 100, 2
+          )
+      ) AS monthlyGrowth
+    FROM proformas;
+  `;
+
+  db.query(analyticsQuery, (err, results) => {
+    if (err) {
+      console.error('❌ Error fetching analytics:', err);
+      return res.status(500).json({
+        success: false,
+        data: null,
+        message: 'Database query failed'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: results[0],
+      message: 'Analytics fetched successfully'
+    });
+  });
+});
+
+
+router.get('/analytics/request-volume', (req, res) => {
+  const query = `
+    SELECT 
+      DATE_FORMAT(proforma_date, '%Y-%m') AS month,
+      COUNT(*) AS totalRequests
+    FROM proformas
+    GROUP BY month
+    ORDER BY month ASC
+  `;
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("❌ Error fetching request volume:", err);
+      return res.status(500).json({ success: false, data: null, message: "Database query failed" });
+    }
+    res.json({ success: true, data: results, message: "Request volume trend fetched successfully" });
+  });
+});
+
+// ✅ Request Type Distribution
+router.get('/analytics/request-distribution', (req, res) => {
+  const query = `
+    SELECT 
+      status,
+      COUNT(*) AS count
+    FROM proformas
+    GROUP BY status
+  `;
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("❌ Error fetching request distribution:", err);
+      return res.status(500).json({ success: false, data: null, message: "Database query failed" });
+    }
+    res.json({ success: true, data: results, message: "Request type distribution fetched successfully" });
+  });
+});
+
 
 
   // GET /api/communication-center/outsource-stock

@@ -247,7 +247,7 @@ const VehicleStatus = () => {
   // Fetch vehicles from backend
   const fetchVehicles = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/tickets/summary');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/tickets/summary');
       if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       const rawData = await response.json();
       const data = Array.isArray(rawData) ? rawData : rawData.tickets;

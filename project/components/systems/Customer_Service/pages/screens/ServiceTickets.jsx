@@ -2,11 +2,12 @@
 import { useState, useEffect } from 'react';
 import { 
   Ticket, Plus, Search, Filter, Eye, Edit, Trash2, Clock, 
-  AlertTriangle, CheckCircle, User, Car, Phone, Mail, Calendar,
+  AlertTriangle, User, Car, Phone, Mail, Calendar,
   MapPin, Wrench, DollarSign, FileText, Star, X, Package, PenTool, 
   ChevronDown, ChevronUp, ClipboardList, CheckSquare, ListChecks,
   SquareStack, ClipboardCheck, Scissors, PackagePlus, FileCheck, Users, UserCheck, 
-  CreditCard, Receipt, Info
+  CreditCard, Receipt, Info, RefreshCw, CheckCircle as CheckCircleIcon, XCircle, HelpCircle,
+  Check, Shield
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,52 @@ const mechanics = [
   { id: 4, name: 'Lisa Davis', specialty: 'Brakes & Suspension' }
 ];
 
+const checklistOrder = [
+  'oilLeaks',
+  'engineAirFilterOilCoolant',
+  'brakeFluidLevels',
+  'glutenFluidLevels',
+  'batteryTimingBelt',
+  'tire',
+  'tirePressureRotation',
+  'lightsWiperHorn',
+  'doorLocksCentralLocks',
+  'customerWorkOrderReceptionBook'
+];
+
+// Helper function to format inspection checklist
+const formatInspectionChecklist = (inspection) => {
+  return {
+    ...inspection,
+    checklist: {
+      oilLeaks: inspection.check_oil_leaks === 'Yes' ? true : inspection.check_oil_leaks === 'No' ? false : null,
+      engineAirFilterOilCoolant: inspection.check_engine_air_filter_oil_coolant_level === 'Yes' ? true : inspection.check_engine_air_filter_oil_coolant_level === 'No' ? false : null,
+      brakeFluidLevels: inspection.check_brake_fluid_levels === 'Yes' ? true : inspection.check_brake_fluid_levels === 'No' ? false : null,
+      glutenFluidLevels: inspection.check_gluten_fluid_levels === 'Yes' ? true : inspection.check_gluten_fluid_levels === 'No' ? false : null,
+      batteryTimingBelt: inspection.check_battery_timing_belt === 'Yes' ? true : inspection.check_battery_timing_belt === 'No' ? false : null,
+      tire: inspection.check_tire === 'Yes' ? true : inspection.check_tire === 'No' ? false : null,
+      tirePressureRotation: inspection.check_tire_pressure_rotation === 'Yes' ? true : inspection.check_tire_pressure_rotation === 'No' ? false : null,
+      lightsWiperHorn: inspection.check_lights_wiper_horn === 'Yes' ? true : inspection.check_lights_wiper_horn === 'No' ? false : null,
+      doorLocksCentralLocks: inspection.check_door_locks_central_locks === 'Yes' ? true : inspection.check_door_locks_central_locks === 'No' ? false : null,
+      customerWorkOrderReceptionBook: inspection.check_customer_work_order_reception_book === 'Yes' ? true : inspection.check_customer_work_order_reception_book === 'No' ? false : null
+    }
+  };
+};
+
+// Checklist labels for display
+const checklistLabels = {
+  oilLeaks: 'Oil Leaks',
+  engineAirFilterOilCoolant: 'Engine Air Filter & Oil Coolant Level',
+  brakeFluidLevels: 'Brake Fluid Levels',
+  glutenFluidLevels: 'Gluten Fluid Levels',
+  batteryTimingBelt: 'Battery & Timing Belt',
+  tire: 'Tire Condition',
+  tirePressureRotation: 'Tire Pressure & Rotation',
+  lightsWiperHorn: 'Lights, Wiper & Horn',
+  doorLocksCentralLocks: 'Door Locks & Central Locks',
+  customerWorkOrderReceptionBook: 'Customer Work Order Reception Book'
+};
+
 export default function ServiceTickets() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +80,7 @@ export default function ServiceTickets() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [showTicketDetails, setShowTicketDetails] = useState(null);
   const [expandedLogs, setExpandedLogs] = useState({});
   const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
@@ -43,11 +91,31 @@ export default function ServiceTickets() {
   const [activeMechanicTab, setActiveMechanicTab] = useState(null);
   const [orderedPartsActiveTab, setOrderedPartsActiveTab] = useState('ordered');
   const [bill, setBill] = useState(null);
-  
+  const [billLoading, setBillLoading] = useState(false);
+  const [billError, setBillError] = useState(null);
+  const [isPaymentRequestModalOpen, setIsPaymentRequestModalOpen] = useState(false);
+  const [isPaymentProcessingModalOpen, setIsPaymentProcessingModalOpen] = useState(false);
+  const [selectedPaymentTerm, setSelectedPaymentTerm] = useState('');
+  const [paymentDetails, setPaymentDetails] = useState({
+    method: 'cash',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
+
+  // Payment method options
+  const paymentMethods = [
+    { value: 'cash', label: 'Cash' },
+    { value: 'bank_transfer', label: 'Bank Transfer' },
+    { value: 'mobile_payment', label: 'Mobile Payment' },
+    { value: 'check', label: 'Check' },
+    { value: 'credit_card', label: 'Credit Card' }
+  ];
+
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/tickets/service_tickets');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/tickets/service_tickets');
         if (!response.ok) throw new Error('Failed to fetch tickets');
         const data = await response.json();
         // Enrich each ticket with actual bill amount using your existing bill API
@@ -55,7 +123,7 @@ export default function ServiceTickets() {
           data.map(async (ticket) => {
             let actualBillAmount = null;
             try {
-              const billRes = await fetch(`http://localhost:5001/api/bill/car-bills/${ticket.ticket_number}`);
+              const billRes = await fetch(`https://ipasystem.bymsystem.com/api/bill/car-bills/${ticket.ticket_number}`);
               if (billRes.ok) {
                 const billData = await billRes.json();
                 if (billData.success && billData.bill && billData.bill.final_total) {
@@ -93,38 +161,42 @@ export default function ServiceTickets() {
     };
     fetchTickets();
   }, [addNotification]);
-  
- // First, update the fetchBill function to properly handle the API response
-const fetchBill = async (ticketNumber) => {
-  try {
-    const response = await fetch(`http://localhost:5001/api/bill/car-bills/${ticketNumber}`);
-    if (!response.ok) {
-      if (response.status === 404) {
-        setBill(null);
-        return;
+
+  const fetchBill = async (ticketNumber) => {
+    setBillLoading(true);
+    setBillError(null);
+    try {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/bill/car-bills/${ticketNumber}`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          setBill(null);
+          return;
+        }
+        throw new Error('Failed to fetch bill');
       }
-      throw new Error('Failed to fetch bill');
-    }
-    const data = await response.json();
-    if (data.success) {
-      // The API returns { success: true, bill: {...}, items: [...] }
-      // We need to combine bill and items into a single object for the UI
-      setBill({
-        ...data.bill,
-        items: data.items || []
-      });
-    } else {
+      const data = await response.json();
+      if (data.success) {
+        // The API returns { success: true, bill: {...}, items: [...] }
+        // We need to combine bill and items into a single object for the UI
+        setBill({
+          ...data.bill,
+          items: data.items || []
+        });
+      } else {
+        setBill(null);
+      }
+    } catch (err) {
+      console.error('Error fetching bill:', err);
+      setBillError(err.message);
       setBill(null);
+    } finally {
+      setBillLoading(false);
     }
-  } catch (err) {
-    console.error('Error fetching bill:', err);
-    setBill(null);
-  }
-};
+  };
   
   const fetchTicketDetails = async (ticketNumber) => {
     try {
-      const response = await fetch(`http://localhost:5001/api/tickets/service_tickets/${ticketNumber}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/tickets/service_tickets/${ticketNumber}`);
       if (!response.ok) throw new Error('Failed to fetch ticket details');
       const data = await response.json();
       const normalizedTicket = {
@@ -142,7 +214,7 @@ const fetchBill = async (ticketNumber) => {
       setActiveTab('overview');
       
       try {
-        const paymentResponse = await fetch(`http://localhost:5001/api/outsource-mechanic-payments/outsource-payments/${ticketNumber}`);
+        const paymentResponse = await fetch(`https://ipasystem.bymsystem.com/api/outsource-mechanic-payments/outsource-payments/${ticketNumber}`);
         if (paymentResponse.ok) {
           const paymentData = await paymentResponse.json();
           setShowTicketDetails(prev => ({
@@ -177,6 +249,102 @@ const fetchBill = async (ticketNumber) => {
       fetchTicketDetails(showTicketDetails.ticket_number);
     }
   }
+
+  // Handle payment request
+  const handlePaymentRequest = async () => {
+    try {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/bill/update-to-payment-requested', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ticketNumber: showTicketDetails.ticket_number }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Update the bill status in the UI
+        setBill(prev => ({ ...prev, status: 'payment_requested' }));
+        // Update the ticket status in the UI
+        setShowTicketDetails(prev => ({ ...prev, status: 'payment-requested' }));
+        // Close the modal
+        setIsPaymentRequestModalOpen(false);
+        // Show success notification
+        addNotification({
+          type: 'success',
+          title: 'Payment Requested',
+          message: `Payment requested for ticket ${showTicketDetails.ticket_number}`,
+        });
+      } else {
+        throw new Error(data.message || 'Failed to request payment');
+      }
+    } catch (error) {
+      console.error('Error requesting payment:', error);
+      addNotification({
+        type: 'error',
+        title: 'Failed to Request Payment',
+        message: error.message || 'Could not request payment',
+      });
+    }
+  };
+
+  // Handle payment submission
+  const handlePaymentProcessingSubmit = async () => {
+    if (!selectedPaymentTerm) {
+      addNotification({
+        type: 'error',
+        title: 'Payment Type Required',
+        message: 'Please select a payment type',
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/bill/submit-payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ticketNumber: showTicketDetails.ticket_number,
+          paymentType: selectedPaymentTerm,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Update the bill status to 'paid' in the UI
+        setBill(prev => ({ 
+          ...prev, 
+          status: 'paid', 
+          payment_type: selectedPaymentTerm 
+        }));
+        // Update the ticket status to 'completed' in the UI
+        setShowTicketDetails(prev => ({ ...prev, status: 'completed' }));
+        // Close the modal
+        setIsPaymentProcessingModalOpen(false);
+        // Reset selected payment term
+        setSelectedPaymentTerm('');
+        // Show success notification
+        addNotification({
+          type: 'success',
+          title: 'Payment Submitted',
+          message: `Payment submitted for ticket ${showTicketDetails.ticket_number}`,
+        });
+      } else {
+        throw new Error(data.message || 'Failed to submit payment');
+      }
+    } catch (error) {
+      console.error('Error submitting payment:', error);
+      addNotification({
+        type: 'error',
+        title: 'Failed to Submit Payment',
+        message: error.message || 'Could not submit payment',
+      });
+    }
+  };
   
   const filteredTickets = tickets.filter(ticket => {
     const matchesSearch = 
@@ -187,8 +355,9 @@ const fetchBill = async (ticketNumber) => {
     
     const matchesStatus = statusFilter === 'all' || ticket.status === statusFilter;
     const matchesPriority = priorityFilter === 'all' || ticket.priority === priorityFilter;
+    const matchesType = typeFilter === 'all' || ticket.type === typeFilter;
     
-    return matchesSearch && matchesStatus && matchesPriority;
+    return matchesSearch && matchesStatus && matchesPriority && matchesType;
   });
   
   const getStatusColor = (status) => {
@@ -200,12 +369,24 @@ const fetchBill = async (ticketNumber) => {
       'successful-inspection': 'bg-green-100 text-green-800 border-green-200',
       'inspection-failed': 'bg-red-100 text-red-800 border-red-200',
       completed: 'bg-green-200 text-green-900 border-green-300',
+      'payment-requested': 'bg-yellow-100 text-yellow-800 border-yellow-200',
     };
     return colorMap[status] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
   
   const getPriorityColor = (priority) => {
     return priority === 'high' ? 'bg-red-500' : priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500';
+  };
+  
+  const getTypeColor = (type) => {
+    const colorMap = {
+      'repair': 'bg-blue-100 text-blue-800 border-blue-200',
+      'maintenance': 'bg-green-100 text-green-800 border-green-200',
+      'inspection': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'diagnostic': 'bg-purple-100 text-purple-800 border-purple-200',
+      'insurance': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    };
+    return colorMap[type] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
   
   const formatDateTime = (dateString) => {
@@ -249,7 +430,8 @@ const fetchBill = async (ticketNumber) => {
     { id: 'usedTools', label: 'Used Tools', icon: Wrench },
     { id: 'orderedParts', label: 'Ordered Parts', icon: PackagePlus },
     { id: 'inspection', label: 'Inspection', icon: FileCheck },
-    { id: 'bill', label: 'Bill', icon: Receipt }
+    { id: 'bill', label: 'Bill', icon: Receipt },
+    ...(showTicketDetails?.type === 'insurance' ? [{ id: 'insurance', label: 'Insurance', icon: Shield }] : [])
   ];
   
   const getMechanicDetails = (mechanicId) => {
@@ -263,6 +445,24 @@ const fetchBill = async (ticketNumber) => {
     return null;
   };
   
+  // Reset bill state when ticket changes
+  useEffect(() => {
+    if (showTicketDetails) {
+      setBill(null);
+      setBillError(null);
+    }
+  }, [showTicketDetails]);
+
+  // Initialize payment details when bill is loaded
+  useEffect(() => {
+    if (bill) {
+      setPaymentDetails(prev => ({
+        ...prev,
+        amount: bill.final_total ? parseFloat(bill.final_total).toString() : ''
+      }));
+    }
+  }, [bill]);
+  
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -270,6 +470,9 @@ const fetchBill = async (ticketNumber) => {
       </div>
     );
   }
+  
+  // Get unique ticket types for filter
+  const ticketTypes = Array.from(new Set(tickets.map(t => t.type).filter(Boolean)));
   
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -296,8 +499,8 @@ const fetchBill = async (ticketNumber) => {
           { label: 'Total', value: tickets.length, icon: Ticket, color: 'from-blue-500 to-blue-600' },
           { label: 'Pending', value: tickets.filter(t => t.status === 'pending').length, icon: Clock, color: 'from-gray-500 to-gray-600' },
           { label: 'In Progress', value: tickets.filter(t => t.status === 'in-progress').length, icon: Wrench, color: 'from-purple-500 to-purple-600' },
-          { label: 'Inspection', value: tickets.filter(t => t.status.includes('inspection')).length, icon: AlertTriangle, color: 'from-orange-500 to-orange-600' },
-          { label: 'Completed', value: tickets.filter(t => t.status === 'completed').length, icon: CheckCircle, color: 'from-green-500 to-green-600' }
+          { label: 'Payment Requested', value: tickets.filter(t => t.status === 'payment-requested').length, icon: CreditCard, color: 'from-yellow-500 to-yellow-600' },
+          { label: 'Completed', value: tickets.filter(t => t.status === 'completed').length, icon: Check, color: 'from-green-500 to-green-600' }
         ].map((stat, i) => (
           <Card key={i} className={`bg-gradient-to-br ${stat.color} text-white shadow-lg`}>
             <CardContent className="p-6">
@@ -338,6 +541,7 @@ const fetchBill = async (ticketNumber) => {
                 <SelectItem value="inspection">Inspection</SelectItem>
                 <SelectItem value="successful-inspection">Successful Inspection</SelectItem>
                 <SelectItem value="inspection-failed">Inspection Failed</SelectItem>
+                <SelectItem value="payment-requested">Payment Requested</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
               </SelectContent>
             </Select>
@@ -350,6 +554,17 @@ const fetchBill = async (ticketNumber) => {
                 <SelectItem value="high">High</SelectItem>
                 <SelectItem value="medium">Medium</SelectItem>
                 <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-48 border-gray-300 focus:ring-blue-500">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl shadow-2xl">
+                <SelectItem value="all">All Types</SelectItem>
+                {ticketTypes.map(type => (
+                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -373,6 +588,12 @@ const fetchBill = async (ticketNumber) => {
                       <Badge variant="outline" className="text-xs border-2">
                         {ticket.priority.toUpperCase()}
                       </Badge>
+                      {/* Ticket Type Badge */}
+                      {ticket.type && (
+                        <Badge className={`${getTypeColor(ticket.type)} px-3 py-1 text-sm font-medium`}>
+                          {ticket.type}
+                        </Badge>
+                      )}
                     </div>
                     <h4 className="font-semibold text-blue-700 mb-2">{ticket.title}</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
@@ -385,7 +606,7 @@ const fetchBill = async (ticketNumber) => {
                           <Car className="w-4 h-4" />
                           <span>{ticket.vehicle_info} ({ticket.license_plate})</span>
                         </div>
-                        {/* Mechanic Name - Added */}
+                        {/* Mechanic Name */}
                         {ticket.mechanic_assignments && ticket.mechanic_assignments.length > 0 && (
                           <div className="flex items-center space-x-2">
                             <Wrench className="w-4 h-4 text-purple-600" />
@@ -400,7 +621,6 @@ const fetchBill = async (ticketNumber) => {
                           <Calendar className="w-4 h-4 text-blue-500" />
                           <span className="text-gray-700">Arrived: {formatDateOnly(ticket.created_at)}</span>
                         </div>
-                        {/* Estimated Time - Updated */}
                         <div className="flex items-center space-x-2">
                           <Calendar className="w-4 h-4 text-orange-500" />
                           <span className="text-gray-700">
@@ -534,7 +754,7 @@ const fetchBill = async (ticketNumber) => {
                         <p><strong>Plate:</strong> {showTicketDetails.license_plate}</p>
                         {showTicketDetails.vehicle?.image && (
                           <img 
-                            src={`http://localhost:5001/${showTicketDetails.vehicle.image}`} 
+                            src={`https://ipasystem.bymsystem.com/${showTicketDetails.vehicle.image}`} 
                             alt="Vehicle" 
                             className="w-32 h-24 object-cover rounded-lg border mt-2 shadow"
                           />
@@ -689,6 +909,62 @@ const fetchBill = async (ticketNumber) => {
                         </>
                       ) : (
                         <p className="text-gray-500">No inspection performed yet</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Service */}
+                  <Card className="shadow-md">
+                    <CardHeader>
+                      <CardTitle className="flex items-center text-lg">
+                        <ClipboardList className="w-4 h-4 mr-2 text-blue-600" />
+                        Service Details
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div>
+                        <strong>Issue:</strong>
+                        <div className="mt-1 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <h4 className="font-bold text-blue-800">{showTicketDetails.title}</h4>
+                        </div>
+                      </div>
+                      <div>
+                        <strong>Type:</strong>
+                        <div className="mt-1">
+                          {showTicketDetails.type ? (
+                            <Badge className={`${getTypeColor(showTicketDetails.type)} px-3 py-1 text-sm font-medium`}>
+                              {showTicketDetails.type}
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-500 text-sm">Not specified</span>
+                          )}
+                        </div>
+                      </div>
+                      {showTicketDetails.description && (
+                        <div>
+                          <strong>Description:</strong>
+                          <div className="mt-1 p-3 bg-gray-50 rounded-lg border">
+                            {renderDescription(showTicketDetails.description)}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Timeline */}
+                  <Card className="shadow-md">
+                    <CardHeader>
+                      <CardTitle className="flex items-center text-lg">
+                        <Calendar className="w-4 h-4 mr-2 text-blue-600" />
+                        Completion Timeline
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <p><strong>Estimated:</strong> {formatDateTime(showTicketDetails.estimated_completion_date) || 'N/A'}</p>
+                      {showTicketDetails.completion_date ? (
+                        <p className="text-green-600"><strong>Actual:</strong> {formatDateTime(showTicketDetails.completion_date)}</p>
+                      ) : (
+                        <p className="text-gray-500"><em>Not completed yet</em></p>
                       )}
                     </CardContent>
                   </Card>
@@ -1009,50 +1285,6 @@ const fetchBill = async (ticketNumber) => {
                       </CardContent>
                     </Card>
                   )}
-                  
-                  {/* Service */}
-                  <Card className="shadow-md">
-                    <CardHeader>
-                      <CardTitle className="flex items-center text-lg">
-                        <ClipboardList className="w-4 h-4 mr-2 text-blue-600" />
-                        Service Details
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div>
-                        <strong>Issue:</strong>
-                        <div className="mt-1 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                          <h4 className="font-bold text-blue-800">{showTicketDetails.title}</h4>
-                        </div>
-                      </div>
-                      {showTicketDetails.description && (
-                        <div>
-                          <strong>Description:</strong>
-                          <div className="mt-1 p-3 bg-gray-50 rounded-lg border">
-                            {renderDescription(showTicketDetails.description)}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                  
-                  {/* Timeline */}
-                  <Card className="shadow-md">
-                    <CardHeader>
-                      <CardTitle className="flex items-center text-lg">
-                        <Calendar className="w-4 h-4 mr-2 text-blue-600" />
-                        Completion Timeline
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <p><strong>Estimated:</strong> {formatDateTime(showTicketDetails.estimated_completion_date) || 'N/A'}</p>
-                      {showTicketDetails.completion_date ? (
-                        <p className="text-green-600"><strong>Actual:</strong> {formatDateTime(showTicketDetails.completion_date)}</p>
-                      ) : (
-                        <p className="text-gray-500"><em>Not completed yet</em></p>
-                      )}
-                    </CardContent>
-                  </Card>
                 </div>
               )}
               
@@ -1301,51 +1533,91 @@ const fetchBill = async (ticketNumber) => {
                   </CardHeader>
                   <CardContent className="max-h-[60vh] overflow-y-auto space-y-3 p-2 bg-gray-50 rounded-lg">
                     {showTicketDetails.inspections && showTicketDetails.inspections.length > 0 ? (
-                      showTicketDetails.inspections.map((insp) => (
-                        <div key={insp.id} className="p-4 bg-white rounded-lg border shadow-sm hover:shadow transition-shadow">
-                          <div className="flex justify-between items-start mb-3">
-                            <h4 className="font-semibold text-gray-800">Inspection #{insp.id}</h4>
-                            <Badge 
-                              className={
-                                insp.inspection_status === 'successful' 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : insp.inspection_status === 'failed' 
-                                    ? 'bg-red-100 text-red-800' 
-                                    : 'bg-yellow-100 text-yellow-800'
-                              }
-                            >
-                              {insp.inspection_status.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                            </Badge>
+                      showTicketDetails.inspections.map((insp) => {
+                        const formattedInsp = formatInspectionChecklist(insp);
+                        return (
+                          <div key={insp.id} className="p-4 bg-white rounded-lg border shadow-sm hover:shadow transition-shadow">
+                            <div className="flex justify-between items-start mb-3">
+                              <h4 className="font-semibold text-gray-800">Inspection #{insp.id}</h4>
+                              <Badge 
+                                className={
+                                  insp.inspection_status === 'successful' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : insp.inspection_status === 'failed' 
+                                      ? 'bg-red-100 text-red-800' 
+                                      : 'bg-yellow-100 text-yellow-800'
+                                }
+                              >
+                                {insp.inspection_status.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                              </Badge>
+                            </div>
+                            
+                            {/* Inspection Details */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-4">
+                              <div>
+                                <p className="text-gray-600">Date</p>
+                                <p className="font-medium">{formatDateTime(insp.inspection_date)}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Main Issue Resolved</p>
+                                <p className={`font-medium ${insp.main_issue_resolved ? 'text-green-600' : 'text-red-600'}`}>
+                                  {insp.main_issue_resolved ? '✅ Yes' : '❌ No'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Reassembly Verified</p>
+                                <p className={`font-medium ${insp.reassembly_verified ? 'text-green-600' : 'text-red-600'}`}>
+                                  {insp.reassembly_verified ? '✅ Yes' : '❌ No'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">General Condition</p>
+                                <p className="font-medium">{insp.general_condition}</p>
+                              </div>
+                            </div>
+                            
+                            {/* Inspection Checklist - Two Column Layout */}
+                            <div className="mt-4">
+                              <h5 className="font-medium text-gray-700 mb-3 flex items-center">
+                                <CheckSquare className="w-4 h-4 mr-2 text-blue-600" />
+                                Inspection Checklist
+                              </h5>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {checklistOrder.map((key) => {
+                                  const value = formattedInsp.checklist[key];
+                                  return (
+                                    <div key={key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                      <span className="text-gray-700 text-sm">{checklistLabels[key]}</span>
+                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                        value === true 
+                                          ? 'bg-green-100 text-green-800' 
+                                          : value === false 
+                                            ? 'bg-red-100 text-red-800' 
+                                            : 'bg-gray-100 text-gray-800'
+                                      }`}>
+                                        {value === true ? (
+                                          <span className="text-sm font-medium">✓</span>
+                                        ) : value === false ? (
+                                          <span className="text-sm font-medium">✗</span>
+                                        ) : (
+                                          <span className="text-sm font-medium">?</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            
+                            {insp.notes && (
+                              <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                <p className="text-sm text-gray-700"><strong>Notes:</strong> {insp.notes}</p>
+                              </div>
+                            )}
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                            <div>
-                              <p className="text-gray-600">Date</p>
-                              <p className="font-medium">{formatDateTime(insp.inspection_date)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">Main Issue Resolved</p>
-                              <p className={`font-medium ${insp.main_issue_resolved ? 'text-green-600' : 'text-red-600'}`}>
-                                {insp.main_issue_resolved ? '✅ Yes' : '❌ No'}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">Reassembly Verified</p>
-                              <p className={`font-medium ${insp.reassembly_verified ? 'text-green-600' : 'text-red-600'}`}>
-                                {insp.reassembly_verified ? '✅ Yes' : '❌ No'}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">General Condition</p>
-                              <p className="font-medium">{insp.general_condition}</p>
-                            </div>
-                          </div>
-                          {insp.notes && (
-                            <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                              <p className="text-sm text-gray-700"><strong>Notes:</strong> {insp.notes}</p>
-                            </div>
-                          )}
-                        </div>
-                      ))
+                        );
+                      })
                     ) : (
                       <div className="text-center py-8">
                         <FileCheck className="w-12 h-12 text-gray-400 mx-auto mb-3 opacity-70" />
@@ -1356,193 +1628,355 @@ const fetchBill = async (ticketNumber) => {
                 </Card>
               )}
               
+              {/* Insurance Tab */}
+              {activeTab === 'insurance' && (
+                <Card className="shadow-md">
+                  <CardHeader>
+                    <CardTitle className="flex items-center text-lg">
+                      <Shield className="w-4 h-4 mr-2 text-blue-600" />
+                      Insurance Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {showTicketDetails.insurance ? (
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {/* Insurance Company */}
+                          <Card className="shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg flex items-center">
+                                <Shield className="w-4 h-4 mr-2 text-blue-600" />
+                                Insurance Company
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              <div>
+                                <p className="text-sm text-gray-600">Company Name</p>
+                                <p className="font-medium">{showTicketDetails.insurance.insurance_company}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Contact Phone</p>
+                                <p className="font-medium">{showTicketDetails.insurance.insurance_phone}</p>
+                              </div>
+                            </CardContent>
+                          </Card>
+                          
+                          {/* Accident Details */}
+                          <Card className="shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg flex items-center">
+                                <Calendar className="w-4 h-4 mr-2 text-blue-600" />
+                                Accident Details
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              <div>
+                                <p className="text-sm text-gray-600">Accident Date</p>
+                                <p className="font-medium">{formatDateOnly(showTicketDetails.insurance.accident_date)}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Description</p>
+                                <p className="text-sm">{showTicketDetails.insurance.insurance_description || 'No description provided'}</p>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+                        
+                        {/* Vehicle Owner */}
+                        <Card className="shadow-sm">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-lg flex items-center">
+                              <User className="w-4 h-4 mr-2 text-blue-600" />
+                              Vehicle Owner
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div>
+                                <p className="text-sm text-gray-600">Owner Name</p>
+                                <p className="font-medium">{showTicketDetails.insurance.owner_name}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Phone</p>
+                                <p className="font-medium">{showTicketDetails.insurance.owner_phone}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Email</p>
+                                <p className="font-medium">{showTicketDetails.insurance.owner_email}</p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        
+                        {/* Insurance Timeline */}
+                        <Card className="shadow-sm">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-lg flex items-center">
+                              <Clock className="w-4 h-4 mr-2 text-blue-600" />
+                              Insurance Timeline
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-sm text-gray-600">Insurance Created</p>
+                                <p className="font-medium">{formatDateTime(showTicketDetails.insurance.created_at)}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Last Updated</p>
+                                <p className="font-medium">{formatDateTime(showTicketDetails.insurance.updated_at)}</p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <Shield className="w-16 h-16 text-gray-400 mx-auto mb-4 opacity-70" />
+                        <h3 className="text-xl font-medium text-gray-700 mb-2">No Insurance Information</h3>
+                        <p className="text-gray-500 max-w-md mx-auto">
+                          This ticket doesn't have associated insurance information. Insurance details are typically added for insurance-related claims.
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+              
               {/* Bill Tab */}
-              {/* Bill Tab */}
-{activeTab === 'bill' && (
-  <Card className="shadow-md">
-    <CardHeader>
-      <CardTitle className="flex items-center text-lg">
-        <Receipt className="w-4 h-4 mr-2 text-blue-600" />
-        Bill Details
-      </CardTitle>
-    </CardHeader>
-    <CardContent>
-      {bill ? (
-        <div className="space-y-6">
-          {/* Bill Summary */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-800">
-                Invoice #{bill.id} {bill.proforma_number && `(Proforma: ${bill.proforma_number})`}
-              </h3>
-              <Badge className={`${bill.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'} px-3 py-1`}>
-                {bill.status.charAt(0).toUpperCase() + bill.status.slice(1)}
-              </Badge>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <p className="text-sm text-gray-600">Ticket Number</p>
-                <p className="font-medium">{bill.ticket_number}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Customer</p>
-                <p className="font-medium">{bill.customer_name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Vehicle</p>
-                <p className="font-medium">{bill.vehicle_info}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Issue Date</p>
-                <p className="font-medium">{formatDateTime(bill.created_at)}</p>
-              </div>
-              {bill.proforma_date && (
-                <div>
-                  <p className="text-sm text-gray-600">Proforma Date</p>
-                  <p className="font-medium">{formatDateTime(bill.proforma_date)}</p>
-                </div>
+              {activeTab === 'bill' && (
+                <Card className="shadow-md">
+                  <CardHeader>
+                    <CardTitle className="flex items-center text-lg">
+                      <Receipt className="w-4 h-4 mr-2 text-blue-600" />
+                      Bill Details
+                      {billLoading && (
+                        <span className="ml-2 text-xs text-gray-500 flex items-center">
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500 mr-1"></div>
+                          Loading...
+                        </span>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {billError ? (
+                      <div className="text-center py-8">
+                        <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-3" />
+                        <p className="text-gray-500 mb-3">Error loading bill: {billError}</p>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => fetchBill(showTicketDetails.ticket_number)}
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    ) : billLoading ? (
+                      <div className="text-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                        <p className="text-gray-500">Loading bill details...</p>
+                      </div>
+                    ) : bill ? (
+                      <div className="space-y-6">
+                        {/* Bill Summary */}
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+                          <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-gray-800">
+                              Invoice #{bill.id} {bill.proforma_number && `(Proforma: ${bill.proforma_number})`}
+                            </h3>
+                            <Badge className={`${bill.status === 'paid' ? 'bg-green-100 text-green-800' : bill.status === 'payment_requested' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'} px-3 py-1`}>
+                              {bill.status === 'payment_requested' ? 'Payment Requested' : bill.status.charAt(0).toUpperCase() + bill.status.slice(1)}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <p className="text-sm text-gray-600">Ticket Number</p>
+                              <p className="font-medium">{bill.ticket_number}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Customer</p>
+                              <p className="font-medium">{bill.customer_name}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Vehicle</p>
+                              <p className="font-medium">{bill.vehicle_info}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Issue Date</p>
+                              <p className="font-medium">{formatDateTime(bill.created_at)}</p>
+                            </div>
+                            {bill.proforma_date && (
+                              <div>
+                                <p className="text-sm text-gray-600">Proforma Date</p>
+                                <p className="font-medium">{formatDateTime(bill.proforma_date)}</p>
+                              </div>
+                            )}
+                          </div>
+                          {/* Payment Term Section */}
+                          <div className="mt-4 pt-4 border-t border-blue-100">
+                            <div className="flex items-center justify-between">
+                              {/* Payment Request Button */}
+                              {bill.status !== 'paid' && (
+                                <Button
+                                  disabled={bill.status !== 'pending'}
+                                  className={`${
+                                    bill.status === 'payment_requested'
+                                      ? 'blur-sm opacity-60 cursor-not-allowed'
+                                      : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
+                                  } text-white font-medium px-6 py-2 rounded-xl shadow-lg transition-all`}
+                                  onClick={() => {
+                                    if (bill.status === 'pending') {
+                                      setIsPaymentRequestModalOpen(true);
+                                    }
+                                  }}
+                                >
+                                  {bill.status === 'payment_requested' ? 'Payment Requested' : 'Request Payment'}
+                                </Button>
+                              )}
+                              {/* Payment Details Button - Only shows when status is 'payment_requested' */}
+                              {bill.status === 'payment_requested' && (
+                                <Button 
+                                  onClick={() => setIsPaymentProcessingModalOpen(true)}
+                                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium px-6 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all"
+                                >
+                                  <CreditCard className="w-4 h-4 mr-2" />
+                                  Record Payment
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        {/* Cost Breakdown */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <Card className="shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg">Cost Breakdown</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Labor Cost</span>
+                                <span className="font-medium">ETB {(parseFloat(bill.labor_cost) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Parts Cost</span>
+                                <span className="font-medium">ETB {(parseFloat(bill.parts_cost) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Outsourced Parts</span>
+                                <span className="font-medium">ETB {(parseFloat(bill.outsourced_parts_cost) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Outsourced Labor</span>
+                                <span className="font-medium">ETB {(parseFloat(bill.outsourced_labor_cost) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="border-t pt-3 mt-3 flex justify-between font-semibold">
+                                <span>Subtotal</span>
+                                <span>ETB {(parseFloat(bill.subtotal) || 0).toFixed(2)}</span>
+                              </div>
+                            </CardContent>
+                          </Card>
+                          <Card className="shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg">Tax & Discounts</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Tax Rate</span>
+                                <span className="font-medium">{bill.tax_rate || '0'}%</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Tax Amount</span>
+                                <span className="font-medium">ETB {(parseFloat(bill.tax_amount) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Discount</span>
+                                <span className="font-medium text-green-600">-ETB {(parseFloat(bill.discount) || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="border-t pt-3 mt-3 flex justify-between font-bold text-lg">
+                                <span>Total</span>
+                                <span className="text-blue-600">ETB {(parseFloat(bill.final_total) || 0).toFixed(2)}</span>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+                        {/* Proforma Items Section */}
+                        {bill.items && bill.items.length > 0 && (
+                          <Card className="shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg flex items-center">
+                                <PackagePlus className="w-4 h-4 mr-2 text-blue-600" />
+                                Proforma Items
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                  <thead className="bg-gray-50">
+                                    <tr>
+                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
+                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="bg-white divide-y divide-gray-200">
+                                    {bill.items.map((item, index) => (
+                                      <tr key={index} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.description}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.size || '-'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.quantity}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">ETB {parseFloat(item.unit_price).toFixed(2)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">ETB {parseFloat(item.amount).toFixed(2)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                        {/* Notes */}
+                        {bill.notes && (
+                          <Card className="shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg">Notes</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <p className="text-gray-700">{bill.notes}</p>
+                            </CardContent>
+                          </Card>
+                        )}
+                        {/* Action Buttons */}
+                        <div className="flex justify-end space-x-3 pt-4">
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <Receipt className="w-16 h-16 text-gray-400 mx-auto mb-4 opacity-70" />
+                        <h3 className="text-xl font-medium text-gray-700 mb-2">No Bill Available</h3>
+                        <p className="text-gray-500 max-w-md mx-auto">
+                          This ticket doesn't have an associated bill yet. Bills are typically generated when a service is completed.
+                        </p>
+                        {showTicketDetails.status === 'completed' && (
+                          <Button className="mt-6 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
+                            Generate Bill
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               )}
             </div>
-          </div>
-          
-          {/* Cost Breakdown */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Cost Breakdown</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Labor Cost</span>
-                  <span className="font-medium">ETB {(parseFloat(bill.labor_cost) || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Parts Cost</span>
-                  <span className="font-medium">ETB {(parseFloat(bill.parts_cost) || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Outsourced Parts</span>
-                  <span className="font-medium">ETB {(parseFloat(bill.outsourced_parts_cost) || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Outsourced Labor</span>
-                  <span className="font-medium">ETB {(parseFloat(bill.outsourced_labor_cost) || 0).toFixed(2)}</span>
-                </div>
-                <div className="border-t pt-3 mt-3 flex justify-between font-semibold">
-                  <span>Subtotal</span>
-                  <span>ETB {(parseFloat(bill.subtotal) || 0).toFixed(2)}</span>
-                </div>
-              </CardContent>
-            </Card>
             
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Tax & Discounts</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Tax Rate</span>
-                  <span className="font-medium">{bill.tax_rate || '0'}%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Tax Amount</span>
-                  <span className="font-medium">ETB {(parseFloat(bill.tax_amount) || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Discount</span>
-                  <span className="font-medium text-green-600">-ETB {(parseFloat(bill.discount) || 0).toFixed(2)}</span>
-                </div>
-                <div className="border-t pt-3 mt-3 flex justify-between font-bold text-lg">
-                  <span>Total</span>
-                  <span className="text-blue-600">ETB {(parseFloat(bill.final_total) || 0).toFixed(2)}</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          
-          {/* Proforma Items Section */}
-          {bill.items && bill.items.length > 0 && (
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center">
-                  <PackagePlus className="w-4 h-4 mr-2 text-blue-600" />
-                  Proforma Items
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {bill.items.map((item, index) => (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.description}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.size || '-'}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.quantity}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">ETB {parseFloat(item.unit_price).toFixed(2)}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">ETB {parseFloat(item.amount).toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          
-          {/* Notes */}
-          {bill.notes && (
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Notes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-700">{bill.notes}</p>
-              </CardContent>
-            </Card>
-          )}
-          
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-3 pt-4">
-            <Button variant="outline" className="border-blue-300 hover:bg-blue-50">
-              Print Invoice
-            </Button>
-            <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-              Send to Customer
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <Receipt className="w-16 h-16 text-gray-400 mx-auto mb-4 opacity-70" />
-          <h3 className="text-xl font-medium text-gray-700 mb-2">No Bill Available</h3>
-          <p className="text-gray-500 max-w-md mx-auto">
-            This ticket doesn't have an associated bill yet. Bills are typically generated when a service is completed.
-          </p>
-          {showTicketDetails.status === 'completed' && (
-            <Button className="mt-6 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
-              Generate Bill
-            </Button>
-          )}
-        </div>
-      )}
-    </CardContent>
-  </Card>
-)}
-            </div>
-            
-            {/* Footer */}
             <div className="bg-gray-50 px-6 py-4 flex justify-end border-t">
-              <Button variant="outline" className="mr-2">Print</Button>
+              <Button 
+                onClick={() => setIsPaymentProcessingModalOpen(true)}
+                className="mr-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
+              >
+                Payment Processing
+              </Button>
               <Button onClick={() => {
                 setShowTicketDetails(null);
                 setBill(null);
@@ -1566,6 +2000,111 @@ const fetchBill = async (ticketNumber) => {
         mechanicName={selectedMechanic?.mechanic_name}
         onPaymentAdded={handlePaymentAdded}
       />
+      
+      {/* === MODAL: Payment Request Confirmation === */}
+      {isPaymentRequestModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+              <h2 className="text-xl font-bold">Confirm Payment Request</h2>
+            </div>
+            
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <div className="bg-blue-100 p-3 rounded-full mr-4">
+                  <CreditCard className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">Request Payment</h3>
+                  <p className="text-gray-600">Do you want to request payment for this ticket?</p>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 rounded-lg p-4 mb-6">
+                <p className="text-sm text-gray-700">
+                  <span className="font-medium">Ticket:</span> {showTicketDetails.ticket_number}<br />
+                  <span className="font-medium">Customer:</span> {showTicketDetails.customer_name}<br />
+                  <span className="font-medium">Amount:</span> ETB {bill ? parseFloat(bill.final_total).toFixed(2) : '0.00'}
+                </p>
+              </div>
+              
+              <div className="flex justify-end space-x-3">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsPaymentRequestModalOpen(false)}
+                  className="border-gray-300 hover:bg-gray-50"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handlePaymentRequest}
+                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                >
+                  Yes, Request Payment
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* === MODAL: Payment Processing === */}
+      {isPaymentProcessingModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6">
+              <h2 className="text-xl font-bold">Payment Processing</h2>
+            </div>
+            
+            <div className="p-6">
+              <div className="space-y-4 text-black">
+                <div>
+                  <label className="block text-sm font-medium text-black mb-1">Select Payment Method</label>
+                  <Select 
+                    value={selectedPaymentTerm} 
+                    onValueChange={(value) => setSelectedPaymentTerm(value)}
+                  >
+                    <SelectTrigger className="w-full border-black focus:ring-blue-500">
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl shadow-2xl">
+                      {paymentMethods.map(method => (
+                        <SelectItem key={method.value} value={method.value}>
+                          {method.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="bg-purple-50 rounded-lg p-4 mt-4">
+                  <p className="text-sm text-gray-700">
+                    <span className="font-medium">Ticket:</span> {showTicketDetails.ticket_number}<br />
+                    <span className="font-medium">Customer:</span> {showTicketDetails.customer_name}<br />
+                    <span className="font-medium">Amount:</span> ETB {bill ? parseFloat(bill.final_total).toFixed(2) : '0.00'}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsPaymentProcessingModalOpen(false)}
+                  className="border-gray-300 hover:bg-gray-50"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handlePaymentProcessingSubmit}
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
+                >
+                  Record Payment
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

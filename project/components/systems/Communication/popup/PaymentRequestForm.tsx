@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CreditCard, DollarSign, FileText, AlertCircle, CheckCircle2, Upload } from 'lucide-react';
-import { Button } from '../ui/button';
+// Update the import path below to the correct location of your Button component if different
+import { Button } from '../../../ui/button';
 
 interface PaymentItem {
   id: string;

@@ -50,9 +50,19 @@ const Analytics = () => {
   });
   const [pendingRequests, setPendingRequests] = useState([]);
   const [statusData, setStatusData] = useState([]);
+  const [weeklyRepairTrends, setWeeklyRepairTrends] = useState({
+    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    data: [12, 19, 15, 17, 14, 8, 5]
+  });
+  const [monthlyRevenue, setMonthlyRevenue] = useState({
+    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+    data: [30000, 35000, 42000, 38000, 45000, 50000]
+  });
   const [loading, setLoading] = useState(true);
   const [requestsLoading, setRequestsLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(true);
+  const [weeklyTrendsLoading, setWeeklyTrendsLoading] = useState(true);
+  const [monthlyRevenueLoading, setMonthlyRevenueLoading] = useState(true);
   const [error, setError] = useState(null);
 
   // Fetch analytics stats
@@ -65,10 +75,10 @@ const Analytics = () => {
           vehiclesRes,
           inspectionsRes
         ] = await Promise.all([
-          fetch(`http://localhost:5001/api/manager-analytics/total-employees`),
-          fetch(`http://localhost:5001/api/manager-analytics/active-customers`),
-          fetch(`http://localhost:5001/api/manager-analytics/vehicles-in-service`),
-          fetch(`http://localhost:5001/api/manager-analytics/pending-inspections`)
+          fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/total-employees`),
+          fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/active-customers`),
+          fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/vehicles-in-service`),
+          fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/pending-inspections`)
         ]);
 
         const results = await Promise.all([
@@ -100,7 +110,7 @@ const Analytics = () => {
     const fetchPendingRequests = async () => {
       setRequestsLoading(true);
       try {
-        const res = await fetch(`http://localhost:5001/api/manager-analytics/pending`);
+        const res = await fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/pending`);
         if (!res.ok) throw new Error('Failed to fetch pending requests');
 
         const data = await res.json();
@@ -139,7 +149,7 @@ const Analytics = () => {
     const fetchStatusDistribution = async () => {
       setChartLoading(true);
       try {
-        const res = await fetch('http://localhost:5001/api/ticket-stats/status-distribution');
+        const res = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/status-distribution');
         if (!res.ok) throw new Error('Failed to fetch status distribution');
 
         const data = await res.json();
@@ -173,28 +183,78 @@ const Analytics = () => {
     fetchStatusDistribution();
   }, []);
 
+  // Fetch weekly repair trends
+  useEffect(() => {
+    const fetchWeeklyRepairTrends = async () => {
+      setWeeklyTrendsLoading(true);
+      try {
+        const res = await fetch('https://ipasystem.bymsystem.com/api/manager-analytics/weekly-repair-trends');
+        if (!res.ok) throw new Error('Failed to fetch weekly repair trends');
+
+        const data = await res.json();
+        setWeeklyRepairTrends({
+          labels: data.labels || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          data: data.data || [12, 19, 15, 17, 14, 8, 5]
+        });
+      } catch (err) {
+        console.error('Error fetching weekly repair trends:', err);
+        // Static data is already set as initial state, so no need to set it again
+      } finally {
+        setWeeklyTrendsLoading(false);
+      }
+    };
+
+    fetchWeeklyRepairTrends();
+  }, []);
+
+  // Fetch monthly revenue
+  useEffect(() => {
+    const fetchMonthlyRevenue = async () => {
+      setMonthlyRevenueLoading(true);
+      try {
+        const res = await fetch('https://ipasystem.bymsystem.com/api/manager-analytics/monthly-revenue');
+        if (!res.ok) throw new Error('Failed to fetch monthly revenue');
+
+        const data = await res.json();
+        setMonthlyRevenue({
+          labels: data.labels || ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+          data: data.data || [30000, 35000, 42000, 38000, 45000, 50000]
+        });
+      } catch (err) {
+        console.error('Error fetching monthly revenue:', err);
+        // Static data is already set as initial state, so no need to set it again
+      } finally {
+        setMonthlyRevenueLoading(false);
+      }
+    };
+
+    fetchMonthlyRevenue();
+  }, []);
+
   // Helper to get color by status
   const getStatusColor = (status) => {
-  switch (status.toLowerCase()) {
-    case 'pending': return '#8b5cf6'; // purple
-    case 'in progress': return '#f59e0b'; // amber
-    case 'ready for inspection': return '#3b82f6'; // blue
-    case 'inspection': return '#06b6d4'; // cyan
-    case 'successful inspection': return '#10b981'; // green
-    case 'inspection failed': return '#ef4444'; // red
-    case 'awaiting bill': return '#f97316'; // orange
-    case 'completed': return '#059669'; // dark green
-    default: return '#9ca3af'; // gray
-  }
-};
+    switch (status.toLowerCase()) {
+      case 'pending': return '#8b5cf6'; // purple
+      case 'in progress': return '#f59e0b'; // amber
+      case 'ready for inspection': return '#3b82f6'; // blue
+      case 'inspection': return '#06b6d4'; // cyan
+      case 'successful inspection': return '#10b981'; // green
+      case 'inspection failed': return '#ef4444'; // red
+      case 'awaiting bill': return '#f97316'; // orange
+      case 'completed': return '#059669'; // dark green
+      case 'awaiting survey': return '#eab308'; // yellow (stands out as "awaiting")
+      case 'awaiting salvage form': return '#a855f7'; // violet (different from pending purple)
+      default: return '#9ca3af'; // gray
+    }
+  };
 
   // Chart Data
   const repairTrendsData = {
-    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    labels: weeklyRepairTrends.labels,
     datasets: [
       {
         label: 'Repairs Completed',
-        data: [12, 19, 15, 17, 14, 8, 5],
+        data: weeklyRepairTrends.data,
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.5)',
         tension: 0.4
@@ -203,11 +263,11 @@ const Analytics = () => {
   };
 
   const monthlyTrendsData = {
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+    labels: monthlyRevenue.labels,
     datasets: [
       {
         label: 'Revenue',
-        data: [30000, 35000, 42000, 38000, 45000, 50000],
+        data: monthlyRevenue.data,
         backgroundColor: 'rgba(59, 130, 246, 0.7)'
       }
     ]
@@ -392,7 +452,13 @@ const Analytics = () => {
             Weekly Repair Trends
           </h2>
           <div className="h-[300px]">
-            <Line data={repairTrendsData} options={chartOptions} />
+            {weeklyTrendsLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-gray-500">Loading weekly trends...</p>
+              </div>
+            ) : (
+              <Line data={repairTrendsData} options={chartOptions} />
+            )}
           </div>
         </div>
 
@@ -403,7 +469,13 @@ const Analytics = () => {
             Monthly Revenue
           </h2>
           <div className="h-[300px]">
-            <Bar data={monthlyTrendsData} options={chartOptions} />
+            {monthlyRevenueLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-gray-500">Loading revenue data...</p>
+              </div>
+            ) : (
+              <Bar data={monthlyTrendsData} options={chartOptions} />
+            )}
           </div>
         </div>
       </div>

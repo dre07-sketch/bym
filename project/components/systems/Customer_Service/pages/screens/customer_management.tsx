@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Search, Plus, Edit, Archive, Eye, Download, 
-  Phone, Mail, MapPin, Car, ImageIcon, Trash2, CheckCircle 
+  Phone, Mail, MapPin, Car, ImageIcon, Trash2, CheckCircle, Award 
 } from 'lucide-react';
 import Modal from '../../../../ui/Modal';
 import { Badge } from '../../../../ui/badge';
 import AddCustomerModal from '../pop up/AddCustomerModal';
 
 // === Interfaces ===
-const BASE_URL = 'http://localhost:5001';
-const IMAGE_BASE_URL = `${BASE_URL}/uploads`; // Direct path to uploads
+const BASE_URL = 'https://ipasystem.bymsystem.com';
+const IMAGE_BASE_URL = `${BASE_URL}/uploads`;
 
 interface Vehicle {
   id: string;
@@ -19,13 +19,13 @@ interface Vehicle {
   licensePlate: string;
   vin: string;
   color: string;
-  mileage: number;
+  current_mileage: number;
   imageUrl: string | null;
 }
 
 interface Customer {
   customerId: string;
-  readableCustomerId: string; // Now properly used
+  readableCustomerId: string;
   customerType: 'individual' | 'company';
   name: string;
   email: string;
@@ -40,6 +40,7 @@ interface Customer {
   vehicles: Vehicle[];
   isArchived?: boolean;
   customerImage?: string | null;
+  loyaltyPoints?: number; // Added loyalty points
 }
 
 interface VehicleForm {
@@ -48,10 +49,11 @@ interface VehicleForm {
   year: string;
   licensePlate: string;
   color: string;
-  mileage: string;
+  current_mileage: string;
   vin: string;
   image: File | null;
   imagePreview: string | null;
+  serviceInterval?: number;
 }
 
 type CustomerTypeFilter = 'all' | 'individual' | 'company';
@@ -75,28 +77,53 @@ const CustomerManagement = () => {
       year: '',
       licensePlate: '',
       color: '',
-      mileage: '',
+      current_mileage: '',
       vin: '',
       image: null,
       imagePreview: null,
     },
   ]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Car models state
+  const [carMakes, setCarMakes] = useState<string[]>([]);
+  const [carModelsByMake, setCarModelsByMake] = useState<Record<string, { model: string; serviceInterval: number }[]>>({});
+  const [loadingModels, setLoadingModels] = useState(false);
 
-  // ✅ Correctly build image URL
+  // Fetch car models when modal opens
+  useEffect(() => {
+    const fetchCarModels = async () => {
+      if (!isAddVehicleModalOpen) return;
+      
+      setLoadingModels(true);
+      try {
+        const response = await fetch(`${BASE_URL}/api/customers/car-models`);
+        if (!response.ok) throw new Error('Failed to load car models');
+        const data: Record<string, { model: string; serviceInterval: number }[]> = await response.json();
+        setCarModelsByMake(data);
+        setCarMakes(Object.keys(data).sort());
+      } catch (err) {
+        console.error('Error loading car models:', err);
+        setError('Could not load car models. Please try again.');
+      } finally {
+        setLoadingModels(false);
+      }
+    };
+
+    fetchCarModels();
+  }, [isAddVehicleModalOpen]);
+
+  // Build image URL
   const buildImageUrl = (path: string | null | undefined): string | null => {
     if (!path) return null;
-    // If it's already a full URL, return it
     if (path.startsWith('http')) return path;
-    // If it starts with 'uploads/', just use IMAGE_BASE_URL
     if (path.startsWith('uploads/')) {
-      return `${IMAGE_BASE_URL}/${path.substring(8)}`; // Remove 'uploads/' and rebuild
+      return `${IMAGE_BASE_URL}/${path.substring(8)}`;
     }
-    // Otherwise, assume it's relative
     return `${IMAGE_BASE_URL}/${path}`;
   };
 
-  // Handle image upload for vehicle form (preview only)
+  // Handle image upload
   const handleImageUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -146,11 +173,10 @@ const CustomerManagement = () => {
 
         const transformedCustomers = data.map((customer: any) => ({
           ...customer,
-          // ✅ Use actual readableCustomerId from DB
           readableCustomerId: customer.readableCustomerId || customer.customerId,
           isArchived: customer.isArchived || false,
-          // ✅ Fix customer image URL
           customerImage: customer.customerImage ? buildImageUrl(customer.customerImage) : null,
+          loyaltyPoints: customer.loyaltyPoints || 0, // Added loyalty points
           vehicles: Array.isArray(customer.vehicles)
             ? customer.vehicles.map((v: any) => ({
                 id: v.id,
@@ -160,7 +186,7 @@ const CustomerManagement = () => {
                 licensePlate: v.licensePlate || '',
                 vin: v.vin || '',
                 color: v.color || '',
-                mileage: v.mileage || 0,
+                current_mileage: v.current_mileage || 0,
                 imageUrl: v.imageUrl || (v.vehicle_image ? buildImageUrl(v.vehicle_image) : null),
               }))
             : [],
@@ -230,7 +256,7 @@ const CustomerManagement = () => {
         year: '',
         licensePlate: '',
         color: '',
-        mileage: '',
+        current_mileage: '',
         vin: '',
         image: null,
         imagePreview: null,
@@ -248,7 +274,7 @@ const CustomerManagement = () => {
         year: '',
         licensePlate: '',
         color: '',
-        mileage: '',
+        current_mileage: '',
         vin: '',
         image: null,
         imagePreview: null,
@@ -263,9 +289,32 @@ const CustomerManagement = () => {
   };
 
   const handleVehicleChange = (index: number, field: keyof VehicleForm, value: string) => {
-    setVehicles((prev) =>
-      prev.map((v, i) => (i === index ? { ...v, [field]: value } : v))
-    );
+    setVehicles((prev) => {
+      const newVehicles = [...prev];
+      
+      if (field === 'make') {
+        newVehicles[index] = { 
+          ...newVehicles[index], 
+          make: value, 
+          model: '', 
+          serviceInterval: undefined 
+        };
+      } else if (field === 'model') {
+        const selectedMake = newVehicles[index].make;
+        const modelsForMake = carModelsByMake[selectedMake] || [];
+        const selectedModelData = modelsForMake.find(m => m.model === value);
+        
+        newVehicles[index] = { 
+          ...newVehicles[index], 
+          model: value, 
+          serviceInterval: selectedModelData?.serviceInterval 
+        };
+      } else {
+        newVehicles[index] = { ...newVehicles[index], [field]: value };
+      }
+      
+      return newVehicles;
+    });
   };
 
   const handleSubmitVehicles = async () => {
@@ -287,8 +336,9 @@ const CustomerManagement = () => {
         year: vehicle.year || null,
         licensePlate: vehicle.licensePlate || null,
         color: vehicle.color || null,
-        mileage: vehicle.mileage || null,
+        current_mileage: vehicle.current_mileage || null,
         vin: vehicle.vin || null,
+        serviceInterval: vehicle.serviceInterval || null,
       }));
 
       formData.append('vehicles', JSON.stringify(vehiclesDataForJson));
@@ -317,7 +367,6 @@ const CustomerManagement = () => {
 
       const result = await response.json();
 
-      // ✅ Extract new vehicles with correct image URLs
       const newVehiclesFromServer: Vehicle[] = [];
       if (result.newVehicles && Array.isArray(result.newVehicles)) {
         result.newVehicles.forEach((v: any) => {
@@ -329,12 +378,11 @@ const CustomerManagement = () => {
             licensePlate: v.licensePlate || '',
             vin: v.vin || '',
             color: v.color || '',
-            mileage: v.mileage || 0,
+            current_mileage: v.current_mileage || 0,
             imageUrl: v.imageUrl || null,
           });
         });
       } else {
-        // Fallback: use form data + image URLs from response
         const imageUrls = result.imageUrls || [];
         vehicles.forEach((formVehicle, index) => {
           const imagePath = imageUrls[index] || null;
@@ -346,13 +394,12 @@ const CustomerManagement = () => {
             licensePlate: formVehicle.licensePlate,
             vin: formVehicle.vin,
             color: formVehicle.color,
-            mileage: parseInt(formVehicle.mileage) || 0,
+            current_mileage: parseInt(formVehicle.current_mileage) || 0,
             imageUrl: imagePath ? buildImageUrl(imagePath) : formVehicle.imagePreview,
           });
         });
       }
 
-      // Update both global and selected customer
       setCustomers((prev) =>
         prev.map((c) =>
           c.customerId === selectedCustomer.customerId
@@ -373,7 +420,6 @@ const CustomerManagement = () => {
           : prev
       );
 
-      // Reset form
       setIsAddVehicleModalOpen(false);
       setVehicles([
         {
@@ -382,7 +428,7 @@ const CustomerManagement = () => {
           year: '',
           licensePlate: '',
           color: '',
-          mileage: '',
+          current_mileage: '',
           vin: '',
           image: null,
           imagePreview: null,
@@ -477,6 +523,7 @@ const CustomerManagement = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact Info</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicles</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loyalty Points</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registered</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -520,11 +567,17 @@ const CustomerManagement = () => {
                     {customer.vehicles.length} vehicle(s)
                   </div>
                 </td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center">
+                    <Award className="w-4 h-4 mr-1 text-amber-500" />
+                    <span className="font-medium">{customer.loyaltyPoints || 0}</span>
+                  </div>
+                </td>
                 <td className="px-6 py-4 text-sm text-gray-900">
                   {new Date(customer.registrationDate).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4">
-                  <Badge variant={customer.isArchived ? 'warning' : 'success'}>
+                  <Badge variant={customer.isArchived ? 'outline' : 'default'}>
                     {customer.isArchived ? 'Archived' : 'Active'}
                   </Badge>
                 </td>
@@ -589,7 +642,7 @@ const CustomerManagement = () => {
                   <Badge variant={selectedCustomer.customerType === 'company' ? 'default' : 'outline'}>
                     {selectedCustomer.customerType === 'company' ? '🏢 Company' : '👤 Individual'}
                   </Badge>
-                  <Badge variant={selectedCustomer.isArchived ? 'warning' : 'success'}>
+                  <Badge variant={selectedCustomer.isArchived ? 'outline' : 'default'}>
                     {selectedCustomer.isArchived ? 'Archived' : 'Active'}
                   </Badge>
                 </div>
@@ -628,6 +681,67 @@ const CustomerManagement = () => {
                     <span className="text-sm text-gray-500">Customer ID:</span>
                     <span className="ml-2 font-mono">{selectedCustomer.readableCustomerId}</span>
                   </div>
+                  
+                  {/* Loyalty Points Section */}
+                  <div className="flex items-center">
+                    <div className="bg-gradient-to-r from-amber-100 to-yellow-100 rounded-lg p-3 flex items-center border border-amber-200">
+                      <Award className="w-6 h-6 text-amber-600 mr-2" />
+                      <div>
+                        <span className="text-sm text-gray-500">Loyalty Points:</span>
+                        <div className="flex items-baseline">
+                          <span className="text-xl font-bold text-amber-700">{selectedCustomer.loyaltyPoints || 0}</span>
+                          <span className="text-xs text-amber-500 ml-1">points</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Loyalty Tier */}
+                  {selectedCustomer.loyaltyPoints && (
+                    <div className="mt-2">
+                      <span className="text-sm text-gray-500">Loyalty Tier:</span>
+                      <div className="mt-1">
+                        {selectedCustomer.loyaltyPoints >= 1000 ? (
+                          <Badge className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white">
+                            Platinum Member
+                          </Badge>
+                        ) : selectedCustomer.loyaltyPoints >= 500 ? (
+                          <Badge className="bg-gradient-to-r from-gray-600 to-gray-800 text-white">
+                            Gold Member
+                          </Badge>
+                        ) : selectedCustomer.loyaltyPoints >= 200 ? (
+                          <Badge className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+                            Silver Member
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-gradient-to-r from-blue-400 to-blue-600 text-white">
+                            Bronze Member
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Progress Bar */}
+                  {selectedCustomer.loyaltyPoints && (
+                    <div className="mt-4">
+                      <div className="flex justify-between text-sm text-gray-500 mb-1">
+                        <span>Progress to next tier</span>
+                        <span>
+                          {selectedCustomer.loyaltyPoints >= 1000 
+                            ? "Max tier reached!" 
+                            : `${selectedCustomer.loyaltyPoints % 200}/200 points`}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div 
+                          className="bg-gradient-to-r from-amber-400 to-yellow-500 h-2.5 rounded-full" 
+                          style={{ width: `${Math.min(100, (selectedCustomer.loyaltyPoints % 200) / 2)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+                  
                   {selectedCustomer.companyName && (
                     <div>
                       <span className="text-sm text-gray-500">Company:</span>
@@ -681,8 +795,8 @@ const CustomerManagement = () => {
                           <span className="ml-2">{v.vin || 'N/A'}</span>
                         </div>
                         <div>
-                          <span className="text-gray-500">Mileage:</span>
-                          <span className="ml-2">{v.mileage.toLocaleString()} km</span>
+                          <span className="text-gray-500">Current Mileage:</span>
+                          <span className="ml-2">{v.current_mileage.toLocaleString()} km</span>
                         </div>
                       </div>
                       <div className="mt-4">
@@ -758,27 +872,49 @@ const CustomerManagement = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Make *</label>
-                    <input
-                      type="text"
-                      value={vehicle.make}
-                      onChange={(e) => handleVehicleChange(index, 'make', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="Toyota"
-                      required
-                      disabled={isSubmitting}
-                    />
+                    {loadingModels ? (
+                      <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100">
+                        Loading makes...
+                      </div>
+                    ) : (
+                      <select
+                        value={vehicle.make}
+                        onChange={(e) => handleVehicleChange(index, 'make', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        required
+                        disabled={isSubmitting}
+                      >
+                        <option value="">Select Make</option>
+                        {carMakes.map((make) => (
+                          <option key={make} value={make}>
+                            {make}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Model *</label>
-                    <input
-                      type="text"
-                      value={vehicle.model}
-                      onChange={(e) => handleVehicleChange(index, 'model', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="Camry"
-                      required
-                      disabled={isSubmitting}
-                    />
+                    {loadingModels ? (
+                      <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100">
+                        Loading models...
+                      </div>
+                    ) : (
+                      <select
+                        value={vehicle.model}
+                        onChange={(e) => handleVehicleChange(index, 'model', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        required
+                        disabled={isSubmitting || !vehicle.make}
+                      >
+                        <option value="">Select Model</option>
+                        {vehicle.make && carModelsByMake[vehicle.make]?.map((modelData) => (
+                          <option key={modelData.model} value={modelData.model}>
+                            {modelData.model}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
@@ -815,11 +951,11 @@ const CustomerManagement = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Mileage</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Current Mileage</label>
                     <input
                       type="number"
-                      value={vehicle.mileage}
-                      onChange={(e) => handleVehicleChange(index, 'mileage', e.target.value)}
+                      value={vehicle.current_mileage}
+                      onChange={(e) => handleVehicleChange(index, 'current_mileage', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                       placeholder="50000"
                       disabled={isSubmitting}

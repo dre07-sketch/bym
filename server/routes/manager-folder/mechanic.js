@@ -283,6 +283,11 @@ router.get("/:mechanicName/tickets-history", (req, res) => {
     "inspection",
     "successful inspection",
     "inspection failed",
+    'awaiting survey',
+      'awaiting salvage form',
+      'survey complete',
+      'Payment Requested',
+      'Request Payment',
     "awaiting bill",
     "completed"
   ];
@@ -309,6 +314,7 @@ router.get("/:mechanicName/tickets-history", (req, res) => {
       return res.json([]);
     }
 
+    // --- Sub Queries ---
     const disassembledPartsQuery = `
       SELECT id, ticket_number, part_name, \`condition\`, status, notes, logged_at, reassembly_verified
       FROM disassembled_parts
@@ -324,12 +330,47 @@ router.get("/:mechanicName/tickets-history", (req, res) => {
     `;
 
     const inspectionsQuery = `
-      SELECT id, ticket_number, main_issue_resolved, reassembly_verified, general_condition,
-             notes, inspection_date, inspection_status, created_at, updated_at
+      SELECT 
+        id,
+        ticket_number,
+        main_issue_resolved,
+        reassembly_verified,
+        general_condition,
+        notes,
+        inspection_date,
+        inspection_status,
+        created_at,
+        updated_at,
+        check_oil_leaks,
+        check_engine_air_filter_oil_coolant_level,
+        check_brake_fluid_levels,
+        check_gluten_fluid_levels,
+        check_battery_timing_belt,
+        check_tire,
+        check_tire_pressure_rotation,
+        check_lights_wiper_horn,
+        check_door_locks_central_locks,
+        check_customer_work_order_reception_book
       FROM inspections
       WHERE ticket_number = ?
       ORDER BY created_at DESC
     `;
+
+    const formatInspection = (inspection) => ({
+      ...inspection,
+      checklist: {
+        oilLeaks: inspection.check_oil_leaks ?? null,
+        engineAirFilterOilCoolant: inspection.check_engine_air_filter_oil_coolant_level ?? null,
+        brakeFluidLevels: inspection.check_brake_fluid_levels ?? null,
+        glutenFluidLevels: inspection.check_gluten_fluid_levels ?? null,
+        batteryTimingBelt: inspection.check_battery_timing_belt ?? null,
+        tire: inspection.check_tire ?? null,
+        tirePressureRotation: inspection.check_tire_pressure_rotation ?? null,
+        lightsWiperHorn: inspection.check_lights_wiper_horn ?? null,
+        doorLocksCentralLocks: inspection.check_door_locks_central_locks ?? null,
+        customerWorkOrderReceptionBook: inspection.check_customer_work_order_reception_book ?? null
+      }
+    });
 
     const orderedPartsQuery = `
       SELECT id, ticket_number, item_id, name, category, sku, price, quantity, status, ordered_at
@@ -353,6 +394,7 @@ router.get("/:mechanicName/tickets-history", (req, res) => {
       ORDER BY assigned_at DESC
     `;
 
+    // --- Fetch Related Data ---
     const fetchRelatedData = (ticket) => {
       return new Promise((resolve) => {
         db.query(disassembledPartsQuery, [ticket.ticket_number], (err1, disassembledParts) => {
@@ -362,7 +404,7 @@ router.get("/:mechanicName/tickets-history", (req, res) => {
             ticket.progressLogs = err2 ? [] : progressLogs || [];
 
             db.query(inspectionsQuery, [ticket.ticket_number], (err3, inspections) => {
-              ticket.inspections = err3 ? [] : inspections || [];
+              ticket.inspections = err3 ? [] : (inspections || []).map(formatInspection);
 
               db.query(orderedPartsQuery, [ticket.ticket_number], (err4, orderedParts) => {
                 ticket.orderedParts = err4 ? [] : orderedParts || [];
@@ -382,6 +424,7 @@ router.get("/:mechanicName/tickets-history", (req, res) => {
       });
     };
 
+    // --- Final Response ---
     Promise.all(tickets.map(fetchRelatedData))
       .then((ticketsWithDetails) => res.json(ticketsWithDetails))
       .catch((error) => {

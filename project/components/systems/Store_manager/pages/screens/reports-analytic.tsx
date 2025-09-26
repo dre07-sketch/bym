@@ -132,11 +132,11 @@ const Reports: React.FC = () => {
         activityRes,
         damageRes
       ] = await Promise.all([
-        fetch('http://localhost:5001/api/tools/stats').then(r => r.json()),
-        fetch('http://localhost:5001/api/tools/reports/summary').then(r => r.json()),
-        fetch('http://localhost:5001/api/tools/reports/category-distribution').then(r => r.json()),
-        fetch('http://localhost:5001/api/tools/recent-activity').then(r => r.json()),
-        fetch('http://localhost:5001/api/damage-reports').then(r => r.json())
+        fetch('https://ipasystem.bymsystem.com/api/tools/stats').then(r => r.json()),
+        fetch('https://ipasystem.bymsystem.com/api/tools/reports/summary').then(r => r.json()),
+        fetch('https://ipasystem.bymsystem.com/api/tools/reports/category-distribution').then(r => r.json()),
+        fetch('https://ipasystem.bymsystem.com/api/tools/recent-activity').then(r => r.json()),
+        fetch('https://ipasystem.bymsystem.com/api/damage-reports').then(r => r.json())
       ]);
 
       // Handle responses

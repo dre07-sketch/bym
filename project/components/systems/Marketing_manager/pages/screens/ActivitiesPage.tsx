@@ -46,7 +46,7 @@ const DailyActivityPage = () => {
 
   const fetchActivities = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/marketing-activities');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/marketing-activities');
       const data = await res.json();
 
       // Ensure status fallback

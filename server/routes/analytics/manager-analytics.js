@@ -92,4 +92,67 @@ router.get('/pending', (req, res) => {
   });
 });
 
+
+router.get('/weekly-repair-trends', (req, res) => {
+  const query = `
+    SELECT 
+      DAYNAME(created_at) AS day,
+      COUNT(*) AS count
+    FROM service_tickets
+    WHERE status = 'completed'
+      AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+    GROUP BY DAYNAME(created_at), DAYOFWEEK(created_at)
+    ORDER BY DAYOFWEEK(created_at);
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('❌ Error fetching weekly repair trends:', err);
+      return res.status(500).json({ error: 'Failed to fetch weekly repair trends' });
+    }
+
+    // Format to { labels: [], data: [] }
+    const labels = [];
+    const data = [];
+    const weekDays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+    // Fill in days of the week (even with 0)
+    weekDays.forEach(day => {
+      const found = results.find(r => r.day === day);
+      labels.push(day.substring(0, 3)); // short label
+      data.push(found ? found.count : 0);
+    });
+
+    res.json({ labels, data });
+  });
+});
+
+// ===============================
+// Monthly Revenue (only paid bills)
+// ===============================
+router.get('/monthly-revenue', (req, res) => {
+  const query = `
+    SELECT 
+      DATE_FORMAT(created_at, '%Y-%m') AS month,
+      SUM(final_total) AS revenue
+    FROM bills
+    WHERE status = 'paid'
+    GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+    ORDER BY month ASC;
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('❌ Error fetching monthly revenue:', err);
+      return res.status(500).json({ error: 'Failed to fetch monthly revenue' });
+    }
+
+    // Format to { labels: [], data: [] }
+    const labels = results.map(r => r.month);
+    const data = results.map(r => Number(r.revenue) || 0);
+
+    res.json({ labels, data });
+  });
+});
+
 module.exports = router;

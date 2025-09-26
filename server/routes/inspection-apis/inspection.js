@@ -226,36 +226,53 @@ router.post('/update-inspection-status', (req, res) => {
 
     console.log(`✅ Updated inspections for ${ticketNumber} → ${inspectionStatus}`);
 
-    // Step 2: Map inspection result → service_tickets.status
-    let newStatus = '';
-    if (inspectionStatus === 'pass') newStatus = 'awaiting bill';
-    if (inspectionStatus === 'fail') newStatus = 'inspection failed';
-
-    const updateTicket = `
-      UPDATE service_tickets 
-      SET status = ? 
-      WHERE ticket_number = ?
-    `;
-
-    db.query(updateTicket, [newStatus, ticketNumber], (err2, result2) => {
+    // Step 2: Fetch ticket type to determine new status
+    const getTicketType = `SELECT type FROM service_tickets WHERE ticket_number = ? LIMIT 1`;
+    db.query(getTicketType, [ticketNumber], (err2, rows) => {
       if (err2) {
-        console.error('❌ Error updating service_tickets:', err2);
-        return res.status(500).json({ message: 'Failed to update ticket' });
+        console.error('❌ Error fetching ticket type:', err2);
+        return res.status(500).json({ message: 'Failed to fetch ticket type' });
       }
-      if (result2.affectedRows === 0) {
-        return res.status(404).json({ message: 'Ticket not found in service_tickets' });
+      if (rows.length === 0) {
+        return res.status(404).json({ message: 'Ticket not found' });
       }
 
-      console.log(`✅ Updated service_tickets for ${ticketNumber} → ${newStatus}`);
+      const ticketType = rows[0].type; // e.g., 'insurance' or 'regular'
+      let newStatus = '';
 
-      res.status(200).json({
-        message: 'Success',
-        inspectionStatus,
-        newTicketStatus: newStatus
+      if (ticketType === 'insurance') {
+        newStatus = 'awaiting survey';
+      } else {
+        newStatus = inspectionStatus === 'pass' ? 'awaiting bill' : 'inspection failed';
+      }
+
+      const updateTicket = `
+        UPDATE service_tickets 
+        SET status = ? 
+        WHERE ticket_number = ?
+      `;
+
+      db.query(updateTicket, [newStatus, ticketNumber], (err3, result3) => {
+        if (err3) {
+          console.error('❌ Error updating service_tickets:', err3);
+          return res.status(500).json({ message: 'Failed to update ticket' });
+        }
+        if (result3.affectedRows === 0) {
+          return res.status(404).json({ message: 'Ticket not found in service_tickets' });
+        }
+
+        console.log(`✅ Updated service_tickets for ${ticketNumber} → ${newStatus}`);
+
+        res.status(200).json({
+          message: 'Success',
+          inspectionStatus,
+          newTicketStatus: newStatus
+        });
       });
     });
   });
 });
+
 
 
 
@@ -301,9 +318,10 @@ router.get('/completed-with-parts', (req, res) => {
       ON i.ticket_number = st.ticket_number
     WHERE st.status IN ('completed', 'awaiting bill')
       AND i.id = (
-        SELECT id FROM inspections 
-        WHERE ticket_number = st.ticket_number 
-        ORDER BY created_at DESC 
+        SELECT id 
+        FROM inspections 
+        WHERE ticket_number = st.ticket_number
+        ORDER BY inspection_date DESC, created_at DESC
         LIMIT 1
       )
     ORDER BY st.created_at DESC
@@ -329,13 +347,6 @@ router.get('/completed-with-parts', (req, res) => {
         console.error('Error fetching mechanics:', err);
         return res.status(500).json({ message: 'Failed to fetch mechanics' });
       }
-
-      // helper to normalize yes/no/1/0 into true/false/null
-      const normalizeCheck = (val) => {
-        if (val === 'yes' || val === 'YES' || val === 1 || val === true) return true;
-        if (val === 'no' || val === 'NO' || val === 0 || val === false) return false;
-        return null;
-      };
 
       const mechanicsMap = {};
       mechanicsRows.forEach(m => {
@@ -366,16 +377,16 @@ router.get('/completed-with-parts', (req, res) => {
             inspectionStatus: row.inspection_status,
             inspectionDate: row.inspection_date,
             checklist: {
-              oilLeaks: normalizeCheck(row.check_oil_leaks),
-              engineAirFilterOilCoolant: normalizeCheck(row.check_engine_air_filter_oil_coolant_level),
-              brakeFluidLevels: normalizeCheck(row.check_brake_fluid_levels),
-              glutenFluidLevels: normalizeCheck(row.check_gluten_fluid_levels),
-              batteryTimingBelt: normalizeCheck(row.check_battery_timing_belt),
-              tire: normalizeCheck(row.check_tire),
-              tirePressureRotation: normalizeCheck(row.check_tire_pressure_rotation),
-              lightsWiperHorn: normalizeCheck(row.check_lights_wiper_horn),
-              doorLocksCentralLocks: normalizeCheck(row.check_door_locks_central_locks),
-              customerWorkOrderReceptionBook: normalizeCheck(row.check_customer_work_order_reception_book)
+              oilLeaks: row.check_oil_leaks, // will return "Yes", "No", or null
+              engineAirFilterOilCoolant: row.check_engine_air_filter_oil_coolant_level,
+              brakeFluidLevels: row.check_brake_fluid_levels,
+              glutenFluidLevels: row.check_gluten_fluid_levels,
+              batteryTimingBelt: row.check_battery_timing_belt,
+              tire: row.check_tire,
+              tirePressureRotation: row.check_tire_pressure_rotation,
+              lightsWiperHorn: row.check_lights_wiper_horn,
+              doorLocksCentralLocks: row.check_door_locks_central_locks,
+              customerWorkOrderReceptionBook: row.check_customer_work_order_reception_book
             },
             replacedParts: []
           };
@@ -396,6 +407,8 @@ router.get('/completed-with-parts', (req, res) => {
     });
   });
 });
+
+
 
 
 

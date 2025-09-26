@@ -56,6 +56,7 @@ interface ProformaItem {
   unit_price: number;
 }
 
+// Updated interface to include both frontend and backend statuses
 interface Proforma {
   id: number;
   proforma_number: string;
@@ -66,7 +67,7 @@ interface Proforma {
   company_phone?: string;
   company_vat_number?: string;
   notes?: string;
-  status: 'Draft' | 'Awaiting Send' | 'Sent' | 'Accepted' | 'Cancelled' | 'Expired';
+  status: 'Converted to Ticket' | 'Awaiting Send' | 'Sent' | 'Accepted' | 'Cancelled' | 'Expired' | 'Converted'; // Added 'Converted'
   subtotal: number;
   vat_rate?: number;
   vat_amount: number;
@@ -81,6 +82,10 @@ interface PaginationData {
   pages: number;
   total: number;
   limit: number;
+}
+
+interface StatusCounts {
+  [key: string]: number;
 }
 
 const Performa: React.FC = () => {
@@ -114,19 +119,40 @@ const Performa: React.FC = () => {
   // Status dropdown state
   const [openStatusDropdown, setOpenStatusDropdown] = useState<number | null>(null);
   
-  // Allowed statuses
+  // Status counts state
+  const [statusCounts, setStatusCounts] = useState<StatusCounts>({});
+  const [countsLoading, setCountsLoading] = useState<boolean>(true);
+  
+  // Allowed statuses - removed 'Expired' as it's not supported by backend
   const allowedStatuses = [
+    
     'Awaiting Send',
     'Sent',
-    'Cancelled',
     'Accepted',
-    'Expired',
-    'Draft'
+    'Cancelled'
   ];
   
   // Function to navigate to the PerformaInvoice page
   const handleNewProforma = () => {
     setShowInvoiceModal(true);
+  };
+  
+  // Function to fetch status counts
+  const fetchStatusCounts = async () => {
+    setCountsLoading(true);
+    try {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/status-counts');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      if (!result.success) throw new Error(result.message);
+      
+      setStatusCounts(result.counts);
+    } catch (err) {
+      console.error('Fetch status counts error:', err);
+      // We don't set a main error for this, just log it
+    } finally {
+      setCountsLoading(false);
+    }
   };
   
   // Function to refresh data after saving
@@ -137,18 +163,27 @@ const Performa: React.FC = () => {
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
         ...(searchTerm && { search: searchTerm }),
-        ...(filterStatus !== 'all' && { status: filterStatus }),
+        ...(filterStatus !== 'all' && { status: filterStatus === 'converted' ? 'Converted' : filterStatus }),
         ...(dateRange.start && { date: dateRange.start })
       });
       
-      const response = await fetch(`http://localhost:5001/api/communication-center/proformas?${params}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/proformas?${params}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
       
-      setProformas(result.data);
+      // Map backend status to frontend status
+      const mappedData = result.data.map((proforma: Proforma) => ({
+        ...proforma,
+        status: proforma.status === 'Converted' ? 'Converted to Ticket' : proforma.status
+      }));
+      
+      setProformas(mappedData);
       setPagination(result.meta || pagination); // Fallback to current pagination if meta is undefined
-      setFilteredProformas(result.data);
+      setFilteredProformas(mappedData);
+      
+      // Also refresh status counts
+      fetchStatusCounts();
     } catch (err) {
       console.error('Fetch proformas error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load proforma invoices.');
@@ -157,31 +192,42 @@ const Performa: React.FC = () => {
     }
   };
   
-  // Fetch proformas from backend
+  // Fetch proformas and status counts from backend
   useEffect(() => {
-    const fetchProformas = async () => {
+    const fetchData = async () => {
       try {
+        // Fetch proformas
         const params = new URLSearchParams({
           page: '1',
           limit: '10'
         });
         
-        const response = await fetch(`http://localhost:5001/api/communication-center/proformas?${params}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const result = await response.json();
-        if (!result.success) throw new Error(result.message);
+        const proformasResponse = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/proformas?${params}`);
+        if (!proformasResponse.ok) throw new Error(`HTTP ${proformasResponse.status}`);
+        const proformasResult = await proformasResponse.json();
+        if (!proformasResult.success) throw new Error(proformasResult.message);
         
-        setProformas(result.data);
-        setPagination(result.meta || pagination); // Fallback to current pagination if meta is undefined
-        setFilteredProformas(result.data);
+        // Map backend status to frontend status
+        const mappedData = proformasResult.data.map((proforma: Proforma) => ({
+          ...proforma,
+          status: proforma.status === 'Converted' ? 'Converted to Ticket' : proforma.status
+        }));
+        
+        setProformas(mappedData);
+        setPagination(proformasResult.meta || pagination);
+        setFilteredProformas(mappedData);
+        
+        // Fetch status counts
+        fetchStatusCounts();
       } catch (err) {
-        console.error('Fetch proformas error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load proforma invoices.');
+        console.error('Fetch data error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load data.');
       } finally {
         setLoading(false);
       }
     };
-    fetchProformas();
+    
+    fetchData();
   }, []);
   
   // Apply filters and search
@@ -197,18 +243,27 @@ const Performa: React.FC = () => {
           page: currentPage.toString(),
           limit: currentLimit.toString(),
           ...(searchTerm && { search: searchTerm }),
-          ...(filterStatus !== 'all' && { status: filterStatus }),
+          ...(filterStatus !== 'all' && { status: filterStatus === 'converted' ? 'Converted' : filterStatus }),
           ...(dateRange.start && { date: dateRange.start })
         });
         
-        const response = await fetch(`http://localhost:5001/api/communication-center/proformas?${params}`);
+        const response = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/proformas?${params}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const result = await response.json();
         if (!result.success) throw new Error(result.message);
         
-        setProformas(result.data);
+        // Map backend status to frontend status
+        const mappedData = result.data.map((proforma: Proforma) => ({
+          ...proforma,
+          status: proforma.status === 'Converted' ? 'Converted to Ticket' : proforma.status
+        }));
+        
+        setProformas(mappedData);
         setPagination(result.meta || { page: currentPage, pages: 1, total: 0, limit: currentLimit });
-        setFilteredProformas(result.data);
+        setFilteredProformas(mappedData);
+        
+        // Also refresh status counts
+        fetchStatusCounts();
       } catch (err) {
         console.error('Fetch proformas error:', err);
         setError(err instanceof Error ? err.message : 'Failed to load proforma invoices.');
@@ -239,10 +294,13 @@ const Performa: React.FC = () => {
     // Don't set selectedProforma to null here to preserve existing data
     
     try {
-      const response = await fetch(`http://localhost:5001/api/communication-center/proformas/${id}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/proformas/${id}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
+      
+      // Map backend status to frontend status
+      const frontendStatus = result.data.status === 'Converted' ? 'Converted to Ticket' : result.data.status;
       
       // Update selectedProforma while preserving customer info if it exists
       setSelectedProforma(prev => {
@@ -250,11 +308,12 @@ const Performa: React.FC = () => {
           // Preserve customer_name and company_name from previous state if they exist
           return {
             ...result.data,
+            status: frontendStatus,
             customer_name: prev.customer_name || result.data.customer_name,
             company_name: prev.company_name || result.data.company_name
           };
         }
-        return result.data;
+        return { ...result.data, status: frontendStatus };
       });
     } catch (err) {
       console.error('Fetch proforma details error:', err);
@@ -281,19 +340,41 @@ const Performa: React.FC = () => {
     setModalError(null);
   };
   
-  // Update proforma status
+  // Update proforma status with improved error handling
   const updateProformaStatus = async (id: number, newStatus: string) => {
     try {
-      const response = await fetch(`http://localhost:5001/api/communication-center/proformas/${id}/status`, {
+      // Map frontend status to backend status
+      let backendStatus = newStatus;
+      if (newStatus === 'Converted to Ticket') {
+        backendStatus = 'Converted';
+      }
+      
+      console.log('Updating proforma status:', { id, newStatus, backendStatus });
+      
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/proformas/${id}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: backendStatus }),
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      // Handle non-200 responses
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Backend error response:', errorText);
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.message || `HTTP ${response.status}: ${errorText}`);
+        } catch (parseError) {
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+      }
+      
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
+      
       // Update the proforma in the list
       setProformas(prev => prev.map(p => p.id === id ? { ...p, status: newStatus as any } : p));
       setFilteredProformas(prev => prev.map(p => p.id === id ? { ...p, status: newStatus as any } : p));
@@ -302,6 +383,9 @@ const Performa: React.FC = () => {
       if (selectedProforma && selectedProforma.id === id) {
         setSelectedProforma({ ...selectedProforma, status: newStatus as any });
       }
+      
+      // Refresh status counts after status update
+      fetchStatusCounts();
       
       // Show success feedback
       console.log(`Status updated to ${newStatus}`);
@@ -406,16 +490,16 @@ const Performa: React.FC = () => {
     }
   };
   
-  // Status badge colors
+  // Status badge colors - removed 'Expired' case
   const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'Draft':
+      case 'Converted to Ticket':
         return { 
-          icon: Clock, 
-          color: 'bg-gradient-to-r from-sky-100 to-cyan-50 text-sky-700 border-sky-200',
-          bgColor: 'from-sky-500 to-cyan-600',
-          textColor: 'text-sky-600',
-          ring: 'ring-sky-500/20'
+          icon: CheckCircle, 
+          color: 'bg-gradient-to-r from-emerald-100 to-teal-50 text-emerald-700 border-emerald-200',
+          bgColor: 'from-emerald-500 to-teal-600',
+          textColor: 'text-emerald-600',
+          ring: 'ring-emerald-500/20'
         };
       case 'Awaiting Send':
         return { 
@@ -448,14 +532,6 @@ const Performa: React.FC = () => {
           bgColor: 'from-rose-500 to-pink-600',
           textColor: 'text-rose-600',
           ring: 'ring-rose-500/20'
-        };
-      case 'Expired':
-        return { 
-          icon: Clock, 
-          color: 'bg-gradient-to-r from-purple-100 to-fuchsia-50 text-purple-700 border-purple-200',
-          bgColor: 'from-purple-500 to-fuchsia-600',
-          textColor: 'text-purple-600',
-          ring: 'ring-purple-500/20'
         };
       default:
         return { 
@@ -582,8 +658,25 @@ const Performa: React.FC = () => {
           
           {/* Stats Summary */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-           
-            
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-4 border border-emerald-50 relative overflow-hidden hover:shadow-lg transition-all duration-300">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-100 rounded-full -mr-8 -mt-8"></div>
+              <div className="flex items-center mb-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center mr-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                </div>
+                <p className="text-slate-500 text-sm font-medium">Converted to Ticket</p>
+              </div>
+              <p className="text-2xl font-bold text-slate-800">
+                {countsLoading ? (
+                  <div className="flex items-center">
+                    <Loader className="w-4 h-4 animate-spin text-emerald-500 mr-2" />
+                    <span className="text-sm">Loading...</span>
+                  </div>
+                ) : (
+                  statusCounts['Converted'] || 0
+                )}
+              </p>
+            </div>
             
             <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-4 border border-amber-50 relative overflow-hidden hover:shadow-lg transition-all duration-300">
               <div className="absolute top-0 right-0 w-16 h-16 bg-amber-100 rounded-full -mr-8 -mt-8"></div>
@@ -594,7 +687,14 @@ const Performa: React.FC = () => {
                 <p className="text-slate-500 text-sm font-medium">Awaiting</p>
               </div>
               <p className="text-2xl font-bold text-slate-800">
-                {proformas.filter(p => p.status === 'Awaiting Send').length}
+                {countsLoading ? (
+                  <div className="flex items-center">
+                    <Loader className="w-4 h-4 animate-spin text-amber-500 mr-2" />
+                    <span className="text-sm">Loading...</span>
+                  </div>
+                ) : (
+                  statusCounts['Awaiting Send'] || 0
+                )}
               </p>
             </div>
             
@@ -607,7 +707,14 @@ const Performa: React.FC = () => {
                 <p className="text-slate-500 text-sm font-medium">Sent</p>
               </div>
               <p className="text-2xl font-bold text-slate-800">
-                {proformas.filter(p => p.status === 'Sent').length}
+                {countsLoading ? (
+                  <div className="flex items-center">
+                    <Loader className="w-4 h-4 animate-spin text-indigo-500 mr-2" />
+                    <span className="text-sm">Loading...</span>
+                  </div>
+                ) : (
+                  statusCounts['Sent'] || 0
+                )}
               </p>
             </div>
             
@@ -620,7 +727,14 @@ const Performa: React.FC = () => {
                 <p className="text-slate-500 text-sm font-medium">Accepted</p>
               </div>
               <p className="text-2xl font-bold text-slate-800">
-                {proformas.filter(p => p.status === 'Accepted').length}
+                {countsLoading ? (
+                  <div className="flex items-center">
+                    <Loader className="w-4 h-4 animate-spin text-emerald-500 mr-2" />
+                    <span className="text-sm">Loading...</span>
+                  </div>
+                ) : (
+                  statusCounts['Accepted'] || 0
+                )}
               </p>
             </div>
             
@@ -633,7 +747,14 @@ const Performa: React.FC = () => {
                 <p className="text-slate-500 text-sm font-medium">Cancelled</p>
               </div>
               <p className="text-2xl font-bold text-slate-800">
-                {proformas.filter(p => p.status === 'Cancelled').length}
+                {countsLoading ? (
+                  <div className="flex items-center">
+                    <Loader className="w-4 h-4 animate-spin text-rose-500 mr-2" />
+                    <span className="text-sm">Loading...</span>
+                  </div>
+                ) : (
+                  statusCounts['Cancelled'] || 0
+                )}
               </p>
             </div>
           </div>
@@ -669,7 +790,7 @@ const Performa: React.FC = () => {
           {showFilters && (
             <div className="mt-6 pt-6 border-t border-slate-200">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Status Filter */}
+                {/* Status Filter - removed 'expired' option */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-3">Status</label>
                   <select
@@ -678,12 +799,11 @@ const Performa: React.FC = () => {
                     className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-800 shadow-sm"
                   >
                     <option value="all">All Status</option>
-                    <option value="draft">Draft</option>
+                    <option value="converted">Converted to Ticket</option>
                     <option value="awaitingSend">Awaiting Send</option>
                     <option value="sent">Sent</option>
                     <option value="accepted">Accepted</option>
                     <option value="cancelled">Cancelled</option>
-                    <option value="expired">Expired</option>
                   </select>
                 </div>
                 {/* Date Range Start */}

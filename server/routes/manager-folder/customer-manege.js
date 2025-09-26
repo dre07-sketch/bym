@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../db/connection');
 
-const BASE_URL = 'http://localhost:5001';
+const BASE_URL = 'https://ipasystem.bymsystem.com';
 const IMAGE_BASE_URL = `${BASE_URL}`;
 
 const encode = (path) => encodeURIComponent(path).replace(/%2F/g, '/');
@@ -31,7 +31,7 @@ router.get('/fetch', (req, res) => {
       v.license_plate,
       v.vin,
       v.color,
-      v.mileage,
+      v.current_mileage ,
       v.image AS vehicle_image
     FROM individual_customers ic
     LEFT JOIN vehicles v ON ic.customer_id = v.customer_id
@@ -58,7 +58,7 @@ router.get('/fetch', (req, res) => {
       v.license_plate,
       v.vin,
       v.color,
-      v.mileage,
+      v.current_mileage ,
       v.image AS vehicle_image
     FROM company_customers cc
     LEFT JOIN vehicles v ON cc.customer_id = v.customer_id
@@ -103,7 +103,7 @@ router.get('/fetch', (req, res) => {
           licensePlate: row.license_plate,
           vin: row.vin,
           color: row.color,
-          mileage: row.mileage,
+          current_mileage : row.current_mileage ,
           imageUrl: row.vehicle_image ? `${IMAGE_BASE_URL}/${encode(row.vehicle_image)}` : null
         });
       }
@@ -177,7 +177,7 @@ router.get('/:id/vehicles', (req, res) => {
   const customerId = req.params.id;
 
   const query = `
-    SELECT id, make, model, year, license_plate, vin, color, mileage, image AS vehicle_image
+    SELECT id, make, model, year, license_plate, vin, color, current_mileage , image AS vehicle_image
     FROM vehicles
     WHERE customer_id = ?
   `;
@@ -196,12 +196,97 @@ router.get('/:id/vehicles', (req, res) => {
       licensePlate: v.license_plate,
       vin: v.vin,
       color: v.color,
-      mileage: v.mileage,
+      current_mileage : v.current_mileage ,
       imageUrl: v.vehicle_image ? `${IMAGE_BASE_URL}/${v.vehicle_image}` : null
     }));
 
     res.json({ vehicles });
   });
 });
+
+
+// GET /api/customer-manege/completed-tickets/:customer_id
+router.get("/completed-tickets/:customer_id", (req, res) => {
+  const { customer_id } = req.params;
+
+  const sql = `
+    SELECT ticket_number, title, vehicle_info, license_plate, updated_at
+    FROM service_tickets
+    WHERE status = 'completed' AND customer_id = ?
+    ORDER BY updated_at DESC
+  `;
+
+  db.query(sql, [customer_id], (err, tickets) => {
+    if (err) {
+      console.error("❌ DB error:", err);
+      return res.status(500).json({ message: "Database error" });
+    }
+    res.json(tickets);
+  });
+});
+
+
+// GET /api/customer-manege/completed-tickets/:customer_id/:ticket_number
+router.get("/completed-tickets/:customer_id/:ticket_number", (req, res) => {
+  const { customer_id, ticket_number } = req.params;
+
+  const sql = `
+    SELECT *
+    FROM service_tickets
+    WHERE status = 'completed' AND customer_id = ? AND ticket_number = ?
+  `;
+
+  db.query(sql, [customer_id, ticket_number], (err, tickets) => {
+    if (err) {
+      console.error("❌ DB error:", err);
+      return res.status(500).json({ message: "Database error" });
+    }
+
+    if (tickets.length === 0) {
+      return res.status(404).json({ message: "Ticket not found" });
+    }
+
+    let ticket = tickets[0];
+    let details = {
+      disassembled_parts: [],
+      outsource_mechanics: [],
+      ordered_parts: [],
+      outsource_stock: [],
+      inspections: [],
+      progress_logs: [],
+      bills: []
+    };
+
+    const queries = {
+      disassembled_parts: "SELECT * FROM disassembled_parts WHERE ticket_number = ? ORDER BY logged_at",
+      outsource_mechanics: "SELECT * FROM outsource_mechanics WHERE ticket_number = ? ORDER BY created_at",
+      ordered_parts: "SELECT * FROM ordered_parts WHERE ticket_number = ? ORDER BY ordered_at",
+      outsource_stock: "SELECT * FROM outsource_stock WHERE ticket_number = ? ORDER BY requested_at",
+      inspections: "SELECT * FROM inspections WHERE ticket_number = ? ORDER BY created_at",
+      progress_logs: "SELECT * FROM progress_logs WHERE ticket_number = ? ORDER BY created_at",
+      bills: "SELECT * FROM bills WHERE ticket_number = ? ORDER BY created_at"
+    };
+
+    let pending = Object.keys(queries).length;
+
+    Object.entries(queries).forEach(([key, sql]) => {
+      db.query(sql, [ticket_number], (err, rows) => {
+        if (err) {
+          console.error(`❌ Error fetching ${key} for ${ticket_number}:`, err);
+          details[key] = [];
+        } else {
+          details[key] = rows;
+        }
+
+        pending--;
+        if (pending === 0) {
+          return res.json({ ...ticket, ...details });
+        }
+      });
+    });
+  });
+});
+
+
 
 module.exports = router;

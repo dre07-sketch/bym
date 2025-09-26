@@ -71,6 +71,8 @@ router.get('/in-progress', (req, res) => {
       'inspection',
       'successful inspection',
       'inspection failed',
+       'awaiting survey',
+      'awaiting salvage form',
       'awaiting bill',
       'completed'
     )
@@ -523,7 +525,19 @@ router.get("/inspection/:ticket_number", (req, res) => {
       inspection_date,
       inspection_status,
       created_at,
-      updated_at
+      updated_at,
+
+      -- ✅ New checklist fields
+      check_oil_leaks,
+      check_engine_air_filter_oil_coolant_level,
+      check_brake_fluid_levels,
+      check_gluten_fluid_levels,
+      check_battery_timing_belt,
+      check_tire,
+      check_tire_pressure_rotation,
+      check_lights_wiper_horn,
+      check_door_locks_central_locks,
+      check_customer_work_order_reception_book
     FROM inspections
     WHERE ticket_number = ?
     ORDER BY created_at DESC
@@ -539,9 +553,36 @@ router.get("/inspection/:ticket_number", (req, res) => {
       return res.status(404).json({ message: "No inspection records found for this ticket" });
     }
 
-    res.json(results);
+    // Transform rows: NULL → "null"
+    const transformed = results.map(row => ({
+      id: row.id,
+      ticket_number: row.ticket_number,
+      main_issue_resolved: row.main_issue_resolved ?? "null",
+      reassembly_verified: row.reassembly_verified ?? "null",
+      general_condition: row.general_condition ?? "null",
+      notes: row.notes ?? "null",
+      inspection_date: row.inspection_date ?? "null",
+      inspection_status: row.inspection_status ?? "null",
+      created_at: row.created_at ?? "null",
+      updated_at: row.updated_at ?? "null",
+
+      // ✅ Checklist fields
+      check_oil_leaks: row.check_oil_leaks ?? "null",
+      check_engine_air_filter_oil_coolant_level: row.check_engine_air_filter_oil_coolant_level ?? "null",
+      check_brake_fluid_levels: row.check_brake_fluid_levels ?? "null",
+      check_gluten_fluid_levels: row.check_gluten_fluid_levels ?? "null",
+      check_battery_timing_belt: row.check_battery_timing_belt ?? "null",
+      check_tire: row.check_tire ?? "null",
+      check_tire_pressure_rotation: row.check_tire_pressure_rotation ?? "null",
+      check_lights_wiper_horn: row.check_lights_wiper_horn ?? "null",
+      check_door_locks_central_locks: row.check_door_locks_central_locks ?? "null",
+      check_customer_work_order_reception_book: row.check_customer_work_order_reception_book ?? "null",
+    }));
+
+    res.json(transformed);
   });
 });
+
 
 // Helper function for retrying on deadlocks
 function executeWithRetry(query, params, retries = 3) {
@@ -723,6 +764,53 @@ router.post("/outsource-mechanic", (req, res) => {
     }
   );
 });
+
+router.put('/:id/status', (req, res) => {
+  const { id } = req.params;
+
+  const query = `
+    UPDATE service_tickets
+    SET status = 'Inspection', updated_at = NOW()
+    WHERE id = ?
+  `;
+
+  db.query(query, [id], (err, result) => {
+    if (err) {
+      console.error('Error updating ticket to Inspection:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+
+    res.json({ success: true, message: 'Ticket marked for Inspection' });
+  });
+});
+
+router.post('/parts-request', (req, res) => {
+  const { ticketNumber, parts_needed, quantity } = req.body;
+
+  if (!ticketNumber || !parts_needed) {
+    return res.status(400).json({ error: 'ticketNumber and parts_needed are required' });
+  }
+
+  const qty = quantity && Number.isInteger(quantity) ? quantity : 1;
+
+  const query = `
+    INSERT INTO parts_requests (ticket_number, parts_needed, quantity)
+    VALUES (?, ?, ?)
+  `;
+
+  db.query(query, [ticketNumber, parts_needed, qty], (err, result) => {
+    if (err) {
+      console.error('Error inserting request:', err);
+      return res.status(500).json({ error: 'Failed to save parts request' });
+    }
+
+    res.json({ message: 'Parts request saved successfully', id: result.insertId });
+  });
+});
+
 
 
 

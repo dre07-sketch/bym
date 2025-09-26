@@ -112,7 +112,7 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
       const fetchAppointments = async () => {
         try {
           setLoading(true);
-          const response = await fetch('http://localhost:5001/api/appointments/getappointment');
+          const response = await fetch('https://ipasystem.bymsystem.com/api/appointments/getappointment');
           if (!response.ok) {
             throw new Error('Network response was not ok');
           }
@@ -138,7 +138,7 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/tickets/customers?type=${formData.customerType}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/tickets/customers?type=${formData.customerType}`);
       const data = await response.json();
       setCustomers(data);
     } catch (error) {
@@ -151,7 +151,7 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
   const fetchVehicles = async (customerId: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/tickets/vehicles/${customerId}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/tickets/vehicles/${customerId}`);
       const data = await response.json();
       setVehicles(data);
     } catch (error) {
@@ -322,7 +322,7 @@ Notes: ${appointment.notes}` : ''}`,
     setSubmitError(null);
 
     try {
-      const response = await fetch('http://localhost:5001/api/tickets', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/tickets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -353,7 +353,7 @@ Notes: ${appointment.notes}` : ''}`,
       // After successful ticket creation, update appointment status to 'converted'
       if (formData.appointmentId) {
         try {
-          await fetch(`http://localhost:5001/api/appointments/${formData.appointmentId}/status`, {
+          await fetch(`https://ipasystem.bymsystem.com/api/appointments/${formData.appointmentId}/status`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'converted' }),

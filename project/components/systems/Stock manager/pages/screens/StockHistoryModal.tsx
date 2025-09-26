@@ -29,7 +29,7 @@ const StockHistoryModal: React.FC<StockHistoryModalProps> = ({ isOpen, onClose }
 
     const fetchHistory = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/inventory/stock-history');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/stock-history');
         if (!response.ok) throw new Error('Failed to fetch stock history');
         const result = await response.json();
         setLogs(result.data || []);

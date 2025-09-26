@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../db/connection');
 const multer = require('multer');
+const bcrypt = require('bcrypt');
+
 
 const BASE_URL = 'http://localhost:5001';
 const IMAGE_BASE_URL = `${BASE_URL}`;
@@ -20,12 +22,15 @@ function generateReadableCustomerId() {
 // =============================
 // REGISTER CUSTOMER AND VEHICLES
 // =============================
-router.post('/', upload.array('images'), (req, res) => {
+
+
+router.post('/', upload.array('images'), async (req, res) => {
   const {
     customerType,
     name,
     email,
     phone,
+    password, // added
     emergencyContact,
     address,
     notes,
@@ -35,8 +40,8 @@ router.post('/', upload.array('images'), (req, res) => {
     vehicles
   } = req.body;
 
-  if (!customerType || !name || !email || !phone || !vehicles) {
-    return res.status(400).json({ message: 'Missing required customer or vehicle fields.' });
+  if (!customerType || !name || !email || !phone || !vehicles || !password) {
+    return res.status(400).json({ message: 'Missing required customer, password, or vehicle fields.' });
   }
 
   let vehiclesArr;
@@ -59,91 +64,99 @@ router.post('/', upload.array('images'), (req, res) => {
 
   const customerImagePath = customerImageFile ? `uploads/${customerImageFile.filename}` : null;
 
-  db.getConnection((err, connection) => {
-    if (err) {
-      console.error('Connection error:', err);
-      return res.status(500).json({ message: 'Database connection failed.' });
-    }
+  try {
+    // 🔐 hash password before storing
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    connection.beginTransaction(err => {
+    db.getConnection((err, connection) => {
       if (err) {
-        connection.release();
-        return res.status(500).json({ message: 'Transaction failed to start.' });
+        console.error('Connection error:', err);
+        return res.status(500).json({ message: 'Database connection failed.' });
       }
 
-      const insertCustomerQuery = customerType === 'individual'
-        ? `INSERT INTO individual_customers
-            (customer_id, name, email, phone, emergency_contact, address, notes, registration_date, total_services, image)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        : `INSERT INTO company_customers
-            (customer_id, company_name, contact_person_name, email, phone, emergency_contact, address, notes, registration_date, total_services, image)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-
-      const customerParams = customerType === 'individual'
-        ? [customer_id, name, email, phone, emergencyContact, address, notes, registrationDate, totalServices, customerImagePath]
-        : [customer_id, companyName, name, email, phone, emergencyContact, address, notes, registrationDate, totalServices, customerImagePath];
-
-      connection.query(insertCustomerQuery, customerParams, (err) => {
+      connection.beginTransaction(err => {
         if (err) {
-          return connection.rollback(() => {
-            connection.release();
-            console.error('Insert customer error:', err);
-            res.status(500).json({ message: 'Failed to insert customer.' });
-          });
+          connection.release();
+          return res.status(500).json({ message: 'Transaction failed to start.' });
         }
 
-        const insertVehicleQuery = `
-          INSERT INTO vehicles
-          (customer_id, make, model, year, license_plate, vin, color, mileage, image)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
+        const insertCustomerQuery = customerType === 'individual'
+          ? `INSERT INTO individual_customers
+              (customer_id, name, email, phone, password, emergency_contact, address, notes, registration_date, total_services, image)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          : `INSERT INTO company_customers
+              (customer_id, company_name, name, email, phone, password, emergency_contact, address, notes, registration_date, total_services, image)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-        const vehicleInsertTasks = vehiclesArr.map((vehicle, i) => {
-          const {
-            make, model, year = null, licensePlate = null,
-            vin = null, color = null, mileage = null
-          } = vehicle;
+        const customerParams = customerType === 'individual'
+          ? [customer_id, name, email, phone, hashedPassword, emergencyContact, address, notes, registrationDate, totalServices, customerImagePath]
+          : [customer_id, companyName, name, email, phone, hashedPassword, emergencyContact, address, notes, registrationDate, totalServices, customerImagePath];
 
-          const fileForVehicle = vehicleImageFiles[i];
-          const imagePath = fileForVehicle ? `uploads/${fileForVehicle.filename}` : null;
-
-          return new Promise((resolve, reject) => {
-            connection.query(
-              insertVehicleQuery,
-              [customer_id, make, model, year, licensePlate, vin, color, mileage, imagePath],
-              (err) => err ? reject(err) : resolve()
-            );
-          });
-        });
-
-        Promise.all(vehicleInsertTasks)
-          .then(() => {
-            connection.commit(err => {
-              if (err) {
-                return connection.rollback(() => {
-                  connection.release();
-                  res.status(500).json({ message: 'Failed to commit transaction.' });
-                });
-              }
-
+        connection.query(insertCustomerQuery, customerParams, (err) => {
+          if (err) {
+            return connection.rollback(() => {
               connection.release();
-              res.status(201).json({
-                message: 'Customer and vehicles registered successfully.',
-                customer_id,
-                customerImage: customerImagePath ? `${IMAGE_BASE_URL}/${encode(customerImagePath)}` : null
+              console.error('Insert customer error:', err);
+              res.status(500).json({ message: 'Failed to insert customer.' });
+            });
+          }
+
+          const insertVehicleQuery = `
+            INSERT INTO vehicles
+            (customer_id, make, model, year, license_plate, vin, color, current_mileage, image)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `;
+
+          const vehicleInsertTasks = vehiclesArr.map((vehicle, i) => {
+            const {
+              make, model, year = null, licensePlate = null,
+              vin = null, color = null, current_mileage = null
+            } = vehicle;
+
+            const fileForVehicle = vehicleImageFiles[i];
+            const imagePath = fileForVehicle ? `uploads/${fileForVehicle.filename}` : null;
+
+            return new Promise((resolve, reject) => {
+              connection.query(
+                insertVehicleQuery,
+                [customer_id, make, model, year, licensePlate, vin, color, current_mileage, imagePath],
+                (err) => err ? reject(err) : resolve()
+              );
+            });
+          });
+
+          Promise.all(vehicleInsertTasks)
+            .then(() => {
+              connection.commit(err => {
+                if (err) {
+                  return connection.rollback(() => {
+                    connection.release();
+                    res.status(500).json({ message: 'Failed to commit transaction.' });
+                  });
+                }
+
+                connection.release();
+                res.status(201).json({
+                  message: 'Customer and vehicles registered successfully.',
+                  customer_id,
+                  customerImage: customerImagePath ? `${IMAGE_BASE_URL}/${encode(customerImagePath)}` : null
+                });
+              });
+            })
+            .catch(vehicleErr => {
+              connection.rollback(() => {
+                connection.release();
+                console.error('Insert vehicle error:', vehicleErr);
+                res.status(500).json({ message: 'Failed to insert vehicles.' });
               });
             });
-          })
-          .catch(vehicleErr => {
-            connection.rollback(() => {
-              connection.release();
-              console.error('Insert vehicle error:', vehicleErr);
-              res.status(500).json({ message: 'Failed to insert vehicles.' });
-            });
-          });
+        });
       });
     });
-  });
+  } catch (err) {
+    console.error('Password hashing error:', err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
 });
 
 // =============================
@@ -163,6 +176,7 @@ router.get('/fetch', (req, res) => {
       ic.notes,
       ic.registration_date,
       ic.total_services,
+      ic.loyalty_points,
       ic.image AS customer_image,
       v.id AS vehicle_id,
       v.make,
@@ -171,7 +185,7 @@ router.get('/fetch', (req, res) => {
       v.license_plate,
       v.vin,
       v.color,
-      v.mileage,
+      v.current_mileage,
       v.image AS vehicle_image
     FROM individual_customers ic
     LEFT JOIN vehicles v ON ic.customer_id = v.customer_id
@@ -190,6 +204,7 @@ router.get('/fetch', (req, res) => {
       cc.notes,
       cc.registration_date,
       cc.total_services,
+      cc.loyalty_points,
       cc.image AS customer_image,
       v.id AS vehicle_id,
       v.make,
@@ -198,7 +213,7 @@ router.get('/fetch', (req, res) => {
       v.license_plate,
       v.vin,
       v.color,
-      v.mileage,
+      v.current_mileage,
       v.image AS vehicle_image
     FROM company_customers cc
     LEFT JOIN vehicles v ON cc.customer_id = v.customer_id
@@ -218,8 +233,8 @@ router.get('/fetch', (req, res) => {
       const {
         customer_id, customerType, name, companyName, email, phone,
         emergency_contact, address, notes, registration_date, total_services,
-        customer_image, vehicle_id, make, model, year, license_plate,
-        vin, color, mileage, vehicle_image
+        loyalty_points, customer_image, vehicle_id, make, model, year,
+        license_plate, vin, color, current_mileage, vehicle_image
       } = row;
 
       if (!grouped[customer_id]) {
@@ -235,6 +250,7 @@ router.get('/fetch', (req, res) => {
           notes,
           registrationDate: registration_date,
           totalServices: total_services,
+          loyaltyPoints: loyalty_points,
           customerImage: customer_image ? `${IMAGE_BASE_URL}/${encode(customer_image)}` : null,
           vehicles: []
         };
@@ -249,7 +265,7 @@ router.get('/fetch', (req, res) => {
           licensePlate: license_plate,
           vin,
           color,
-          mileage,
+          current_mileage,
           imageUrl: vehicle_image ? `${IMAGE_BASE_URL}/${encode(vehicle_image)}` : null
         });
       }
@@ -258,6 +274,7 @@ router.get('/fetch', (req, res) => {
     res.json(Object.values(grouped));
   });
 });
+
 
 // =============================
 // ADD VEHICLES TO EXISTING CUSTOMER
@@ -286,7 +303,7 @@ router.post('/add-vehicles', upload.array('images'), (req, res) => {
   const insertValues = vehicles.map((vehicle, index) => {
     const imageFile = req.files?.[index];
     const year = vehicle.year ? parseInt(vehicle.year, 10) : null;
-    const mileage = vehicle.mileage ? parseInt(vehicle.mileage, 10) : null;
+    const current_mileage = vehicle.current_mileage ? parseInt(vehicle.current_mileage, 10) : null;
 
     return [
       customerId,
@@ -296,14 +313,14 @@ router.post('/add-vehicles', upload.array('images'), (req, res) => {
       vehicle.licensePlate || null,
       vehicle.vin || null,
       vehicle.color || null,
-      mileage,
+      current_mileage,
       imageFile ? `uploads/${imageFile.filename}` : null
     ];
   });
 
   const query = `
     INSERT INTO vehicles 
-    (customer_id, make, model, year, license_plate, vin, color, mileage, image) 
+    (customer_id, make, model, year, license_plate, vin, color, current_mileage, image) 
     VALUES ?
   `;
 

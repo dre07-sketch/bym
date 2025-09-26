@@ -43,7 +43,7 @@ class Mechanic extends React.Component {
   }
 
   fetchMechanics = () => {
-    fetch('http://localhost:5001/api/mechanic/mechanics-fetch')
+    fetch('https://ipasystem.bymsystem.com/api/mechanic/mechanics-fetch')
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch mechanics');
         return res.json();
@@ -58,7 +58,7 @@ class Mechanic extends React.Component {
           rating: parseFloat((4.5 + Math.random() * 0.5).toFixed(1)),
           completedJobs: 0,
           avatar: mech.image_url
-            ? `http://localhost:5001/uploads/${encodeURIComponent(mech.image_url)}`
+            ? `https://ipasystem.bymsystem.com/uploads/${encodeURIComponent(mech.image_url)}`
             : 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=150',
           availability: mech.mechanic_status === 'available'
             ? 'Available'
@@ -79,7 +79,7 @@ class Mechanic extends React.Component {
           try {
             // 1. Fetch Current Assignments: status = 'in progress', 'ready for inspection'
             const currentRes = await fetch(
-              `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/tickets`
+              `https://ipasystem.bymsystem.com/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/tickets`
             );
             const currentTickets = currentRes.ok ? await currentRes.json() : [];
             const formattedCurrent = currentTickets.map((ticket) => ({
@@ -110,7 +110,7 @@ class Mechanic extends React.Component {
             
             // 2. Fetch Work History: status = 'awaiting inspection', 'ready for inspection', etc.
             const historyRes = await fetch(
-              `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/tickets-history`
+              `https://ipasystem.bymsystem.com/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/tickets-history`
             );
             const historyTickets = historyRes.ok ? await historyRes.json() : [];
             const formattedHistory = historyTickets.map((ticket) => ({
@@ -144,7 +144,7 @@ class Mechanic extends React.Component {
             let completedJobs = 0;
             try {
               const countRes = await fetch(
-                `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/awaiting-bill-count`
+                `https://ipasystem.bymsystem.com/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/awaiting-bill-count`
               );
               if (countRes.ok) {
                 const countData = await countRes.json();
@@ -238,6 +238,23 @@ class Mechanic extends React.Component {
   handleCloseTicketModal = (e) => {
     e.stopPropagation();
     this.setState({ selectedTicket: null });
+  };
+
+  // Helper function to format checklist labels
+  formatChecklistLabel = (key) => {
+    const labels = {
+      oilLeaks: "Oil Leaks",
+      engineAirFilterOilCoolant: "Engine Air Filter, Oil & Coolant Level",
+      brakeFluidLevels: "Brake Fluid Levels",
+      glutenFluidLevels: "Clutch Fluid Levels",
+      batteryTimingBelt: "Battery & Timing Belt",
+      tire: "Tire Condition",
+      tirePressureRotation: "Tire Pressure & Rotation",
+      lightsWiperHorn: "Lights, Wiper & Horn",
+      doorLocksCentralLocks: "Door Locks & Central Locks",
+      customerWorkOrderReceptionBook: "Customer Work Order Reception Book"
+    };
+    return labels[key] || key;
   };
 
   // --- MODALS ---
@@ -580,19 +597,70 @@ class Mechanic extends React.Component {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-semibold mb-4">Inspection Records</h4>
                 {selectedTicket.inspections && selectedTicket.inspections.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     {selectedTicket.inspections.map((insp, idx) => (
                       <div key={idx} className="border-l-4 border-green-400 pl-4 py-2 bg-white rounded shadow-sm">
-                        <p className="text-sm font-medium">
-                          {insp.inspection_date || insp.created_at 
-                            ? new Date(insp.inspection_date || insp.created_at).toLocaleString() 
-                            : 'N/A'}
-                        </p>
-                        <p><strong>Status:</strong> {insp.inspection_status || 'N/A'}</p>
-                        <p><strong>Main Issue Resolved:</strong> {insp.main_issue_resolved ? 'Yes' : 'No'}</p>
-                        <p><strong>Reassembly Verified:</strong> {insp.reassembly_verified ? 'Yes' : 'No'}</p>
-                        <p><strong>Condition:</strong> {insp.general_condition || 'N/A'}</p>
-                        {insp.notes && <p><strong>Notes:</strong> {insp.notes}</p>}
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <p className="text-sm font-medium">
+                              {insp.inspection_date || insp.created_at 
+                                ? new Date(insp.inspection_date || insp.created_at).toLocaleString() 
+                                : 'N/A'}
+                            </p>
+                            <p><strong>Status:</strong> {insp.inspection_status || 'N/A'}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              insp.main_issue_resolved === 'Yes' ? 'bg-green-100 text-green-800' : 
+                              insp.main_issue_resolved === 'No' ? 'bg-red-100 text-red-800' : 
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              Main Issue: {insp.main_issue_resolved || 'Not specified'}
+                            </span>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              insp.reassembly_verified === 'Yes' ? 'bg-green-100 text-green-800' : 
+                              insp.reassembly_verified === 'No' ? 'bg-red-100 text-red-800' : 
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              Reassembly: {insp.reassembly_verified || 'Not specified'}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Inspection Checklist */}
+                        <div className="mb-4">
+                          <h5 className="font-medium mb-3">Inspection Checklist</h5>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {Object.entries(insp.checklist || {}).map(([key, value]) => (
+                              <div key={key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <span className="font-medium text-gray-700">{this.formatChecklistLabel(key)}</span>
+                                {value === 'Yes' ? (
+                                  <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-bold flex items-center">
+                                    <span className="mr-1">√</span> Yes
+                                  </span>
+                                ) : value === 'No' ? (
+                                  <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-bold flex items-center">
+                                    <span className="mr-1">×</span> No
+                                  </span>
+                                ) : (
+                                  <span className="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm">N/A</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        {/* Additional Info */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                          <div>
+                            <p className="text-sm font-medium">General Condition</p>
+                            <p className="text-gray-700">{insp.general_condition || 'Not specified'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">Inspector Notes</p>
+                            <p className="text-gray-700">{insp.notes || 'No notes provided'}</p>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -747,9 +815,6 @@ class Mechanic extends React.Component {
                     <p className="text-gray-500">No tool assignments recorded.</p>
                   )}
                 </div>
-                
-                {/* Outsource Stock */}
-             
               </div>
             )}
           </div>
@@ -936,8 +1001,7 @@ class Mechanic extends React.Component {
                     <h2 className="text-2xl font-bold">{selectedMechanic.name}</h2>
                     <p className="text-blue-100">{selectedMechanic.specialty}</p>
                     <div className="flex items-center mt-2">
-                   
-                    
+                      <Star className="text-yellow-400 mr-1" size={16} fill="currentColor" />
                       <span className="text-blue-100">{selectedMechanic.experience}</span>
                     </div>
                   </div>

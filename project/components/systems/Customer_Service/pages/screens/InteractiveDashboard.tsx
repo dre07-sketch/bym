@@ -79,7 +79,7 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
   const [appointments, setAppointments] = useState<RawAppointment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // --- ✅ Allowed Statuses (updated with 'assigned' and 'awaiting bill') ---
+  // --- Allowed Statuses (updated with both payment statuses) ---
   const validStatuses = [
     'pending',
     'assigned',
@@ -89,32 +89,38 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
     'successful inspection',
     'inspection failed',
     'awaiting bill',
+    'payment requested', 
+    'request payment', // Added this status
     'completed'
   ];
 
-  // --- ✅ Enhanced: Status Color Mapping ---
+  // --- Enhanced: Status Color Mapping ---
   const getStatusColorForChart = (status: string | undefined): string => {
     if (!status) return '#9ca3af'; // Gray
 
     const normalized = status.toLowerCase().trim();
 
     const colorMap: Record<string, string> = {
-      'pending': '#6b7280',               // Gray
-      'assigned': '#8b5cf6',              // Purple
-      'in progress': '#f59e0b',           // Amber
-      'ready for inspection': '#06b6d4',  // Cyan
-      'inspection': '#3b82f6',            // Blue
-      'successful inspection': '#10b981', // Emerald
-      'inspection failed': '#ef4444',     // Red
-      'awaiting bill': '#f97316',         // Orange
-      'completed': '#22c55e',             // Green
-      'other': '#9ca3af'                  // Fallback
+     'pending': '#6b7280',               // Gray
+  'assigned': '#8b5cf6',              // Purple
+  'in progress': '#f59e0b',           // Amber
+  'ready for inspection': '#06b6d4',  // Cyan
+  'inspection': '#3b82f6',            // Blue
+  'successful inspection': '#10b981', // Emerald
+  'inspection failed': '#dda15e',     // Red
+  'awaiting bill': '#f97316',         // Orange
+  'awaiting survey': '#14b8a6',       // Teal
+  'awaiting salvage form': '#eab308', // Yellow
+  'payment requested': '#d946ef',     // Pink-Purple
+  'request payment': '#ec4899',       // Pink
+  'completed': '#22c55e',             // Green
+  'other': '#9333ea'                   // Fallback
     };
 
     return colorMap[normalized] || colorMap.other;
   };
 
-  // --- ✅ Normalize Status Names (handle variations) ---
+  // --- Normalize Status Names (handle variations) ---
   const normalizeStatus = (status: string): string => {
     const lower = status.toLowerCase().trim();
 
@@ -124,6 +130,8 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
     if (['failed', 'inspection_failed'].includes(lower)) return 'inspection failed';
     if (['done', 'closed', 'finished'].includes(lower)) return 'completed';
     if (['awaiting-bill', 'awaiting_bill', 'waiting for bill'].includes(lower)) return 'awaiting bill';
+    if (['payment requested', 'payment_requested', 'paymentrequested'].includes(lower)) return 'payment requested';
+    if (['request payment', 'request_payment', 'requestpayment'].includes(lower)) return 'request payment'; // Added this
     if (lower === 'assigned') return 'assigned';
 
     return validStatuses.includes(lower) ? lower : 'other';
@@ -137,7 +145,7 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
 
         // Active Tickets
         try {
-          const activeRes = await fetch('http://localhost:5001/api/ticket-stats/active-tickets');
+          const activeRes = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/active-tickets');
           if (activeRes.ok) {
             const data = await activeRes.json();
             setActiveTickets(typeof data.activeTickets === 'number' ? data.activeTickets : 0);
@@ -148,7 +156,7 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
 
         // SOS Pending
         try {
-          const sosRes = await fetch('http://localhost:5001/api/ticket-stats/sos');
+          const sosRes = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/sos');
           if (sosRes.ok) {
             const data = await sosRes.json();
             setSosPending(typeof data.pending === 'number' ? data.pending : 0);
@@ -159,22 +167,27 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
 
         // Status Distribution
         try {
-          const statusRes = await fetch('http://localhost:5001/api/ticket-stats/status-distribution');
+          const statusRes = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/status-distribution');
           if (statusRes.ok) {
             const data = await statusRes.json();
 
             if (Array.isArray(data.distribution)) {
               const processed = data.distribution
-                .filter((item: any): item is RawStatusData => item && typeof item === 'object')
-                .filter(item => typeof item.status === 'string')
-                .reduce<Record<string, number>>((acc, item) => {
-                  const normalized = normalizeStatus(item.status);
-                  acc[normalized] = (acc[normalized] || 0) + (typeof item.count === 'number' ? item.count : 0);
+                .filter((item: unknown): item is RawStatusData => {
+                  if (!item || typeof item !== 'object') return false;
+                  const obj = item as RawStatusData;
+                  return typeof obj.status === 'string';
+                })
+                .reduce((acc: Record<string, number>, item: RawStatusData) => {
+                  if (item.status) {
+                    const normalized = normalizeStatus(item.status);
+                    acc[normalized] = (acc[normalized] || 0) + (typeof item.count === 'number' ? item.count : 0);
+                  }
                   return acc;
-                }, {});
+                }, {} as Record<string, number>);
 
               const result = Object.entries(processed)
-                .map(([status, count]) => {
+                .map(([status, count]): StatusDataItem => {
                   let displayName = status;
                   if (status !== 'other') {
                     displayName = status
@@ -186,7 +199,7 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
                   }
                   return {
                     name: displayName,
-                    value: count,
+                    value: count as number,
                     color: getStatusColorForChart(status)
                   };
                 });
@@ -205,7 +218,7 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
 
         // Ticket Trends
         try {
-          const trendsRes = await fetch('http://localhost:5001/api/ticket-stats/weekly-ticket-counts');
+          const trendsRes = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/weekly-ticket-counts');
           if (trendsRes.ok) {
             const rawData: RawTicketTrend[] = await trendsRes.json();
 
@@ -241,7 +254,7 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
 
         // Upcoming Appointments
         try {
-          const apptRes = await fetch('http://localhost:5001/api/ticket-stats/upcoming-appointments');
+          const apptRes = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/upcoming-appointments');
           if (apptRes.ok) {
             const rawData: RawAppointment[] = await apptRes.json();
             const formatted = rawData.map(appt => ({

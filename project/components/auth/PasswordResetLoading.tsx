@@ -1,52 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Mail, Shield, Clock, CheckCircle, Loader2, Eye, Lock, Zap, ArrowRight } from 'lucide-react';
+import { Mail, CheckCircle, ArrowRight } from 'lucide-react';
 
 interface PasswordResetLoadingProps {
   onComplete: () => void;
 }
 
 const PasswordResetLoading: React.FC<PasswordResetLoadingProps> = ({ onComplete }) => {
-  const [currentStep, setCurrentStep] = useState(0);
   const [pulseIntensity, setPulseIntensity] = useState(1);
-  const [progress, setProgress] = useState(0);
-
-  const steps = [
-    { icon: Mail, text: "Sending reset email...", color: "text-blue-400", bgColor: "from-blue-500/20 to-blue-600/20" },
-    { icon: Shield, text: "Verifying security protocols...", color: "text-purple-400", bgColor: "from-purple-500/20 to-purple-600/20" },
-    { icon: Lock, text: "Encrypting secure token...", color: "text-indigo-400", bgColor: "from-indigo-500/20 to-indigo-600/20" },
-    { icon: Eye, text: "Validating permissions...", color: "text-cyan-400", bgColor: "from-cyan-500/20 to-cyan-600/20" },
-    { icon: Zap, text: "Finalizing request...", color: "text-emerald-400", bgColor: "from-emerald-500/20 to-emerald-600/20" },
-    { icon: CheckCircle, text: "Email sent successfully!", color: "text-green-400", bgColor: "from-green-500/20 to-green-600/20" }
-  ];
-
-  useEffect(() => {
-    const stepInterval = setInterval(() => {
-      setCurrentStep(prev => {
-        const nextStep = prev + 1;
-        if (nextStep >= steps.length) {
-          clearInterval(stepInterval);
-          setTimeout(() => onComplete(), 2000);
-          return prev;
-        }
-        return nextStep;
-      });
-    }, 2000);
-
-    return () => clearInterval(stepInterval);
-  }, [onComplete]);
-
-  useEffect(() => {
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        const newProgress = Math.min(prev + 2, (currentStep + 1) * (100 / steps.length));
-        return newProgress;
-      });
-    }, 100);
-
-    return () => clearInterval(progressInterval);
-  }, [currentStep]);
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
     const pulseInterval = setInterval(() => {
@@ -55,6 +18,21 @@ const PasswordResetLoading: React.FC<PasswordResetLoadingProps> = ({ onComplete 
 
     return () => clearInterval(pulseInterval);
   }, []);
+
+  useEffect(() => {
+    // Start redirecting after a short delay
+    const redirectTimer = setTimeout(() => {
+      setRedirecting(true);
+      // Then navigate to login page after another delay
+      const navigateTimer = setTimeout(() => {
+        onComplete();
+      }, 1500);
+      
+      return () => clearTimeout(navigateTimer);
+    }, 1500);
+
+    return () => clearTimeout(redirectTimer);
+  }, [onComplete]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
@@ -88,7 +66,7 @@ const PasswordResetLoading: React.FC<PasswordResetLoadingProps> = ({ onComplete 
         <div className="bg-white/5 backdrop-blur-2xl rounded-3xl p-8 shadow-2xl border border-white/10 relative overflow-hidden">
           
           {/* Animated Background Gradient */}
-          <div className={`absolute inset-0 bg-gradient-to-b ${steps[currentStep]?.bgColor} opacity-50 transition-all duration-1000`}></div>
+          <div className={`absolute inset-0 bg-gradient-to-b from-blue-500/20 to-purple-600/20 opacity-50 transition-all duration-1000`}></div>
           
           {/* Header */}
           <div className="text-center mb-8 relative z-10">
@@ -98,69 +76,26 @@ const PasswordResetLoading: React.FC<PasswordResetLoadingProps> = ({ onComplete 
                 style={{ transform: `scale(${pulseIntensity})` }}
               ></div>
               <div className="absolute inset-1 bg-slate-900/80 rounded-full flex items-center justify-center backdrop-blur-sm">
-                {React.createElement(steps[currentStep]?.icon || Mail, {
-                  className: `w-10 h-10 ${steps[currentStep]?.color || 'text-blue-400'} transition-all duration-500`
-                })}
+                <Mail className="w-10 h-10 text-blue-400 transition-all duration-500" />
               </div>
             </div>
             
             <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">
-              Processing Request
+              Password Reset
             </h1>
             <p className="text-blue-200 text-lg font-light">
-              Please wait while we send your reset link
+              You have requested for a password change
             </p>
           </div>
 
-          {/* Progress Bar */}
-          <div className="mb-8 relative z-10">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-white/70">Progress</span>
-              <span className="text-sm text-white font-medium">{Math.round(progress)}%</span>
-            </div>
-            <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-300 ease-out"
-                style={{ width: `${progress}%` }}
-              ></div>
-            </div>
-          </div>
-
-          {/* Current Step Display */}
+          {/* Message Display */}
           <div className="text-center mb-8 relative z-10">
             <div className="flex items-center justify-center space-x-3 p-4 bg-white/5 rounded-xl backdrop-blur-sm border border-white/10">
-              {React.createElement(steps[currentStep]?.icon || Loader2, {
-                className: `w-6 h-6 ${steps[currentStep]?.color || 'text-blue-400'} ${currentStep < steps.length - 1 ? 'animate-spin' : 'animate-pulse'}`
-              })}
+              <Mail className="w-6 h-6 text-blue-400 animate-pulse" />
               <span className="text-white font-medium">
-                {steps[currentStep]?.text || "Processing..."}
+                Check your email for reset instructions
               </span>
             </div>
-          </div>
-
-          {/* Steps Indicator */}
-          <div className="flex justify-center space-x-2 mb-8">
-            {steps.map((step, index) => (
-              <div
-                key={index}
-                className={`relative transition-all duration-700 ${
-                  index === currentStep ? 'scale-125' : 'scale-100'
-                }`}
-              >
-                <div
-                  className={`w-3 h-3 rounded-full transition-all duration-700 ${
-                    index === currentStep
-                      ? `bg-gradient-to-r from-blue-500 to-purple-600 shadow-lg`
-                      : index < currentStep
-                      ? 'bg-green-500'
-                      : 'bg-white/20'
-                  }`}
-                />
-                {index === currentStep && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full animate-ping opacity-75"></div>
-                )}
-              </div>
-            ))}
           </div>
 
           {/* Info Text */}
@@ -174,13 +109,21 @@ const PasswordResetLoading: React.FC<PasswordResetLoadingProps> = ({ onComplete 
               </p>
             </div>
             
-            {currentStep === steps.length - 1 && (
+            {redirecting && (
               <div className="flex items-center justify-center space-x-2 text-green-300 text-sm animate-fade-in">
                 <CheckCircle className="w-4 h-4" />
-                <span>Redirecting to reset page</span>
+                <span>Redirecting to login page</span>
                 <ArrowRight className="w-4 h-4 animate-pulse" />
               </div>
             )}
+            
+            {/* Manual navigation button */}
+            <button 
+              onClick={onComplete}
+              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-300"
+            >
+              Go to Login Now
+            </button>
           </div>
         </div>
       </div>

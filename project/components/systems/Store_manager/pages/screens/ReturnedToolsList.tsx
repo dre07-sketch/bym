@@ -48,7 +48,7 @@ const ReturnedToolsList: React.FC = () => {
   useEffect(() => {
     const fetchStats = async (): Promise<void> => {
       try {
-        const response = await fetch('http://localhost:5001/api/tools/stats');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/tools/stats');
         const data = await response.json();
         
         if (data.success) {
@@ -68,7 +68,7 @@ const ReturnedToolsList: React.FC = () => {
   useEffect(() => {
     const fetchReturnedTools = async (): Promise<void> => {
       try {
-        const response = await fetch('http://localhost:5001/api/tools/returned-tools');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/tools/returned-tools');
         const data = await response.json();
         
         if (Array.isArray(data)) {

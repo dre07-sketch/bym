@@ -41,9 +41,9 @@
       { id: 'purchase-orders', label: 'Purchase Orders', icon: ShoppingCart },
       { id: 'suppliers', label: 'Suppliers', icon: Truck },
       { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
-      { id: 'audit-logs', label: 'Audit Logs', icon: FileText },
-      { id: 'scanner', label: 'Mobile Scanner', icon: QrCode },
-      { id: 'users', label: 'User Management', icon: Users },
+      //{ id: 'audit-logs', label: 'Audit Logs', icon: FileText },
+      //{ id: 'scanner', label: 'Mobile Scanner', icon: QrCode },
+     // { id: 'users', label: 'User Management', icon: Users },
     ];
 
     const notifications = [

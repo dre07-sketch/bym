@@ -70,10 +70,15 @@ const CompletedReports = () => {
     customerWorkOrderReceptionBook: 'Customer Work Order & Reception Book'
   };
   
-  // Normalize checklist value to boolean - Updated to handle "Yes" and "No" strings
+  // Updated normalization function to handle any capitalization of Yes/No
   const normalizeChecklistValue = (value) => {
-    if (value === true || value === 1 || value === 'yes' || value === 'YES' || value === 'Yes') return true;
-    if (value === false || value === 0 || value === 'no' || value === 'NO' || value === 'No') return false;
+    if (typeof value === 'string') {
+      const lowerValue = value.toLowerCase().trim();
+      if (lowerValue === 'yes' || lowerValue === 'y') return true;
+      if (lowerValue === 'no' || lowerValue === 'n') return false;
+    }
+    if (value === true || value === 1) return true;
+    if (value === false || value === 0) return false;
     return null; // For unknown values
   };
   
@@ -90,7 +95,7 @@ const CompletedReports = () => {
     const controller = new AbortController();
     const fetchReports = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/inspection-endpoint/completed-with-parts', {
+        const response = await fetch('https://ipasystem.bymsystem.com/api/inspection-endpoint/completed-with-parts', {
           signal: controller.signal
         });
         if (!response.ok) throw new Error('Failed to fetch reports');
@@ -559,7 +564,7 @@ const CompletedReports = () => {
                 )}
               </div>
               
-              {/* New Inspection Checklist Section */}
+              {/* Updated Inspection Checklist Section */}
               <div className="border border-blue-100 rounded-lg p-4 bg-blue-50">
                 <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-blue-600" />
@@ -596,9 +601,15 @@ const CompletedReports = () => {
                         </div>
                         <div>
                           {normalizedValue === true ? (
-                            <Check className="w-5 h-5 text-green-600" />
+                            <div className="flex items-center gap-1">
+                              <Check className="w-5 h-5 text-green-600" />
+                              <span className="text-green-600 font-medium">Yes</span>
+                            </div>
                           ) : normalizedValue === false ? (
-                            <X className="w-5 h-5 text-red-600" />
+                            <div className="flex items-center gap-1">
+                              <X className="w-5 h-5 text-red-600" />
+                              <span className="text-red-600 font-medium">No</span>
+                            </div>
                           ) : (
                             <span className="text-gray-500 text-sm">N/A</span>
                           )}

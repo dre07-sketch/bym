@@ -32,6 +32,9 @@ const communicationRoutes = require('./routes/communication-center/communication
 const communicationstatsRoutes = require('./routes/communication-center/stats.js'); // Importing communication analytics routes
 const marketingRoutes = require('./routes/marketing-management-system/marketing-activity.js'); // Importing marketing routes
 const insuranceRoutes = require('./routes/reception/insurance'); // Importing insurance routes
+const purchaseOrdersRoutes = require('./routes/manager-folder/purchaseOrders'); // Importing purchase orders routes
+const loginRoutes = require('./routes/auth/login'); // Importing login routesW
+const resetPasswordRoutes = require('./routes/auth/reset-password'); // Importing reset password routes
 
 
 app.use(express.json());
@@ -41,6 +44,10 @@ app.use(cors({
   origin: 'http://localhost:3000'  // or whatever your React dev server runs on
 }));
 
+
+//-------------auth--------------
+app.use('/api/auth', loginRoutes);
+app.use('/api/auth-rest', resetPasswordRoutes);
 
 //-------------customer--------------
 app.use('/api/customers', customerRoutes);
@@ -126,10 +133,13 @@ app.use('/api/communication-center', communicationRoutes);
 app.use('/api/communication-stats', communicationstatsRoutes);
 
 //----------------marketing management system----------------
-app.use('/api/marketing', marketingRoutes);
+app.use('/api/marketing-activities', marketingRoutes);
 
 //----------------insurance----------------
 app.use('/api/insurance', insuranceRoutes);
+
+//----------------purchase orders----------------
+app.use('/api/purchase-orders', purchaseOrdersRoutes);
 
 
 

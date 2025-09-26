@@ -86,7 +86,7 @@ router.get('/vehicles/:customerId', (req, res) => {
       license_plate,
       vin,
       color,
-      mileage,
+      current_mileage,
       
       customer_id AS customerId
     FROM vehicles
@@ -168,7 +168,7 @@ router.get('/getappointment', (req, res) => {
       v.license_plate AS licensePlate,
       v.vin,
       v.color,
-      v.mileage,
+      v.current_mileage,
       a.appointment_date AS appointmentDate,
       a.appointment_time AS appointmentTime,
       a.service_type AS serviceType,

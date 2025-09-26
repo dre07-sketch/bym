@@ -99,7 +99,7 @@ const ToolRequests = () => {
   const fetchStats = async () => {
     setStatsLoading(true);
     try {
-      const res = await fetch('http://localhost:5001/api/tools/stats');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/stats');
       if (!res.ok) throw new Error('Failed to fetch dashboard stats');
       const result = await res.json();
       if (!result.success) {
@@ -123,11 +123,11 @@ const ToolRequests = () => {
   const fetchTickets = async () => {
     setLoadingTickets(true);
     try {
-      const res = await fetch('http://localhost:5001/api/tickets/service_tickets');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tickets/service_tickets');
       if (!res.ok) throw new Error('Failed to fetch tickets');
       const data: ServiceTicket[] = await res.json();
       const inProgress = data.filter(t =>
-        ['in-progress', 'in progress', 'In Progress', 'assigned', 'pending'].includes(t.status)
+        ['in-progress', 'in progress', 'In Progress', 'assigned', ].includes(t.status)
       );
       setTickets(inProgress);
     } catch (err) {
@@ -140,7 +140,7 @@ const ToolRequests = () => {
   const fetchTools = async () => {
     setLoadingTools(true);
     try {
-      const res = await fetch('http://localhost:5001/api/tools/tools-get');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/tools-get');
       if (!res.ok) throw new Error('Failed to fetch tools');
       const data = await res.json();
       setTools((data.data || []).map((tool: any) => ({
@@ -157,7 +157,7 @@ const ToolRequests = () => {
 
   const fetchAssignedTools = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/tools/assigned');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assigned');
       const data = await res.json();
       setAssignedList(data.data || []);
     } catch (err) {
@@ -167,7 +167,7 @@ const ToolRequests = () => {
 
   const fetchActiveAssignments = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/tools/assigned');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assigned');
       const data = await res.json();
       setActiveAssignments(data.data || []);
     } catch (err) {
@@ -184,7 +184,7 @@ const ToolRequests = () => {
     const confirm = window.confirm(`Return ${quantity} of this tool?`);
     if (!confirm) return;
     try {
-      const res = await fetch('http://localhost:5001/api/tools/return', {
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/return', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignmentId, toolID: toolId, quantity }),
@@ -247,7 +247,7 @@ const ToolRequests = () => {
     setAssigning(true);
     try {
       for (const { tool, qty } of assignedTools) {
-        const res = await fetch('http://localhost:5001/api/tools/assign', {
+        const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assign', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -18,7 +18,7 @@ interface Vehicle {
   license_plate: string;
   vin: string;
   color: string;
-  mileage: number;
+  current_mileage: number;
   vehicle_type: string;
   customerId: string;
   customerName: string;
@@ -84,7 +84,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/appointments/customers?type=${customerType}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/appointments/customers?type=${customerType}`);
       const data = await response.json();
       setCustomers(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -98,7 +98,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
   const fetchVehicles = async (customerId: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/app/vehicles/${customerId}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/app/vehicles/${customerId}`);
       const data = await response.json();
       setVehicles(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -171,7 +171,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
     e.preventDefault();
     setSubmitStatus('submitting');
     try {
-      const response = await fetch('http://localhost:5001/api/appointments', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/appointments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -602,7 +602,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
                           </div>
                           <div className="text-sm text-gray-500">
                             License: {vehicle.license_plate} | Color: {vehicle.color} | 
-                            Type: {vehicle.vehicle_type} | Mileage: {vehicle.mileage.toLocaleString()}
+                            Type: {vehicle.vehicle_type} | current_mileage: {vehicle.current_mileage.toLocaleString()}
                           </div>
                           <div className="text-xs text-gray-400">
                             VIN: {vehicle.vin}

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ChevronLeft, ChevronRight, LogOut, Sparkles, Zap, Activity, Star, Award, Palette,
   Cpu, Wifi, Battery, Bell, User, ChevronDown, Moon, Sun, Maximize, Minimize,
   Settings, Sliders, Command, CheckCircle2, Clock, AlertTriangle,  
-  Mail, Lock, Camera, X, Volume2, VolumeX, Monitor, Smartphone
+  Mail, X, Volume2, VolumeX, Monitor, Smartphone
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -17,6 +18,7 @@ interface NotificationItem {
 }
 
 interface UserInfo {
+  id: string; // Added ID field for API calls
   name: string;
   role: string;
   email: string;
@@ -40,7 +42,7 @@ interface SidebarHeaderProps {
   activeTab?: string;
   setActiveTab?: (tab: string) => void;
   onLogout?: () => void;
-  children?: React.ReactNode; // Add children prop for content
+  children?: React.ReactNode;
 }
 
 const SidebarHeader: React.FC<SidebarHeaderProps> = ({
@@ -74,18 +76,22 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
       type: 'warning'
     }
   ],
-  userInfo = {
-    name: 'Alex Johnson',
-    role: 'Senior Manager',
-    email: 'alex.johnson@company.com',
-    avatar: null,
-    status: 'online'
-  },
-  activeTab,
-  setActiveTab,
-  onLogout,
-  children // Accept children for content rendering
+  userInfo: propUserInfo,
+  activeTab: propActiveTab,
+  setActiveTab: propSetActiveTab,
+  onLogout: propOnLogout,
+  children
 }) => {
+  // Add state for user info fetching
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false); // Added saving state
+  const [saveSuccess, setSaveSuccess] = useState(false); // Added success state
+  const [saveError, setSaveError] = useState<string | null>(null); // Added error state
+  const router = useRouter();
+  
   // Sidebar states
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -97,19 +103,91 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [activeModalTab, setActiveModalTab] = useState<'profile' | 'security' | 'preferences'>('profile');
+  const [activeModalTab, setActiveModalTab] = useState<'profile' | 'preferences'>('profile');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notificationsList, setNotificationsList] = useState(notifications);
   const [formData, setFormData] = useState({
-    name: userInfo.name,
-    email: userInfo.email,
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
+    name: propUserInfo?.name || '',
+    email: propUserInfo?.email || ''
   });
   
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Add useEffect for fetching user info
+  useEffect(() => {
+    const fetchUser = async () => {
+      // If userInfo is provided via props, use that instead of fetching
+      if (propUserInfo) {
+        setUserInfo(propUserInfo);
+        setUserRole(propUserInfo.role);
+        setIsLoading(false);
+        return;
+      }
+
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      try {
+        const response = await fetch('https://ipasystem.bymsystem.com/api/auth/me', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch user data');
+        }
+
+        const { user } = await response.json();
+
+        // Set user role and info
+        setUserRole(user.role);
+        setUserInfo({
+          id: user.id, // Added ID field
+          name: user.full_name,
+          role: user.role,
+          email: user.email,
+          avatar: user.avatar || null,
+          status: user.status || 'online',
+        });
+
+        // Update form data with fetched user info
+        setFormData(prev => ({
+          ...prev,
+          name: user.full_name,
+          email: user.email
+        }));
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Fetch user error:', error);
+        router.push('/login');
+      }
+    };
+
+    fetchUser();
+  }, [router, propUserInfo]);
+
+  // Update form data when propUserInfo changes
+  useEffect(() => {
+    if (propUserInfo) {
+      setFormData(prev => ({
+        ...prev,
+        name: propUserInfo.name,
+        email: propUserInfo.email
+      }));
+    }
+  }, [propUserInfo]);
+
+  // Use prop values if provided, otherwise use internal state
+  const effectiveUserInfo = propUserInfo || userInfo;
+  const effectiveActiveTab = propActiveTab !== undefined ? propActiveTab : activeTab;
+  const effectiveSetActiveTab = propSetActiveTab || setActiveTab;
+  const effectiveOnLogout = propOnLogout || (() => {
+    localStorage.removeItem('authToken');
+    router.push('/login');
+  });
 
   // Effects
   useEffect(() => {
@@ -169,17 +247,6 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     }
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const markNotificationAsRead = (id: string) => {
     setNotificationsList(prev => 
       prev.map(notification => 
@@ -208,18 +275,114 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    // Clear any previous errors when user starts typing
+    if (saveError) setSaveError(null);
   };
 
-  const handleSaveProfile = () => {
-    console.log('Saving profile:', formData);
-    setShowUserMenu(false);
+  const handleSaveProfile = async () => {
+    if (!effectiveUserInfo || !effectiveUserInfo.id) {
+      setSaveError("User information is missing");
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+    
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/auth/employees/${effectiveUserInfo.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          full_name: formData.name,
+          email: formData.email,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update profile');
+      }
+
+      // Update local state with the new info
+      if (propUserInfo) {
+        // If using props, we can't update the prop directly
+        // We'll update the state userInfo if it exists
+        if (userInfo) {
+          setUserInfo(prev => prev ? {
+            ...prev,
+            name: formData.name,
+            email: formData.email,
+          } : null);
+        }
+      } else {
+        // We are using state, so update it
+        setUserInfo(prev => prev ? {
+          ...prev,
+          name: formData.name,
+          email: formData.email,
+        } : null);
+      }
+
+      setSaveSuccess(true);
+      // Hide success message after 3 seconds
+      setTimeout(() => setSaveSuccess(false), 3000);
+      
+      // Close the modal after a short delay
+      setTimeout(() => setShowUserMenu(false), 1500);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      setSaveError(error instanceof Error ? error.message : 'An unknown error occurred');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const closeAllModals = () => {
     setIsSettingsOpen(false);
     setIsNotificationOpen(false);
     setShowUserMenu(false);
+    setSaveError(null);
+    setSaveSuccess(false);
   };
+
+  // Show loading state while fetching user data
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-slate-600">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If no user info is available after loading
+  if (!effectiveUserInfo) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">No User Found</h2>
+          <p className="text-gray-600">Please log in again.</p>
+          <button
+            onClick={effectiveOnLogout}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -328,16 +491,16 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
               {navigation.map((item, index) => (
                 <li key={item.id} className="animate-slide-in" style={{ animationDelay: `${index * 0.08}s` }}>
                   <button
-                    onClick={() => setActiveTab?.(item.id)}
+                    onClick={() => effectiveSetActiveTab(item.id)}
                     className={`relative w-full group/nav flex items-center ${isCollapsed ? 'justify-center' : 'space-x-4'} p-4 rounded-xl transition-all duration-300 ${
-                      activeTab === item.id
+                      effectiveActiveTab === item.id
                         ? 'bg-gradient-to-r from-blue-600/40 to-purple-600/40 backdrop-blur-xl border border-blue-300/40 shadow-xl shadow-blue-500/30'
                         : 'hover:bg-blue-900/30 hover:backdrop-blur-xl hover:border hover:border-blue-200/25 hover:shadow-lg hover:shadow-blue-500/20'
                     }`}
                     title={isCollapsed ? item.label : ''}
                   >
                     {/* Enhanced active indicator */}
-                    {activeTab === item.id && (
+                    {effectiveActiveTab === item.id && (
                       <>
                         <div className="absolute inset-0 bg-gradient-to-r from-blue-400/30 to-purple-500/30 rounded-xl blur-xl animate-pulse"></div>
                         {!isCollapsed && (
@@ -349,11 +512,11 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                     <div className={`relative flex items-center ${isCollapsed ? '' : 'space-x-4 w-full'}`}>
                       <div className="relative">
                         <item.icon className={`w-6 h-6 flex-shrink-0 transition-all duration-300 group-hover/nav:scale-110 ${
-                          activeTab === item.id ? 'text-blue-200 drop-shadow-lg' : 'text-blue-300/80 group-hover/nav:text-blue-100'
+                          effectiveActiveTab === item.id ? 'text-blue-200 drop-shadow-lg' : 'text-blue-300/80 group-hover/nav:text-blue-100'
                         }`} style={{
-                          filter: activeTab === item.id ? 'drop-shadow(0 0 8px rgba(147, 197, 253, 0.6))' : ''
+                          filter: effectiveActiveTab === item.id ? 'drop-shadow(0 0 8px rgba(147, 197, 253, 0.6))' : ''
                         }} />
-                        {activeTab === item.id && (
+                        {effectiveActiveTab === item.id && (
                           <div className="absolute inset-0 bg-blue-300/60 rounded-lg blur-md animate-pulse"></div>
                         )}
                       </div>
@@ -361,12 +524,12 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                       {!isCollapsed && (
                         <>
                           <span className={`text-sm font-semibold truncate transition-all duration-300 ${
-                            activeTab === item.id ? 'text-white drop-shadow-sm' : 'text-blue-100/90 group-hover/nav:text-white'
+                            effectiveActiveTab === item.id ? 'text-white drop-shadow-sm' : 'text-blue-100/90 group-hover/nav:text-white'
                           }`}>
                             {item.label}
                           </span>
 
-                          {activeTab === item.id && (
+                          {effectiveActiveTab === item.id && (
                             <div className="ml-auto flex items-center space-x-2">
                               <div className="w-2 h-2 bg-gradient-to-r from-blue-300 to-purple-400 rounded-full animate-pulse shadow-lg shadow-blue-400/60"></div>
                               <Sparkles className="w-4 h-4 text-yellow-200 animate-pulse drop-shadow-lg" style={{
@@ -386,7 +549,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           {/* Enhanced Footer Section */}
           <div className="relative z-10 p-4 border-t border-blue-200/20">
             <button
-              onClick={onLogout}
+              onClick={effectiveOnLogout}
               className={`relative w-full group/logout flex items-center ${isCollapsed ? 'justify-center' : 'space-x-4'} p-4 rounded-xl transition-all duration-300 hover:bg-gradient-to-r hover:from-red-600/35 hover:to-red-700/35 hover:backdrop-blur-xl hover:border hover:border-red-300/40 hover:shadow-lg hover:shadow-red-500/25`}
             >
               <div className="absolute inset-0 bg-gradient-to-r from-red-400/30 to-red-500/30 rounded-xl opacity-0 group-hover/logout:opacity-100 transition-opacity duration-300 blur-lg"></div>
@@ -421,7 +584,9 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                   <h1 className="text-2xl md:text-3xl font-black bg-gradient-to-r from-white via-blue-100 to-indigo-100 bg-clip-text text-transparent">
                     {title}
                   </h1>
-                  <p className="text-slate-300 dark:text-slate-400 font-medium text-sm md:text-base">{subtitle}</p>
+                  <p className="text-slate-300 dark:text-slate-400 font-medium text-sm md:text-base">
+                    {subtitle} {effectiveUserInfo?.name ? `, ${effectiveUserInfo.name}` : ''}
+                  </p>
                 </div>
               </div>
 
@@ -497,17 +662,32 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                   >
                     <div className="relative">
                       <div className={`w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm ${
-                        userInfo.status === 'online' ? 'ring-2 ring-green-400' : ''
+                        effectiveUserInfo?.status === 'online' ? 'ring-2 ring-green-400' : ''
                       }`}>
-                        {userInfo.avatar ? (
-                          <img src={userInfo.avatar} alt={userInfo.name} className="w-full h-full rounded-full object-cover" />
+                        {effectiveUserInfo?.avatar ? (
+                          <img 
+                            src={effectiveUserInfo.avatar} 
+                            alt={effectiveUserInfo.name} 
+                            className="w-full h-full rounded-full object-cover"
+                            onError={(e) => {
+                              // Fallback to initial if image fails to load
+                              e.currentTarget.style.display = 'none';
+                              const parent = e.currentTarget.parentElement;
+                              if (parent) {
+                                const fallback = document.createElement('span');
+                                fallback.textContent = effectiveUserInfo?.name?.charAt(0).toUpperCase() || 'U';
+                                fallback.className = 'text-white font-semibold';
+                                parent.appendChild(fallback);
+                              }
+                            }}
+                          />
                         ) : (
-                          userInfo.name.charAt(0).toUpperCase()
+                          effectiveUserInfo?.name?.charAt(0).toUpperCase() || 'U'
                         )}
                       </div>
                       <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
-                        userInfo.status === 'online' ? 'bg-green-400' : 
-                        userInfo.status === 'away' ? 'bg-yellow-400' : 'bg-slate-400'
+                        effectiveUserInfo?.status === 'online' ? 'bg-green-400' : 
+                        effectiveUserInfo?.status === 'away' ? 'bg-yellow-400' : 'bg-slate-400'
                       }`}></div>
                     </div>
                     <ChevronDown className="w-3 h-3 text-blue-400 hidden md:block" />
@@ -519,14 +699,14 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
           {/* Content Area - This is where the children (dashboard content) will render */}
           <main className="flex-1 overflow-auto bg-transparent">
-            <div className="h-full w-full p-6">
+            <div className="h-full w-full">
               {children}
             </div>
           </main>
         </div>
       </div>
 
-      {/* FIXED: Modal Overlay and Modals - Now positioned relative to viewport, not layout container */}
+      {/* Modal Overlay and Modals */}
       {(isSettingsOpen || isNotificationOpen || showUserMenu) && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998]"
@@ -534,7 +714,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         />
       )}
 
-      {/* Settings Modal - FIXED: Now positioned relative to viewport */}
+      {/* Settings Modal */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
           <div 
@@ -606,7 +786,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         </div>
       )}
 
-      {/* Notifications Modal - FIXED: Now positioned relative to viewport */}
+      {/* Notifications Modal */}
       {isNotificationOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
           <div 
@@ -665,7 +845,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         </div>
       )}
 
-      {/* User Profile Modal - FIXED: Now positioned relative to viewport */}
+      {/* User Profile Modal */}
       {showUserMenu && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
           <div 
@@ -687,28 +867,28 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             {/* Profile Image */}
             <div className="flex justify-center mb-6">
               <div className="relative">
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-2xl shadow-lg">
-                  {previewImage ? (
-                    <img src={previewImage} alt="Profile" className="w-full h-full rounded-full object-cover" />
-                  ) : userInfo.avatar ? (
-                    <img src={userInfo.avatar} alt={userInfo.name} className="w-full h-full rounded-full object-cover" />
+                <div className="w-24 h-24 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-lg overflow-hidden">
+                  {effectiveUserInfo?.avatar ? (
+                    <img 
+                      src={effectiveUserInfo.avatar} 
+                      alt={effectiveUserInfo.name} 
+                      className="w-full h-full rounded-full object-cover"
+                      onError={(e) => {
+                        // Fallback to initial if image fails to load
+                        e.currentTarget.style.display = 'none';
+                        const parent = e.currentTarget.parentElement;
+                        if (parent) {
+                          const fallback = document.createElement('span');
+                          fallback.textContent = effectiveUserInfo?.name?.charAt(0).toUpperCase() || 'U';
+                          fallback.className = 'text-white font-bold text-2xl';
+                          parent.appendChild(fallback);
+                        }
+                      }}
+                    />
                   ) : (
-                    userInfo.name.charAt(0).toUpperCase()
+                    effectiveUserInfo?.name?.charAt(0).toUpperCase() || 'U'
                   )}
                 </div>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full transition-colors shadow-lg"
-                >
-                  <Camera className="w-4 h-4" />
-                </button>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleImageChange}
-                  className="hidden"
-                  accept="image/*"
-                />
               </div>
             </div>
 
@@ -716,7 +896,6 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             <div className="flex space-x-1 mb-6 bg-slate-100 dark:bg-slate-700 rounded-xl p-1">
               {[
                 { id: 'profile', label: 'Profile', icon: User },
-                { id: 'security', label: 'Security', icon: Lock },
                 { id: 'preferences', label: 'Preferences', icon: Settings }
               ].map((tab) => (
                 <button
@@ -763,44 +942,6 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                 </>
               )}
 
-              {activeModalTab === 'security' && (
-                <>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                    <input
-                      type="password"
-                      name="currentPassword"
-                      value={formData.currentPassword}
-                      onChange={handleInputChange}
-                      placeholder="Current Password"
-                      className="w-full pl-12 pr-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    />
-                  </div>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                    <input
-                      type="password"
-                      name="newPassword"
-                      value={formData.newPassword}
-                      onChange={handleInputChange}
-                      placeholder="New Password"
-                      className="w-full pl-12 pr-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    />
-                  </div>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                    <input
-                      type="password"
-                      name="confirmPassword"
-                      value={formData.confirmPassword}
-                      onChange={handleInputChange}
-                      placeholder="Confirm New Password"
-                      className="w-full pl-12 pr-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    />
-                  </div>
-                </>
-              )}
-
               {activeModalTab === 'preferences' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700 rounded-xl">
@@ -832,13 +973,37 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
               )}
             </div>
 
+            {/* Status Messages */}
+            {saveSuccess && (
+              <div className="mb-4 p-3 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg flex items-center space-x-2">
+                <CheckCircle2 className="w-5 h-5" />
+                <span>Profile updated successfully!</span>
+              </div>
+            )}
+            
+            {saveError && (
+              <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg flex items-center space-x-2">
+                <AlertTriangle className="w-5 h-5" />
+                <span>{saveError}</span>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex space-x-3">
               <Button 
                 onClick={handleSaveProfile}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-medium transition-all transform hover:scale-105 shadow-lg"
+                disabled={isSaving}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-medium transition-all transform hover:scale-105 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                Save Changes
+                {isSaving ? (
+                  <span className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </span>
+                ) : 'Save Changes'}
               </Button>
               <Button 
                 onClick={() => setShowUserMenu(false)}
