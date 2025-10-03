@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Plus,
   ChevronDown,
+  Edit,
 } from 'lucide-react';
 // === Types ===
 type OutsourceStockStatus = 'awaiting_request' | 'requested' | 'received' | 'cancelled';
@@ -70,6 +71,12 @@ const OutsourceStocksPage = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // New state for price update modal
+  const [selectedItem, setSelectedItem] = useState<OutsourceStock | null>(null);
+  const [newPrice, setNewPrice] = useState<string>('');
+  const [updatingPrice, setUpdatingPrice] = useState<boolean>(false);
+  
   // Fetch data from backend
   useEffect(() => {
     const fetchStocks = async () => {
@@ -125,6 +132,7 @@ const OutsourceStocksPage = () => {
     };
     fetchStocks();
   }, []);
+  
   // Compute stats
   const stats = {
     total: stocks.length,
@@ -133,6 +141,7 @@ const OutsourceStocksPage = () => {
     received: stocks.filter(s => s.status === 'received').length,
     cancelled: stocks.filter(s => s.status === 'cancelled').length,
   };
+  
   // Filtered list
   const filteredStocks = stocks.filter((item) => {
     const matchesSearch =
@@ -144,6 +153,7 @@ const OutsourceStocksPage = () => {
       filterStatus === 'all' || item.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
+  
   // Handle status change
   const handleStatusChange = async (id: string, newStatus: OutsourceStockStatus) => {
     // Optimistic UI update
@@ -191,6 +201,73 @@ const OutsourceStocksPage = () => {
       );
     }
   };
+  
+  // Open price update modal
+  const openPriceModal = (item: OutsourceStock) => {
+    setSelectedItem(item);
+    // Pre-fill with current price without the dollar sign
+    setNewPrice(item.unitPrice.replace('$', ''));
+  };
+  
+  // Close price update modal
+  const closePriceModal = () => {
+    setSelectedItem(null);
+    setNewPrice('');
+  };
+  
+  // Handle price update
+  const handlePriceUpdate = async () => {
+    if (!selectedItem || !newPrice) return;
+    
+    const priceValue = parseFloat(newPrice);
+    if (isNaN(priceValue)) {
+      alert('Please enter a valid price');
+      return;
+    }
+    
+    setUpdatingPrice(true);
+    try {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/update-price/${selectedItem.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ price: priceValue }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update price');
+      }
+      
+      const result = await response.json();
+      if (result.success) {
+        // Update the local state with the new price and calculated total
+        setStocks(prevStocks => 
+          prevStocks.map(item => {
+            if (item.id === selectedItem.id) {
+              const updatedItem = { ...item };
+              updatedItem.unitPrice = `$${priceValue.toFixed(2)}`;
+              // Recalculate total amount
+              const totalAmount = priceValue * item.quantity;
+              updatedItem.totalAmount = `$${totalAmount.toFixed(2)}`;
+              return updatedItem;
+            }
+            return item;
+          })
+        );
+        closePriceModal();
+      } else {
+        throw new Error(result.message || 'Update failed');
+      }
+    } catch (err) {
+      console.error('Error updating price:', err);
+      alert(`Could not update price: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setUpdatingPrice(false);
+    }
+  };
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50/30 to-blue-100/30 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -370,7 +447,7 @@ const OutsourceStocksPage = () => {
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-sm font-medium text-gray-600">Unit Price:</span>
-                          <span className="text-sm text-gray-900">{item.unitPrice}</span>
+                          <span className="text-sm font-bold text-gray-900">{item.unitPrice}</span>
                         </div>
                       </div>
                       
@@ -400,6 +477,15 @@ const OutsourceStocksPage = () => {
                       </span>
                       
                       <div className="flex flex-wrap gap-2">
+                        {/* Price Update Button */}
+                        <button
+                          onClick={() => openPriceModal(item)}
+                          className="flex items-center gap-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-sm font-medium rounded-lg hover:shadow-lg transition-all duration-300"
+                        >
+                          <Edit className="w-4 h-4" />
+                          <span>Update Price</span>
+                        </button>
+                        
                         {item.status === 'awaiting_request' && (
                           <button
                             onClick={() => handleStatusChange(item.id, 'requested')}
@@ -433,6 +519,91 @@ const OutsourceStocksPage = () => {
           )}
         </div>
       </div>
+      
+      {/* Price Update Modal */}
+      {selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-900">Update Price</h3>
+              <button onClick={closePriceModal} className="text-gray-500 hover:text-gray-700">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="mb-6">
+              <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 rounded-lg">
+                <Package className="w-8 h-8 text-blue-600" />
+                <div>
+                  <h4 className="font-medium text-gray-900">{selectedItem.itemName}</h4>
+                  <p className="text-sm text-gray-600">{selectedItem.category} • SKU: {selectedItem.sku}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">Current Price</p>
+                  <p className="font-medium text-gray-900">{selectedItem.unitPrice}</p>
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">Quantity</p>
+                  <p className="font-medium text-gray-900">{selectedItem.quantity}</p>
+                </div>
+              </div>
+              
+              <div className="mb-4">
+                <label htmlFor="price-input" className="block text-sm font-medium text-gray-700 mb-1">
+                  New Price ($)
+                </label>
+                <input
+                  id="price-input"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newPrice}
+                  onChange={(e) => setNewPrice(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter new price"
+                />
+              </div>
+              
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-700">New Total Amount:</span>
+                  <span className="font-bold text-gray-900">
+                    ${newPrice && !isNaN(parseFloat(newPrice)) 
+                      ? (parseFloat(newPrice) * selectedItem.quantity).toFixed(2) 
+                      : '0.00'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={closePriceModal}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePriceUpdate}
+                disabled={updatingPrice}
+                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:shadow-lg transition-all duration-300 flex items-center gap-2 disabled:opacity-70"
+              >
+                {updatingPrice ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    <span>Updating...</span>
+                  </>
+                ) : (
+                  <span>Update Price</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

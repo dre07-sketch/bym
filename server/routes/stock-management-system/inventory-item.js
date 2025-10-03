@@ -624,41 +624,44 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
 
 
 // DELETE /api/inventory/items/:id
-router.delete('/items/:id', async (req, res) => {
+router.delete("/items/:id", (req, res) => {
   const { id } = req.params;
-  if (!id || isNaN(parseInt(id))) {
+
+  if (!id) {
     return res.status(400).json({
       success: false,
-      message: 'Invalid item ID'
+      message: "Item ID is required",
     });
   }
-  const itemId = parseInt(id);
 
-  try {
-    const [[item]] = await db.promise().execute(
-      'SELECT name FROM inventory_items WHERE id = ?', [itemId]
-    );
-    if (!item) {
-      return res.status(404).json({
+  const query = "DELETE FROM inventory_items WHERE id = ?";
+
+  db.query(query, [id], (err, result) => {
+    if (err) {
+      console.error("Error deleting item:", err);
+      return res.status(500).json({
         success: false,
-        message: 'Item not found'
+        message: "Database error",
       });
     }
 
-    await db.promise().execute('DELETE FROM inventory_items WHERE id = ?', [itemId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Item not found",
+      });
+    }
 
-    res.status(200).json({
+    res.json({
       success: true,
-      message: `Item "${item.name}" deleted successfully`
+      message: `Item with ID ${id} deleted successfully`,
     });
-  } catch (error) {
-    console.error('Error deleting item:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
+  });
 });
+
+
+
+
 
 // GET /api/inventory/top-moving
 router.get('/top-moving', async (req, res) => {
@@ -856,6 +859,60 @@ function getUserIdFromToken(req) {
   }
 }
 
+router.post('/purchase-orders', async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req); // 👈 get logged-in user id
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: No or invalid token' });
+    }
+
+    const { supplier, orderDate, expectedDate, totalAmount, itemCount, notes, priority, items } = req.body;
+
+    if (!supplier || !orderDate || !totalAmount || !itemCount || !items?.length) {
+      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    }
+
+    // generate PO number
+    const poNumber = `PO-${Date.now().toString().slice(-6)}`;
+
+    // insert purchase order
+    await db.promise().execute(
+      `INSERT INTO purchase_orders 
+        (po_number, supplier, status, order_date, expected_date, total_amount, item_count, created_by, notes, priority) 
+       VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+      [poNumber, supplier, orderDate, expectedDate, totalAmount, itemCount, userId, notes || '', priority || 'medium']
+    );
+
+    // insert items
+    for (const item of items) {
+      await db.promise().execute(
+        `INSERT INTO purchase_order_items (po_number, name, quantity, price)
+         VALUES (?, ?, ?, ?)`,
+        [poNumber, item.name, item.quantity, item.price]
+      );
+    }
+
+    // ✅ fetch the user's name from employees
+    const [[employee]] = await db.promise().execute(
+      `SELECT full_name FROM employees WHERE id = ?`,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Purchase order created successfully',
+      poNumber,
+      createdBy: {
+        id: userId,
+        full_name: employee ? employee.full_name : null
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error creating PO:', error);
+    res.status(500).json({ success: false, message: 'Failed to create purchase order' });
+  }
+});
+
 // GET all purchase orders
 router.get('/purchase-orders', async (req, res) => {
   try {
@@ -914,45 +971,7 @@ router.get('/purchase-orders', async (req, res) => {
 });
 
 // POST new purchase order
-router.post('/purchase-orders', async (req, res) => {
-  try {
-    const userId = getUserIdFromToken(req); // 👈 get logged-in user id
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Unauthorized: No or invalid token' });
-    }
 
-    const { supplier, orderDate, expectedDate, totalAmount, itemCount, notes, priority, items } = req.body;
-
-    if (!supplier || !orderDate || !totalAmount || !itemCount || !items?.length) {
-      return res.status(400).json({ success: false, message: 'Missing required fields' });
-    }
-
-    // generate PO number
-    const poNumber = `PO-${Date.now().toString().slice(-6)}`;
-
-    // insert purchase order
-    await db.promise().execute(
-      `INSERT INTO purchase_orders 
-        (po_number, supplier, status, order_date, expected_date, total_amount, item_count, created_by, notes, priority) 
-       VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
-      [poNumber, supplier, orderDate, expectedDate, totalAmount, itemCount, userId, notes || '', priority || 'medium']
-    );
-
-    // insert items
-    for (const item of items) {
-      await db.promise().execute(
-        `INSERT INTO purchase_order_items (po_number, name, quantity, price)
-         VALUES (?, ?, ?, ?)`,
-        [poNumber, item.name, item.quantity, item.price]
-      );
-    }
-
-    res.json({ success: true, message: 'Purchase order created successfully', poNumber });
-  } catch (error) {
-    console.error('❌ Error creating PO:', error);
-    res.status(500).json({ success: false, message: 'Failed to create purchase order' });
-  }
-});
 
 
 // PUT /api/inventory/purchase-orders/:poNumber - Update PO status

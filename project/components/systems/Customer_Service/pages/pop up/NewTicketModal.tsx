@@ -140,9 +140,12 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
     try {
       const response = await fetch(`https://ipasystem.bymsystem.com/api/tickets/customers?type=${formData.customerType}`);
       const data = await response.json();
-      setCustomers(data);
+      // Ensure data is always an array
+      const customersArray = Array.isArray(data) ? data : data?.data || [];
+      setCustomers(customersArray);
     } catch (error) {
       console.error('Error fetching customers:', error);
+      setCustomers([]);
     } finally {
       setLoading(false);
     }
@@ -153,9 +156,12 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
     try {
       const response = await fetch(`https://ipasystem.bymsystem.com/api/tickets/vehicles/${customerId}`);
       const data = await response.json();
-      setVehicles(data);
+      // Ensure data is always an array
+      const vehiclesArray = Array.isArray(data) ? data : data?.data || [];
+      setVehicles(vehiclesArray);
     } catch (error) {
       console.error('Error fetching vehicles:', error);
+      setVehicles([]);
     } finally {
       setLoading(false);
     }
@@ -275,12 +281,12 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
 Scheduled Date: ${formattedDate} at ${formattedTime}
 Duration: ${appointment.durationMinutes} minutes
 Service Type: ${appointment.serviceType}
-${appointment.mechanicPreference ? `Mechanic Preference: ${appointment.mechanicPreference}
+ ${appointment.mechanicPreference ? `Mechanic Preference: ${appointment.mechanicPreference}
 ` : ''}
-${appointment.serviceBay ? `Service Bay: ${appointment.serviceBay}
+ ${appointment.serviceBay ? `Service Bay: ${appointment.serviceBay}
 ` : ''}
 Customer: ${appointment.customerName}
-${appointment.notes ? `
+ ${appointment.notes ? `
 Notes: ${appointment.notes}` : ''}`,
       priority: 'medium',
       type: 'appointment',
@@ -949,6 +955,8 @@ Notes: ${appointment.notes}` : ''}`,
       </div>
     </div>
   );
+
+  
 };
 
 export default NewTicketModal;

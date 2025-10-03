@@ -68,7 +68,7 @@ const Render_Store_Manager: React.FC<Render_Store_ManagerDashboardProps> = ({ on
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <ToolDashboard onLogout={onLogout} userRole={userRole} />;
+      case 'dashboard': return <ToolDashboard />; // Removed props
       case 'requests': return <ToolRequests />;
       case 'inventory': return <InventoryManagement />;
       case 'assignments': return <AssignmentReturn />;
@@ -76,7 +76,7 @@ const Render_Store_Manager: React.FC<Render_Store_ManagerDashboardProps> = ({ on
       case 'damage-reports': return <DamageReportPage />;
       case 'reports': return <Reports />;
      
-      default: return <ToolDashboard onLogout={onLogout} userRole={userRole} />;
+      default: return <ToolDashboard />; // Removed props
     }
   };
 
@@ -86,7 +86,7 @@ const Render_Store_Manager: React.FC<Render_Store_ManagerDashboardProps> = ({ on
       subtitle="Manage tool inventory and assignments efficiently"
       sidebarTitle="Store Management"
       navigation={navigation}
-      notifications={notifications}
+    //  notifications={notifications}
       activeTab={activeTab}
       setActiveTab={setActiveTab}
       onLogout={onLogout}

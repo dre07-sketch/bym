@@ -417,23 +417,23 @@ const Employees = () => {
               </div>
               
               {/* Password Reset Section */}
-              <div className="border-t border-gray-200 pt-4">
+            {/*}  <div className="border-t border-gray-200 pt-4">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <Key className="text-purple-500" size={20} />
                   Password Reset
                 </h3>
                 
-                <button
+                 <button
                   onClick={() => openPasswordModal(selectedEmployee.id)}
                   className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full font-medium hover:from-purple-700 hover:to-blue-700 shadow-lg transition-all transform hover:scale-105 flex items-center gap-2"
                 >
                   <RefreshCw size={16} />
                   Reset Password
-                </button>
+                </button> 
                 <p className="text-gray-500 text-xs mt-3 italic">
                   Click to set a new password for this employee.
                 </p>
-              </div>
+              </div>*/}
               
               {/* Expertise */}
               {selectedEmployee.expertise && selectedEmployee.expertise.length > 0 && (

@@ -201,7 +201,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
       const fetchCustomers = async () => {
         setIsLoadingCustomers(true);
         try {
-          const response = await fetch('http://localhost:5001/api/customers/fetch');
+          const response = await fetch('https://ipasystem.bymsystem.com/api/customers/fetch');
           const data = await response.json();
           
           if (response.ok) {
@@ -227,7 +227,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
       const fetchCarModels = async () => {
         setIsLoadingCarModels(true);
         try {
-          const response = await fetch('http://localhost:5001/api/customers/car-models');
+          const response = await fetch('https://ipasystem.bymsystem.com/api/customers/car-models');
           const data = await response.json();
           
           if (response.ok) {
@@ -254,7 +254,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
       const fetchProformaDetails = async () => {
         setIsLoadingProformaDetails(true);
         try {
-          const response = await fetch(`http://localhost:5001/api/insurance/proformas/${selectedProforma.proforma_number}`);
+          const response = await fetch(`https://ipasystem.bymsystem.com/api/insurance/proformas/${selectedProforma.proforma_number}`);
           const data = await response.json();
           
           if (data.success) {
@@ -426,13 +426,13 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
         ? selectedCustomer.customerId.toString() 
         : Date.now().toString();
       // Convert images to base64 if they exist
-      let customerImageBase64 = null;
+      let customerImageBase64: string | null = null;
       if (customerImage) {
         customerImageBase64 = await fileToBase64(customerImage);
       }
       // Get the first vehicle
       const vehicle = vehicles[0];
-      let vehicleImageBase64 = null;
+      let vehicleImageBase64: string | null = null;
       if (vehicle.image) {
         vehicleImageBase64 = await fileToBase64(vehicle.image);
       }
@@ -492,7 +492,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
         requestBody.individual_image = customerImageBase64;
       }
       // Send the request
-      const response = await fetch('http://localhost:5001/api/tickets', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/tickets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

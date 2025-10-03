@@ -108,7 +108,8 @@ const ReturnedToolsList: React.FC = () => {
       // Update the latest returned date if this tool's date is later
       if (tool.returned_at && grouped[ticketNumber].latestReturnedDate) {
         const currentDate = new Date(tool.returned_at).getTime();
-        const currentLatest = new Date(grouped[ticketNumber].latestReturnedDate).getTime();
+        // Fixed: Add non-null assertion operator since we've already checked it's truthy
+        const currentLatest = new Date(grouped[ticketNumber].latestReturnedDate!).getTime();
         if (currentDate > currentLatest) {
           grouped[ticketNumber].latestReturnedDate = tool.returned_at;
         }

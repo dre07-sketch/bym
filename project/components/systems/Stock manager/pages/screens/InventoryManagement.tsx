@@ -33,12 +33,12 @@ interface InventoryItem {
   location: string;
   status: 'In Stock' | 'Low Stock' | 'Out of Stock';
   minStock: number;
-  maxStock?: number | null;
-  imageUrl?: string | null;
+  maxStock?: number; // Changed from number | null to just number | undefined
+  imageUrl?: string; // Changed from string | null to just string | undefined
   rating?: number;
   sku: string;
-  supplier?: string | null;
-  description?: string | null;
+  supplier?: string; // Changed from string | null to just string | undefined
+  description?: string; // Changed from string | null to just string | undefined
   lastUpdated: string;
 }
 
@@ -81,12 +81,12 @@ const InventoryManagement: React.FC = () => {
             ? 'Low Stock'
             : 'In Stock',
           minStock: item.minStock,
-          maxStock: item.maxStock || null,
-          imageUrl: item.imageUrl || null,
+          maxStock: item.maxStock ?? undefined, // Convert null to undefined
+          imageUrl: item.imageUrl ?? undefined, // Convert null to undefined
           rating: item.rating || 0,
           sku: item.sku,
-          supplier: item.supplier || null,
-          description: item.description || null,
+          supplier: item.supplier ?? undefined, // Convert null to undefined
+          description: item.description ?? undefined, // Convert null to undefined
           lastUpdated: item.lastUpdated,
         }));
         setInventoryItems(mappedItems);

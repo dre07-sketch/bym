@@ -28,7 +28,7 @@ import VehicleStatus from './pages/screens/VehicleStatus';
 import Reports from '../Stock manager/pages/screens/Reports';
 import Feedback from './pages/screens/Feedback';
 import FinancePage from './pages/screens/FinancePage';
-import Insurance from './pages/screens/insurance';
+import Insurance from './pages/screens/Insurance';
 import ConvertedProformasPage from './pages/screens/ConvertedProformasPage';
 
 interface DashboardProps {

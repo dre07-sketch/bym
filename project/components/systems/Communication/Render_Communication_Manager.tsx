@@ -4,25 +4,18 @@ import {
   FileText,
   Users,
   BarChart3,
-  Settings,
-  DollarSign,
   PersonStanding,
-  PersonStandingIcon,
   FormInputIcon,
-  DollarSignIcon,
 } from 'lucide-react';
 
 import SidebarHeader from '../../layout/SidebarHeader';
 import CommunicationDashboard from './screens/CommunicationDashboard';
-import Performa from './screens/Performa';
-import OutsourceStock from './screens/OutsourceStocksPage';
-import ReportsAnalytics from './screens/ReportsAnalytics';
-import SettingsPage from './screens/SettingsPage';
 import PerformaDashboard from './screens/Performa';
 import OutsourceStocksPage from './screens/OutsourceStocksPage';
+import ReportsAnalytics from './screens/ReportsAnalytics';
+import SettingsPage from './screens/SettingsPage';
 import RequestSurveyor from './screens/RequestSurveyor';
 import RequestSalvage from './screens/RequestSalvage';
-import { Form } from 'react-hook-form';
 
 interface Render_Communication_ManagerDashboardProps {
   onLogout: () => void;
@@ -36,11 +29,9 @@ const Render_Communication_Manager: React.FC<Render_Communication_ManagerDashboa
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'performa', label: 'Performa', icon: FileText },
     { id: 'outsource', label: 'OutsourceStock', icon: Users },
-    { id: 'request surveyor', label: 'Request surveyor', icon: PersonStandingIcon },
+    { id: 'request surveyor', label: 'Request surveyor', icon: PersonStanding },
     { id: 'request salvage', label: 'Request salvage', icon: FormInputIcon },
-    
     { id: 'reports', label: 'Reports', icon: BarChart3 },
-    
   ];
 
   const notifications = [
@@ -66,7 +57,8 @@ const Render_Communication_Manager: React.FC<Render_Communication_ManagerDashboa
       message: 'Complaint received from VIP client',
       time: '3 hours ago',
       read: false,
-      type: 'urgent' as const,
+      // ✅ Fixed: 'urgent' is not allowed — use 'error' instead
+      type: 'error' as const,
     },
   ];
 
@@ -84,8 +76,6 @@ const Render_Communication_Manager: React.FC<Render_Communication_ManagerDashboa
         return <RequestSurveyor />;
       case 'request salvage':
         return <RequestSalvage />;
-      case 'request payment':
-        return <ReportsAnalytics />;
       case 'settings':
         return <SettingsPage />;
       default:

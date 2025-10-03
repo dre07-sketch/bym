@@ -175,7 +175,7 @@ const RequestSurveyorPage = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:5001/api/communication-center/awaiting-survey');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/awaiting-survey');
         
         if (!response.ok) {
           throw new Error('Failed to fetch data');
@@ -188,9 +188,10 @@ const RequestSurveyorPage = () => {
           // Fetch bill amount for each ticket
           const ticketsWithBillAmount = await Promise.all(
             data.tickets.map(async (ticket: ServiceTicket) => {
-              let actualBillAmount = null;
+              // Fixed: Explicitly type as number | null
+              let actualBillAmount: number | null = null;
               try {
-                const billRes = await fetch(`http://localhost:5001/api/bill/car-bills/${ticket.ticket_number}`);
+                const billRes = await fetch(`https://ipasystem.bymsystem.com/api/bill/car-bills/${ticket.ticket_number}`);
                 if (billRes.ok) {
                   const billData = await billRes.json();
                   if (billData.success && billData.bill && billData.bill.final_total) {
@@ -256,7 +257,7 @@ const RequestSurveyorPage = () => {
     setCompletingSurvey(true);
     
     try {
-      const response = await fetch(`http://localhost:5001/api/communication-center/tickets/${selectedTicket.ticket_number}/complete-survey`, {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/tickets/${selectedTicket.ticket_number}/complete-survey`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

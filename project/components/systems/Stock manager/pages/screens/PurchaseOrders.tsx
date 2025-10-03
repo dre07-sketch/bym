@@ -21,6 +21,30 @@ import {
   Loader,
   ChevronDown
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+
+// Helper functions for JWT handling
+function parseJwt(token: string) {
+  try {
+    return JSON.parse(atob(token.split('.')[1]));
+  } catch (e) {
+    console.error('JWT parsing error:', e);
+    return null;
+  }
+}
+
+function isTokenExpired(token: string): boolean {
+  const decoded = parseJwt(token);
+  if (!decoded) return true;
+  const now = Date.now() / 1000;
+  const isExpired = decoded.exp < now;
+  console.log('Token expiration check:', {
+    exp: new Date(decoded.exp * 1000),
+    now: new Date(now * 1000),
+    isExpired
+  });
+  return isExpired;
+}
 
 interface OrderItem {
   id: string;
@@ -38,7 +62,7 @@ interface PurchaseOrder {
   expectedDate: string;
   totalAmount: number;
   itemCount: number;
-  createdBy: string;
+  createdBy: string; // Now just the full name
   notes?: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   items: Array<{
@@ -54,7 +78,13 @@ interface Supplier {
   name: string;
 }
 
+interface CreatedBy {
+  id: string;
+  full_name: string;
+}
+
 const PurchaseOrders: React.FC = () => {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'ordered' | 'received'>('all');
   const [isLoading, setIsLoading] = useState(false);
@@ -62,42 +92,125 @@ const PurchaseOrders: React.FC = () => {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [viewingPO, setViewingPO] = useState<PurchaseOrder | null>(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; role: string } | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
 
+  // Function to handle logout and redirect
+  const handleLogout = () => {
+    console.log('Logging out user...');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
+    router.push('/login');
+  };
+
+  // Function to check authentication and redirect if needed
+  const checkAuth = () => {
+    const token = localStorage.getItem('authToken');
+    const userData = localStorage.getItem('user');
+    
+    console.log('Auth check - Token exists:', !!token);
+    console.log('Auth check - User data exists:', !!userData);
+    
+    if (!token) {
+      setAuthError('No authentication token found. Please log in again.');
+      setDebugInfo('Missing token');
+      handleLogout();
+      return false;
+    }
+    
+    if (isTokenExpired(token)) {
+      setAuthError('Session expired. Please log in again.');
+      setDebugInfo('Token expired');
+      handleLogout();
+      return false;
+    }
+
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        setCurrentUser({
+          id: user.id,
+          name: user.full_name,
+          role: user.role
+        });
+        console.log('Current user set:', user.full_name);
+        return true;
+      } catch (e) {
+        console.error('Error parsing user data:', e);
+        setAuthError('Invalid user data. Please log in again.');
+        setDebugInfo('Invalid user data');
+        handleLogout();
+        return false;
+      }
+    } else {
+      setAuthError('User data not found. Please log in again.');
+      setDebugInfo('Missing user data');
+      handleLogout();
+      return false;
+    }
+  };
+
+  // Check authentication on component mount
   useEffect(() => {
-    setAnimatedCards(true);
-    fetchPurchaseOrders();
+    const isAuthenticated = checkAuth();
+    if (isAuthenticated) {
+      setAnimatedCards(true);
+      fetchPurchaseOrders();
+    }
   }, []);
 
   const fetchPurchaseOrders = async () => {
     try {
       const token = localStorage.getItem('authToken');
       if (!token) {
-        alert('❌ Session expired. Please log in again.');
+        setAuthError('No authentication token found. Please log in again.');
+        setDebugInfo('Missing token in fetchPurchaseOrders');
+        handleLogout();
         return;
       }
+
+      console.log('Fetching purchase orders with token:', token.substring(0, 20) + '...');
 
       const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/purchase-orders', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      if (!response.ok) throw new Error('Failed to fetch POs');
+      
+      console.log('Fetch response status:', response.status);
+      
+      if (response.status === 401) {
+        setAuthError('Session expired. Please log in again.');
+        setDebugInfo('401 Unauthorized in fetchPurchaseOrders');
+        handleLogout();
+        return;
+      }
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Fetch error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
+      
       const result = await response.json();
+      console.log('Fetch result:', result);
       
       const poList = Array.isArray(result.data) 
-        ? result.data.map((po: { totalAmount: string; orderDate: any; expectedDate: any; }) => ({
+        ? result.data.map((po: any) => ({
             ...po,
             totalAmount: parseFloat(po.totalAmount) || 0,
             orderDate: po.orderDate || 'N/A',
-            expectedDate: po.expectedDate || 'N/A'
+            expectedDate: po.expectedDate || 'N/A',
+            createdBy: po.createdBy?.full_name || 'Unknown' // Extract full_name from createdBy object
           }))
         : [];
 
       setPurchaseOrders(poList);
     } catch (err) {
-      console.error('Error:', err);
+      console.error('Error in fetchPurchaseOrders:', err);
       setPurchaseOrders([]);
-      alert('❌ Failed to load purchase orders');
+      setAuthError(`Failed to load purchase orders: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -113,7 +226,8 @@ const PurchaseOrders: React.FC = () => {
     try {
       const token = localStorage.getItem('authToken');
       if (!token) {
-        alert('❌ Not logged in.');
+        setAuthError('No authentication token found. Please log in again.');
+        handleLogout();
         return;
       }
 
@@ -125,6 +239,12 @@ const PurchaseOrders: React.FC = () => {
         },
         body: JSON.stringify({ status })
       });
+
+      if (response.status === 401) {
+        setAuthError('Session expired. Please log in again.');
+        handleLogout();
+        return;
+      }
 
       const result = await response.json();
 
@@ -141,6 +261,7 @@ const PurchaseOrders: React.FC = () => {
         alert(`❌ Error: ${result.message}`);
       }
     } catch (err) {
+      console.error('Error in handleStatusUpdate:', err);
       alert('❌ Failed to update status');
     }
   };
@@ -200,6 +321,30 @@ const PurchaseOrders: React.FC = () => {
 
   const totalValue = purchaseOrders.reduce((sum, po) => sum + po.totalAmount, 0);
 
+  // Show authentication error if any
+  if (authError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-red-50">
+        <div className="text-center p-8 bg-white rounded-xl shadow-lg max-w-md">
+          <div className="text-red-500 text-5xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-red-700 mb-2">Authentication Error</h2>
+          <p className="text-gray-600 mb-6">{authError}</p>
+          {debugInfo && (
+            <div className="bg-gray-100 p-3 rounded-lg mb-4">
+              <p className="text-xs font-mono text-gray-700">Debug: {debugInfo}</p>
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-8">
       {/* Header */}
@@ -209,6 +354,17 @@ const PurchaseOrders: React.FC = () => {
             Purchase Orders
           </h2>
           <p className="text-gray-600 mt-2">Manage and monitor purchase requests</p>
+          {currentUser && (
+            <div className="flex items-center mt-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+              <p className="text-sm text-gray-600">
+                Logged in as: <span className="font-medium">{currentUser.name}</span> 
+                <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                  {currentUser.role}
+                </span>
+              </p>
+            </div>
+          )}
         </div>
         <div className="flex space-x-3">
           <button
@@ -393,6 +549,8 @@ const PurchaseOrders: React.FC = () => {
         <RequestPOModal
           onClose={() => setShowRequestModal(false)}
           onPOCreated={fetchPurchaseOrders}
+          currentUser={currentUser}
+          handleLogout={handleLogout}
         />
       )}
 
@@ -532,7 +690,19 @@ const PurchaseOrders: React.FC = () => {
 };
 
 // RequestPOModal Component with Supplier Dropdown
-const RequestPOModal = ({ onClose, onPOCreated }: { onClose: () => void; onPOCreated: () => void }) => {
+interface RequestPOModalProps {
+  onClose: () => void;
+  onPOCreated: () => void;
+  currentUser: { id: string; name: string; role: string } | null;
+  handleLogout: () => void;
+}
+
+const RequestPOModal: React.FC<RequestPOModalProps> = ({ 
+  onClose, 
+  onPOCreated,
+  currentUser,
+  handleLogout
+}) => {
   const [formData, setFormData] = useState({
     supplier: '',
     expectedDate: '',
@@ -545,19 +715,31 @@ const RequestPOModal = ({ onClose, onPOCreated }: { onClose: () => void; onPOCre
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(true);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
 
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
         const token = localStorage.getItem('authToken');
-        if (!token) {
-          setIsLoadingSuppliers(false);
+        if (!token || isTokenExpired(token)) {
+          setAuthError('Session expired. Please log in again.');
+          setDebugInfo('Token expired in fetchSuppliers');
+          handleLogout();
           return;
         }
 
         const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/names', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
+        
+        if (response.status === 401) {
+          setAuthError('Session expired. Please log in again.');
+          setDebugInfo('401 in fetchSuppliers');
+          handleLogout();
+          return;
+        }
+        
         const result = await response.json();
         
         if (result.success) {
@@ -573,7 +755,7 @@ const RequestPOModal = ({ onClose, onPOCreated }: { onClose: () => void; onPOCre
     };
 
     fetchSuppliers();
-  }, []);
+  }, [handleLogout]);
 
   const addItem = () => {
     const newItem: OrderItem = {
@@ -619,12 +801,23 @@ const RequestPOModal = ({ onClose, onPOCreated }: { onClose: () => void; onPOCre
     e.preventDefault();
 
     const token = localStorage.getItem('authToken');
+    console.log('Submit - Token exists:', !!token);
+    
     if (!token) {
-      alert('❌ You are not logged in. Please log in again.');
+      setAuthError('No authentication token found. Please log in again.');
+      setDebugInfo('Missing token on submit');
+      handleLogout();
+      return;
+    }
+    
+    if (isTokenExpired(token)) {
+      setAuthError('Session expired. Please log in again.');
+      setDebugInfo('Token expired on submit');
+      handleLogout();
       return;
     }
 
-    if (!formData.supplier || orderItems.some(item => !item.name)) {
+    if (!formData.supplier || !orderItems || orderItems.length === 0 || orderItems.some(item => !item.name)) {
       alert('Please fill all required fields');
       return;
     }
@@ -633,7 +826,7 @@ const RequestPOModal = ({ onClose, onPOCreated }: { onClose: () => void; onPOCre
     try {
       const payload = {
         supplier: formData.supplier,
-        orderDate: new Date().toISOString().split('T')[0],
+        orderDate: new Date().toISOString().split('T')[0], // Current date in YYYY-MM-DD format
         expectedDate: formData.expectedDate,
         totalAmount,
         itemCount: orderItems.length,
@@ -642,29 +835,70 @@ const RequestPOModal = ({ onClose, onPOCreated }: { onClose: () => void; onPOCre
         items: orderItems
       };
 
+      console.log('Submitting PO with payload:', payload);
+      console.log('Using token:', token.substring(0, 20) + '...');
+
       const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/purchase-orders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` // ✅ CRITICAL: Sends token so backend knows who created the PO
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(payload)
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+
+      if (response.status === 401) {
+        setAuthError('Session expired. Please log in again.');
+        setDebugInfo('401 on submit');
+        handleLogout();
+        return;
+      }
+
+      const result = await response.json();
+      console.log('Response body:', result);
+
       if (response.ok) {
-        alert('✅ Purchase request submitted for approval!');
+        alert(`✅ Purchase request submitted for approval! PO Number: ${result.poNumber}`);
         onPOCreated();
         onClose();
       } else {
-        const result = await response.json();
-        alert(`❌ Error: ${result.message}`);
+        console.error('Backend error:', result);
+        alert(`❌ Error: ${result.message || 'Unknown error occurred'}`);
       }
     } catch (err) {
+      console.error('Fetch error:', err);
       alert('❌ Network error. Check if backend is running.');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Show authentication error if any
+  if (authError) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+          <div className="text-red-500 text-5xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-red-700 mb-2">Authentication Error</h2>
+          <p className="text-gray-600 mb-6">{authError}</p>
+          {debugInfo && (
+            <div className="bg-gray-100 p-3 rounded-lg mb-4">
+              <p className="text-xs font-mono text-gray-700">Debug: {debugInfo}</p>
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fade-in text-black">
@@ -675,7 +909,20 @@ const RequestPOModal = ({ onClose, onPOCreated }: { onClose: () => void; onPOCre
               <div className="p-2 bg-purple-100 rounded-xl">
                 <ShoppingCart className="w-6 h-6 text-purple-600" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900">Request Purchase Order</h2>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Request Purchase Order</h2>
+                {currentUser && (
+                  <div className="flex items-center mt-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                    <p className="text-sm text-gray-600">
+                      Created by: <span className="font-medium">{currentUser.name}</span> 
+                      <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
+                        {currentUser.role}
+                      </span>
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
             <button
               onClick={onClose}

@@ -1583,9 +1583,7 @@ const formatInspectionChecklist = (inspection) => {
 
 
               <div className="mt-8 flex flex-wrap gap-3 justify-end">
-                <button onClick={() => setShowPartsModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-                  <PackagePlus size={20} /> Order Parts
-                </button>
+               
                 {selectedRepair?.status !== 'Inspection' ? (
                   <button
                     onClick={() => setShowInspectionModal(true)}
@@ -1607,9 +1605,7 @@ const formatInspectionChecklist = (inspection) => {
                 >
                   <UserCheck size={20} /> Outsource Mechanic
                 </button>
-                <button onClick={handleFinishRepair} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg hover:opacity-90 shadow transition-all">
-                  <CheckSquare size={20} /> Finish Repair
-                </button>
+               
               </div>
             </div>
           </div>

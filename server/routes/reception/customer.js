@@ -5,7 +5,7 @@ const multer = require('multer');
 const bcrypt = require('bcrypt');
 
 
-const BASE_URL = 'http://localhost:5001';
+const BASE_URL = 'https://ipasystem.bymsystem.com';
 const IMAGE_BASE_URL = `${BASE_URL}`;
 const encode = (path) => encodeURIComponent(path).replace(/%2F/g, '/');
 

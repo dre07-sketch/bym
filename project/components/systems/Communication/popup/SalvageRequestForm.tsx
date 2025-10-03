@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Trash2, Package, DollarSign, FileText, Plus, X, AlertTriangle } from 'lucide-react';
-import { Button } from '../ui/button';
+import { Button } from '../../../ui/button';
 
 interface SalvagePart {
   id: string;

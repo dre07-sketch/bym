@@ -18,7 +18,6 @@ import {
   MessageCircle,
   TrendingUp,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -27,7 +26,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-// Define UserRole type here since the import is missing
+import ForgotPassword from './ForgotPassword';
+import PasswordResetLoading from './PasswordResetLoading';
+import ResetPassword from './ResetPassword';
+
+// Define UserRole type
 export type UserRole =
   | 'customer-service'
   | 'manager'
@@ -37,9 +40,6 @@ export type UserRole =
   | 'inspector'
   | 'communication'
   | 'marketing';
-import ForgotPassword from './ForgotPassword';
-import PasswordResetLoading from './PasswordResetLoading';
-import ResetPassword from './ResetPassword';
 
 interface Role {
   value: UserRole;
@@ -87,13 +87,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     try {
       const response = await fetch('https://ipasystem.bymsystem.com/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();
@@ -102,18 +97,15 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
         throw new Error(data.message || 'Login failed');
       }
 
-      // Validate role matches
       if (data.user.role !== selectedRole) {
-        throw new Error(
-          `You selected "${selectedRole}". Please select the correct role.`
-        );
+        throw new Error(`You selected "${selectedRole}". Please select the correct role.`);
       }
 
-      // Save to localStorage
+      // Save token & user
       localStorage.setItem('authToken', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      // Trigger parent handler (e.g., set global auth state or redirect)
+      // Trigger parent handler
       onLogin(selectedRole);
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred. Please try again.');
@@ -131,7 +123,6 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
   };
 
   const handleLoadingComplete = (): void => {
-    console.log("Navigating to login page");
     setCurrentView('login');
     setError(null);
   };
@@ -145,6 +136,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     setError(null);
   };
 
+  // Render forgot/reset views
   if (currentView === 'forgot') {
     return <ForgotPassword onBack={handleBackToLogin} onSendOtp={handleSendOtp} />;
   }
@@ -157,6 +149,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     return <ResetPassword onBack={handleBackToLogin} onComplete={handleResetComplete} />;
   }
 
+  // Main Login Form
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background Elements */}
@@ -299,7 +292,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full bg-custom-gradient text-white py-3 rounded-xl font-bold hover:from-blue-700 hover:via-purple-700 hover:to-pink-800 transition-all duration-300 transform hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center space-x-2 shadow-md relative overflow-hidden group mt-4"
+                  className="w-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white py-3 rounded-xl font-bold hover:from-blue-700 hover:via-purple-700 hover:to-pink-800 transition-all duration-300 transform hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center space-x-2 shadow-md relative overflow-hidden group mt-4"
                 >
                   {/* Shine Effect */}
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>

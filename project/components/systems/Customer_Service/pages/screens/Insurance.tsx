@@ -1,3 +1,4 @@
+// Insurance.tsx
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, 
@@ -92,7 +93,7 @@ interface Vehicle {
   licensePlate: string | null;
   vin: string | null;
   color: string | null;
-  mileage: string | null;
+  mileage: number | null;
   image: File | null;
   imagePreview: string | null;
 }
@@ -437,7 +438,12 @@ function Insurance() {
     setVehicles((prev) =>
       prev.map((vehicle, i) =>
         i === index
-          ? { ...vehicle, [field]: value.trim() === '' ? null : value }
+          ? { 
+              ...vehicle, 
+              [field]: field === 'mileage' 
+                ? (value.trim() === '' ? null : Number(value)) 
+                : (value.trim() === '' ? null : value)
+            }
           : vehicle
       )
     );
@@ -904,9 +910,8 @@ function Insurance() {
         setCustomerImage={setCustomerImage}
         customerImagePreview={customerImagePreview}
         setCustomerImagePreview={setCustomerImagePreview}
-        carModelsByMake={carModelsByMake}
-        carMakes={carMakes}
-        loadingModels={loadingModels}
+     //   carMakes={carMakes}
+       // loadingModels={loadingModels}
         isSubmitting={isSubmitting}
         error={error}
         setError={setError}
@@ -924,10 +929,10 @@ function Insurance() {
         removeImage={removeImage}
         addVehicle={addVehicle}
         removeVehicle={removeVehicle}
-        getModelsForMake={getModelsForMake}
-        handleGenerateTicket={handleGenerateTicket}
+     //   getModelsForMake={getModelsForMake}
+     //   handleGenerateTicket={handleGenerateTicket}
         formatCurrency={formatCurrency}
-        isLoadingProforma={isFetchingProforma}
+     //   isLoadingProforma={isFetchingProforma}
       />
     </div>
   );

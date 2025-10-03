@@ -1000,5 +1000,50 @@ if (!isValidId) {
   }
 });
 
+router.post('/update-price/:id', (req, res) => {
+  const { id } = req.params;
+  const { price } = req.body;
+
+  if (!price || isNaN(price)) {
+    return res.status(400).json({ success: false, message: "Valid price is required" });
+  }
+
+  // Update by `id` (varchar business identifier)
+  const updateQuery = `
+    UPDATE outsource_stock 
+    SET price = ?, updated_at = NOW() 
+    WHERE id = ?
+  `;
+
+  db.query(updateQuery, [price, id], (err, result) => {
+    if (err) {
+      console.error("DB Error:", err);
+      return res.status(500).json({ success: false, message: "Database error" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Item not found" });
+    }
+
+    // Fetch updated item including calculated total
+    const fetchQuery = `
+      SELECT 
+        auto_id, id, ticket_number, name, category, sku, price, quantity,
+        (price * quantity) AS total, source_shop, status, requested_at, received_at, notes, updated_at
+      FROM outsource_stock 
+      WHERE id = ?
+    `;
+
+    db.query(fetchQuery, [id], (err, rows) => {
+      if (err) {
+        console.error("DB Error:", err);
+        return res.status(500).json({ success: false, message: "Database error" });
+      }
+
+      res.json({ success: true, data: rows[0] });
+    });
+  });
+});
+
   // ====== EXPORT ======
   module.exports = router;

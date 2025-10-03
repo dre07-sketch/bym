@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "NODE_ENV=production node server.js",
+    "lint": "next lint",
+    "export": "next build && next export"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

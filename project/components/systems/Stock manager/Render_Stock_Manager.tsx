@@ -19,7 +19,7 @@
   import PurchaseOrders from './pages/screens/PurchaseOrders';
   import SupplierManagement from './pages/screens/SupplierManagement';
   import Reports from './pages/screens/Reports';
-  import AuditLogs from './pages/screens/AuditLogs';
+  // import AuditLogs from './pages/screens/AuditLogs';
   import MobileScanner from './pages/screens/MobileScanner';
   import UserManagement from './pages/screens/UserManagement';
   import OrderManagementSystem from './pages/screens/OrderManagementSystem';
@@ -83,7 +83,7 @@
         case 'purchase-orders': return <PurchaseOrders />;
         case 'suppliers': return <SupplierManagement />;
         case 'reports': return <Reports />;
-        case 'audit-logs': return <AuditLogs />;
+        // case 'audit-logs': return <AuditLogs />;
         case 'scanner': return <MobileScanner />;
         case 'users': return <UserManagement />;
         default: return <Stock_Manager_Dashboard onLogout={onLogout} userRole={userRole} />;
