@@ -92,7 +92,7 @@ router.get('/vehicles/:customerId', (req, res) => {
       license_plate,
       vin,
       color,
-      mileage,
+      current_mileage,
       customer_id AS customerId
     FROM vehicles
     WHERE customer_id = ?
@@ -225,6 +225,42 @@ router.put('/update/:id', (req, res) => {
   });
 });
 
+router.get('/count-converted', (req, res) => {
+  const sql = `
+    SELECT COUNT(*) AS convertedCount 
+    FROM sos_requests 
+    WHERE status = 'converted'
+  `;
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error('Error fetching converted count:', err);
+      return res.status(500).json({ error: 'Database query failed' });
+    }
+
+    res.json({ convertedCount: results[0].convertedCount });
+  });
+});
+
+
+// GET all converted SOS requests
+router.get('/converted', (req, res) => {
+  const sql = `
+    SELECT * 
+    FROM sos_requests 
+    WHERE status = 'converted'
+    ORDER BY created_at DESC
+  `;
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error('Error fetching converted SOS requests:', err);
+      return res.status(500).json({ error: 'Database query failed' });
+    }
+
+    res.json(results);
+  });
+});
 
 
 module.exports = router;

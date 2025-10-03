@@ -507,7 +507,7 @@ const PerformaInvoice: React.FC<PerformaInvoiceProps> = ({
       setIsGenerating(true);
       setErrorDetails(null);
       
-      const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/proformas-post', {
+      const response = await fetch('http://localhost:5001/api/communication-center/proformas-post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

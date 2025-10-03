@@ -122,18 +122,33 @@ async function ensureCustomerAndGetId(customer_type, customerData) {
 
 // Upsert vehicle (promisified)
 async function ensureVehicle(vehicleData) {
-  // find by license_plate OR vin (if those fields are provided)
-  const rows = await dbQuery('SELECT id FROM vehicles WHERE license_plate = ? OR vin = ?', [
-    vehicleData.license_plate || null,
-    vehicleData.vin || null
-  ]);
+  // 1. Fetch service interval for the vehicle
+  const [serviceRow] = await dbQuery(
+    'SELECT service_interval_km FROM car_models WHERE make = ? AND model = ? LIMIT 1',
+    [vehicleData.make, vehicleData.model]
+  );
+  const serviceInterval = serviceRow ? serviceRow.service_interval_km : null;
+
+  // 2. Calculate next_service_mileage if possible
+  let nextServiceMileage = null;
+  if (vehicleData.current_mileage && serviceInterval) {
+    nextServiceMileage = vehicleData.current_mileage + serviceInterval;
+  }
+
+  // 3. Find vehicle by license_plate OR vin
+  const rows = await dbQuery(
+    'SELECT id FROM vehicles WHERE license_plate = ? OR vin = ?',
+    [vehicleData.license_plate || null, vehicleData.vin || null]
+  );
 
   if (rows.length > 0) {
+    // Update existing vehicle
     const vehicleId = rows[0].id;
     await dbQuery(
       `UPDATE vehicles SET
          customer_id = ?, make = ?, model = ?, year = ?, license_plate = ?,
-         vin = ?, color = ?, mileage = ?, image = ?
+         vin = ?, color = ?, current_mileage = ?, 
+         last_service_mileage = ?, next_service_mileage = ?, image = ?
        WHERE id = ?`,
       [
         vehicleData.customer_id,
@@ -143,18 +158,21 @@ async function ensureVehicle(vehicleData) {
         vehicleData.license_plate || null,
         vehicleData.vin || null,
         vehicleData.color || null,
-        vehicleData.mileage || null,
+        vehicleData.current_mileage || null,
+        vehicleData.last_service_mileage || 0,
+        nextServiceMileage,
         vehicleData.image || null,
         vehicleId
       ]
     );
     return vehicleId;
   } else {
+    // Insert new vehicle
     const result = await dbQuery(
       `INSERT INTO vehicles (
          customer_id, make, model, year, license_plate,
-         vin, color, mileage, image
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         vin, color, current_mileage, last_service_mileage, next_service_mileage, image
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         vehicleData.customer_id,
         vehicleData.make || null,
@@ -163,14 +181,16 @@ async function ensureVehicle(vehicleData) {
         vehicleData.license_plate || null,
         vehicleData.vin || null,
         vehicleData.color || null,
-        vehicleData.mileage || null,
+        vehicleData.current_mileage || null,
+        vehicleData.last_service_mileage || 0,
+        nextServiceMileage,
         vehicleData.image || null
       ]
     );
-    // note: result.insertId on insert
     return result.insertId;
   }
 }
+
 
 // Generate a unique ticket number (TICK-YYYYMMDD-XXXX)
 async function generateTicketNumber() {
@@ -210,12 +230,20 @@ router.post('/', async (req, res) => {
       proforma_id
     } = req.body;
 
-    // minimal validation (expand as needed)
+    // ✅ Basic validation
     if (!customer_type || !title || !description || !priority || !type || !vehicle_info) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // If proforma_id provided, validate it first (same behavior as your previous code)
+    // ✅ Validate customer_name properly
+    if (customer_type === 'individual' && !individual_name) {
+      return res.status(400).json({ error: 'Missing individual_name for individual customer' });
+    }
+    if (customer_type === 'company' && !company_name && !contact_person_name) {
+      return res.status(400).json({ error: 'Missing company_name or contact_person_name for company customer' });
+    }
+
+    // If proforma_id provided, validate
     let proforma = null;
     if (proforma_id) {
       const p = await dbQuery('SELECT * FROM proformas WHERE id = ? AND status = "Accepted"', [proforma_id]);
@@ -225,7 +253,7 @@ router.post('/', async (req, res) => {
       proforma = p[0];
     }
 
-    // Build customerData object to pass into ensureCustomerAndGetId
+    // Build customer data
     const customerData = customer_type === 'company'
       ? {
           customer_id,
@@ -249,10 +277,10 @@ router.post('/', async (req, res) => {
           image: individual_image
         };
 
-    // Ensure customer and get canonical customer_id (with prefix)
+    // Ensure customer
     const finalCustomerId = await ensureCustomerAndGetId(customer_type, customerData);
 
-    // Ensure vehicle and link it with finalCustomerId
+    // Ensure vehicle
     const vehicleId = await ensureVehicle({
       customer_id: finalCustomerId,
       make: vehicle_info.make,
@@ -261,17 +289,22 @@ router.post('/', async (req, res) => {
       license_plate,
       vin: vehicle_info.vin,
       color: vehicle_info.color,
-      mileage: vehicle_info.mileage,
+      current_mileage: vehicle_info.current_mileage,
       image: vehicle_info.image
     });
 
     const vehicleInfoString = `${vehicle_info.make || ''} ${vehicle_info.model || ''} (${vehicle_info.year || ''})`.trim();
 
+    // ✅ Always set customerName (cannot be null)
+    const customerName =
+      customer_type === 'company'
+        ? (contact_person_name || company_name)
+        : individual_name;
+
     // Generate ticket number
     const ticket_number = await generateTicketNumber('TICK');
 
     // Insert ticket
-    const customerName = customer_type === 'company' ? (contact_person_name || company_name) : (individual_name || null);
     const insertTicketQuery = `
       INSERT INTO service_tickets (
         ticket_number, customer_type, customer_id, customer_name,
@@ -295,6 +328,7 @@ router.post('/', async (req, res) => {
           ticket_number, insurance_company, insurance_phone,
           accident_date, owner_name, owner_phone, owner_email, description
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+
         [
           ticket_number, insurance_company || null, insurance_phone || null,
           accident_date || null, owner_name || null, owner_phone || null,
@@ -303,7 +337,7 @@ router.post('/', async (req, res) => {
       );
     }
 
-    // If proforma was provided, create bill and update proforma status
+    // If proforma was provided
     if (proforma) {
       await dbQuery(
         `INSERT INTO bills (
@@ -311,6 +345,7 @@ router.post('/', async (req, res) => {
           labor_cost, parts_cost, outsourced_parts_cost, outsourced_labor_cost,
           subtotal, tax_rate, tax_amount, total, discount, final_total, status, notes
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+
         [
           ticket_number,
           proforma.proforma_number || null,
@@ -330,7 +365,7 @@ router.post('/', async (req, res) => {
       await dbQuery('UPDATE proformas SET status = "Converted", updated_at = NOW() WHERE id = ?', [proforma_id]);
     }
 
-    // Return the created ticket
+    // Return created ticket
     const createdRows = await dbQuery('SELECT * FROM service_tickets WHERE id = ?', [ticketResult.insertId]);
     return res.status(201).json(createdRows[0]);
 
@@ -339,6 +374,7 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: 'Failed to create ticket', details: err.message });
   }
 });
+
 
 
 
@@ -358,7 +394,7 @@ router.get('/vehicles/:customerId', (req, res) => {
       license_plate,
       vin,
       color,
-      mileage,
+      current_mileage,
       
       customer_id AS customerId
     FROM vehicles

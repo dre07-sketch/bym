@@ -71,7 +71,7 @@ const Reports = () => {
 
   const fetchReportData = async () => {
     try {
-      const url = `https://ipasystem.bymsystem.com/api/inventory/reports/${selectedReport}?dateRange=${dateRange}`;
+      const url = `http://localhost:5001/api/inventory/reports/${selectedReport}?dateRange=${dateRange}`;
       const response = await fetch(url);
       const result = await response.json();
 

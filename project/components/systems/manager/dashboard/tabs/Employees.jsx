@@ -49,18 +49,18 @@ const Employees = () => {
 
   const getImageUrl = (imagePath) => {
     if (!imagePath) {
-      return 'https://ipasystem.bymsystem.com/uploads/default-profile.png';
+      return 'http://localhost:5001/uploads/default-profile.png';
     }
     const normalizedPath = imagePath.replace(/\\/g, '/');
     const parts = normalizedPath.split('/');
     const filename = parts[parts.length - 1];
-    return `https://ipasystem.bymsystem.com/uploads/${filename}`;
+    return `http://localhost:5001/uploads/${filename}`;
   };
 
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const response = await fetch('https://ipasystem.bymsystem.com/api/employees/getemployees');
+        const response = await fetch('http://localhost:5001/api/employees/getemployees');
         if (!response.ok) {
           throw new Error('Failed to fetch employees');
         }
@@ -81,7 +81,7 @@ const Employees = () => {
       setAttendanceLoading(true);
       setAttendanceError(null);
       try {
-        const response = await fetch(`https://ipasystem.bymsystem.com/api/employeeattendance/getempsattendance?employeeId=${selectedEmployee.id}`);
+        const response = await fetch(`http://localhost:5001/api/employeeattendance/getempsattendance?employeeId=${selectedEmployee.id}`);
         if (!response.ok) {
           throw new Error('Failed to fetch attendance data');
         }
@@ -101,7 +101,7 @@ const Employees = () => {
     
     setStatusUpdating(true);
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/auth/${selectedEmployee.id}/status`, {
+      const response = await fetch(`http://localhost:5001/api/auth/${selectedEmployee.id}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -140,7 +140,7 @@ const Employees = () => {
     setResetRequestsLoading(true);
     setResetRequestsError(null);
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/auth-rest/get-reset-requests');
+      const response = await fetch('http://localhost:5001/api/auth-rest/get-reset-requests');
       if (!response.ok) {
         throw new Error('Failed to fetch reset requests');
       }
@@ -184,7 +184,7 @@ const Employees = () => {
     setPasswordError('');
     
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/auth-rest/reset-password', {
+      const response = await fetch('http://localhost:5001/api/auth-rest/reset-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -22,7 +22,7 @@ interface Tool {
   tool_name: string;
   brand: string;
   quantity: number;
-  imageUrl?: string; // Changed from image_url to imageUrl
+  imageUrl?: string;
   status: string;
   condition?: string;
 }
@@ -81,6 +81,7 @@ const ToolRequests = () => {
   const [selectedTicket, setSelectedTicket] = useState<ServiceTicket | null>(null);
   const [assignedTools, setAssignedTools] = useState<{ tool: Tool; qty: number }[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [ticketNumberFilter, setTicketNumberFilter] = useState(''); // New state for ticket number filter
   const [currentTime, setCurrentTime] = useState(new Date());
   const [statsLoading, setStatsLoading] = useState(false);
   const [assigning, setAssigning] = useState(false);
@@ -99,7 +100,7 @@ const ToolRequests = () => {
   const fetchStats = async () => {
     setStatsLoading(true);
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/stats');
+      const res = await fetch('http://localhost:5001/api/tools/stats');
       if (!res.ok) throw new Error('Failed to fetch dashboard stats');
       const result = await res.json();
       if (!result.success) {
@@ -123,7 +124,7 @@ const ToolRequests = () => {
   const fetchTickets = async () => {
     setLoadingTickets(true);
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tickets/service_tickets');
+      const res = await fetch('http://localhost:5001/api/tickets/service_tickets');
       if (!res.ok) throw new Error('Failed to fetch tickets');
       const data: ServiceTicket[] = await res.json();
       const inProgress = data.filter(t =>
@@ -140,13 +141,13 @@ const ToolRequests = () => {
   const fetchTools = async () => {
     setLoadingTools(true);
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/tools-get');
+      const res = await fetch('http://localhost:5001/api/tools/tools-get');
       if (!res.ok) throw new Error('Failed to fetch tools');
       const data = await res.json();
       setTools((data.data || []).map((tool: any) => ({
         ...tool,
         tool_name: tool.tool_name || tool.name || 'Unnamed Tool',
-        imageUrl: tool.imageUrl || null, // Updated to match API response
+        imageUrl: tool.imageUrl || null,
       })));
     } catch (err) {
       console.error('Error fetching tools:', err);
@@ -157,7 +158,7 @@ const ToolRequests = () => {
 
   const fetchAssignedTools = async () => {
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assigned');
+      const res = await fetch('http://localhost:5001/api/tools/assigned');
       const data = await res.json();
       setAssignedList(data.data || []);
     } catch (err) {
@@ -167,7 +168,7 @@ const ToolRequests = () => {
 
   const fetchActiveAssignments = async () => {
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assigned');
+      const res = await fetch('http://localhost:5001/api/tools/assigned');
       const data = await res.json();
       setActiveAssignments(data.data || []);
     } catch (err) {
@@ -184,7 +185,7 @@ const ToolRequests = () => {
     const confirm = window.confirm(`Return ${quantity} of this tool?`);
     if (!confirm) return;
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/return', {
+      const res = await fetch('http://localhost:5001/api/tools/return', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignmentId, toolID: toolId, quantity }),
@@ -247,7 +248,7 @@ const ToolRequests = () => {
     setAssigning(true);
     try {
       for (const { tool, qty } of assignedTools) {
-        const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assign', {
+        const res = await fetch('http://localhost:5001/api/tools/assign', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -313,6 +314,11 @@ const ToolRequests = () => {
   const filteredTools = tools.filter(tool =>
     (tool.tool_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (tool.brand || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Filter tickets based on ticket number filter
+  const filteredTickets = tickets.filter(ticket =>
+    ticket.ticket_number.toLowerCase().includes(ticketNumberFilter.toLowerCase())
   );
 
   // Get assigned tools for a ticket
@@ -389,26 +395,45 @@ const ToolRequests = () => {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search tools..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-          />
+      {/* Filters Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Ticket Number Filter */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Filter by ticket number..."
+              value={ticketNumberFilter}
+              onChange={(e) => setTicketNumberFilter(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Tool Search */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search tools..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            />
+          </div>
         </div>
       </div>
 
       {/* Tickets List */}
       <div className="space-y-4">
-        {tickets.length === 0 ? (
-          <div className="text-center py-10 text-gray-500">No in-progress tickets found.</div>
+        {filteredTickets.length === 0 ? (
+          <div className="text-center py-10 text-gray-500">
+            {ticketNumberFilter ? 'No tickets match your filter.' : 'No in-progress tickets found.'}
+          </div>
         ) : (
-          tickets.map((ticket) => {
+          filteredTickets.map((ticket) => {
             const assignedTools = getAssignedToolsForTicket(ticket.id);
             return (
               <div
@@ -561,7 +586,7 @@ const ToolRequests = () => {
                     className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition cursor-pointer"
                     onClick={() => addToAssignment(tool)}
                   >
-                    {tool.imageUrl && (  // Updated to use imageUrl
+                    {tool.imageUrl && (
                       <img
                         src={tool.imageUrl}
                         alt={tool.tool_name}

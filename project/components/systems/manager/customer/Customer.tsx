@@ -12,7 +12,7 @@ import {
   Settings,
 } from 'lucide-react';
 
-const BASE_URL = 'https://ipasystem.bymsystem.com';
+const BASE_URL = 'http://localhost:5001';
 const IMAGE_BASE_URL = `${BASE_URL}/uploads`;
 
 // Interfaces remain the same

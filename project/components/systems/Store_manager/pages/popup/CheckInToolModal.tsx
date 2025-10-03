@@ -42,7 +42,7 @@ const CheckInToolModal: React.FC<CheckInToolModalProps> = ({ isOpen, onClose, on
     const fetchTools = async () => {
       setLoadingTools(true);
       try {
-        const res = await fetch('https://ipasystem.bymsystem.com/api/tools');
+        const res = await fetch('http://localhost:5001/api/tools');
         if (!res.ok) throw new Error('Failed to fetch tools');
         const data = await res.json();
         setTools(Array.isArray(data.data) ? data.data : []);
@@ -72,7 +72,7 @@ const CheckInToolModal: React.FC<CheckInToolModalProps> = ({ isOpen, onClose, on
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/check-in', {
+      const res = await fetch('http://localhost:5001/api/tools/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

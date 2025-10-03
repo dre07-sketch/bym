@@ -66,23 +66,23 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
         let response;
         switch(selectedReport) {
           case 'overview':
-            response = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/reports/overview');
+            response = await fetch('http://localhost:5001/api/ticket-stats/reports/overview');
             const overview = await response.json();
             setOverviewData(overview);
             break;
           case 'tickets':
-            response = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/reports/tickets');
+            response = await fetch('http://localhost:5001/api/ticket-stats/reports/tickets');
             const tickets = await response.json();
             setTicketAnalytics(tickets);
             break;
           case 'revenue':
             // Pass dateRange to the API for dynamic data
-            response = await fetch(`https://ipasystem.bymsystem.com/api/ticket-stats/reports/revenue?dateRange=${dateRange}`);
+            response = await fetch(`http://localhost:5001/api/ticket-stats/reports/revenue?dateRange=${dateRange}`);
             const revenue = await response.json();
             setRevenueData(revenue);
             break;
           case 'customer':
-            response = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/reports/customers');
+            response = await fetch('http://localhost:5001/api/ticket-stats/reports/customers');
             const customers = await response.json();
             setCustomerAnalytics(customers);
             break;

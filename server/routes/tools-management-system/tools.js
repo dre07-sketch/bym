@@ -7,7 +7,7 @@ const path = require('path');
 const fs = require('fs');
 
 
-const IMAGE_BASE_URL = "https://ipasystem.bymsystem.com";
+const IMAGE_BASE_URL = "http://localhost:5001";
 // Ensure upload directories exist
 const imagesDir = path.join(__dirname, '../../uploads/tools/images');
 const docsDir = path.join(__dirname, '../../uploads/tools/documents');

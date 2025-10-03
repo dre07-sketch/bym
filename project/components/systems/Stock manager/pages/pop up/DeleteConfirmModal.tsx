@@ -23,22 +23,42 @@ const DeleteConfirmModal = ({ isOpen, onClose, item, onItemDeleted }: DeleteConf
     setIsDeleting(true);
 
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/inventory/items/${item.id}`, {
+      // Revert to the original endpoint that was working
+      const response = await fetch(`http://localhost:5001/api/inventory/items/${item.id}`, {
         method: 'DELETE',
       });
+
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
 
       const result = await response.json();
 
       if (response.ok) {
-        alert(result.message || '✅ Item deleted successfully!');
-        onItemDeleted(); // Refresh list
+        alert(`✅ ${result.message || 'Item deleted successfully!'}`);
+        onItemDeleted();
         onClose();
       } else {
-        alert(`❌ ${result.message || 'Failed to delete item'}`);
+        // Handle specific error statuses
+        if (response.status === 400) {
+          alert(`❌ ${result.message || 'Invalid request'}`);
+        } else if (response.status === 404) {
+          alert(`❌ ${result.message || 'Item not found'}`);
+          onItemDeleted(); // Refresh list since item doesn't exist
+          onClose();
+        } else {
+          alert(`❌ ${result.message || 'Failed to delete item'}`);
+        }
       }
     } catch (error) {
       console.error('Network error:', error);
-      alert('❌ Failed to connect to server. Is the backend running?');
+      if (error instanceof Error && error.message === 'Server returned non-JSON response') {
+        alert('❌ Server returned an unexpected response. Please check the server logs.');
+      } else {
+        alert('❌ Failed to connect to server. Is the backend running?');
+      }
     } finally {
       setIsDeleting(false);
     }
@@ -85,7 +105,7 @@ const DeleteConfirmModal = ({ isOpen, onClose, item, onItemDeleted }: DeleteConf
                 <div className="w-12 h-12 bg-gradient-to-r from-blue-100 to-purple-100 rounded-lg flex items-center justify-center">
                   {item.imageUrl ? (
                     <img 
-                      src={`https://ipasystem.bymsystem.com${item.imageUrl}`} 
+                      src={`http://localhost:5001${item.imageUrl}`} 
                       alt={item.name} 
                       className="w-full h-full object-cover rounded-lg" 
                     />

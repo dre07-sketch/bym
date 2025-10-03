@@ -624,41 +624,44 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
 
 
 // DELETE /api/inventory/items/:id
-router.delete("/items/:id", (req, res) => {
-  const { id } = req.params;
+router.delete('/items/:item_id', (req, res) => {
+  const { item_id } = req.params;
 
-  if (!id) {
+  if (!item_id) {
     return res.status(400).json({
       success: false,
       message: "Item ID is required",
     });
   }
 
-  const query = "DELETE FROM inventory_items WHERE id = ?";
+  console.log("Attempting to delete item with item_id:", item_id);
 
-  db.query(query, [id], (err, result) => {
+  const query = "DELETE FROM inventory_items WHERE item_id = ?";
+
+  db.query(query, [item_id], (err, result) => {
     if (err) {
-      console.error("Error deleting item:", err);
+      console.error("Database error while deleting item:", err);
       return res.status(500).json({
         success: false,
         message: "Database error",
       });
     }
 
+    console.log("Delete result:", result);
+
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
-        message: "Item not found",
+        message: `Item with ID ${item_id} not found`,
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
-      message: `Item with ID ${id} deleted successfully`,
+      message: `Item with ID ${item_id} deleted successfully`,
     });
   });
 });
-
 
 
 
@@ -859,61 +862,90 @@ function getUserIdFromToken(req) {
   }
 }
 
+
+// POST /api/inventory/purchase-orders
 router.post('/purchase-orders', async (req, res) => {
   try {
-    const userId = getUserIdFromToken(req); // 👈 get logged-in user id
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Unauthorized: No or invalid token' });
+    const { createdBy, supplier, orderDate, expectedDate, totalAmount, itemCount, notes, priority, items } = req.body;
+
+    console.log('Received request to create purchase order');
+    console.log('Request body:', req.body);
+    
+    // Log the createdBy object specifically
+    console.log('Received createdBy:', createdBy);
+    console.log('Type of createdBy.full_name:', typeof createdBy.full_name);
+    console.log('Value of createdBy.full_name:', createdBy.full_name);
+
+    // Validate creator info
+    if (!createdBy || !createdBy.full_name) {
+      console.error('Missing creator info');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Missing creator info. createdBy must include full_name.' 
+      });
     }
 
-    const { supplier, orderDate, expectedDate, totalAmount, itemCount, notes, priority, items } = req.body;
-
+    // Validate required fields
     if (!supplier || !orderDate || !totalAmount || !itemCount || !items?.length) {
-      return res.status(400).json({ success: false, message: 'Missing required fields' });
+      console.error('Missing required fields');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Missing required fields: supplier, orderDate, totalAmount, itemCount, items' 
+      });
     }
 
-    // generate PO number
-    const poNumber = `PO-${Date.now().toString().slice(-6)}`;
+    // Generate unique PO number
+    const poNumber = `PO-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    console.log('Generated PO number:', poNumber);
 
-    // insert purchase order
-    await db.promise().execute(
+    // Insert purchase order - now using createdBy.full_name instead of ID
+    console.log('Inserting purchase order with createdBy.full_name:', createdBy.full_name);
+    const [result] = await db.promise().execute(
       `INSERT INTO purchase_orders 
         (po_number, supplier, status, order_date, expected_date, total_amount, item_count, created_by, notes, priority) 
        VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
-      [poNumber, supplier, orderDate, expectedDate, totalAmount, itemCount, userId, notes || '', priority || 'medium']
+      [poNumber, supplier, orderDate, expectedDate, totalAmount, itemCount, createdBy.full_name, notes || '', priority || 'medium']
     );
 
-    // insert items
-    for (const item of items) {
-      await db.promise().execute(
-        `INSERT INTO purchase_order_items (po_number, name, quantity, price)
-         VALUES (?, ?, ?, ?)`,
-        [poNumber, item.name, item.quantity, item.price]
-      );
-    }
+    console.log('Purchase order inserted with ID:', result.insertId);
 
-    // ✅ fetch the user's name from employees
-    const [[employee]] = await db.promise().execute(
-      `SELECT full_name FROM employees WHERE id = ?`,
-      [userId]
+    // Insert items in bulk
+    const itemValues = items.map(item => [poNumber, item.name, item.quantity, item.price]);
+    console.log('Inserting items:', itemValues);
+    
+    await db.promise().query(
+      `INSERT INTO purchase_order_items (po_number, name, quantity, price) VALUES ?`,
+      [itemValues]
     );
 
+    console.log('Items inserted successfully');
+
+    // Respond with success
     res.json({
       success: true,
       message: 'Purchase order created successfully',
       poNumber,
-      createdBy: {
-        id: userId,
-        full_name: employee ? employee.full_name : null
-      }
+      createdBy,
+      items
     });
+
   } catch (error) {
     console.error('❌ Error creating PO:', error);
-    res.status(500).json({ success: false, message: 'Failed to create purchase order' });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to create purchase order',
+      error: error.message 
+    });
   }
 });
 
+
+
+
 // GET all purchase orders
+
+
+// ✅ GET all purchase orders
 router.get('/purchase-orders', async (req, res) => {
   try {
     const [rows] = await db.promise().execute(`
@@ -926,12 +958,11 @@ router.get('/purchase-orders', async (req, res) => {
         po.received_date AS receivedDate,
         po.total_amount AS totalAmount,
         po.item_count AS itemCount,
-        e.full_name AS createdBy,   -- join employees
+        po.created_by AS createdBy,   -- now using varchar field
         po.notes,
         po.priority,
         po.created_at AS createdAt
       FROM purchase_orders po
-      LEFT JOIN employees e ON po.created_by = e.id
       ORDER BY po.created_at DESC
     `);
 

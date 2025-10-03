@@ -32,7 +32,7 @@ const ReportDamageModal: React.FC<ReportDamageModalProps> = ({ isOpen, onClose, 
     const fetchTools = async () => {
       setLoadingTools(true);
       try {
-        const res = await fetch('https://ipasystem.bymsystem.com/api/tools');
+        const res = await fetch('http://localhost:5001/api/tools');
         if (!res.ok) throw new Error('Failed to fetch tools');
         const data = await res.json();
         // Filter out already damaged tools (optional)
@@ -69,7 +69,7 @@ const ReportDamageModal: React.FC<ReportDamageModalProps> = ({ isOpen, onClose, 
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/damage', {
+      const res = await fetch('http://localhost:5001/api/tools/damage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

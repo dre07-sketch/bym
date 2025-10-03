@@ -24,7 +24,7 @@ interface ApiResponse<T> {
 
 class InventoryService {
   // 🔥 Hardcoded backend URL — no Vite or .env needed
-  private baseUrl = 'https://ipasystem.bymsystem.com/api'; // ← Your Express server
+  private baseUrl = 'http://localhost:5001/api'; // ← Your Express server
 
   async getInventoryItems(): Promise<InventoryItem[]> {
     try {

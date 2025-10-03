@@ -41,7 +41,7 @@ export default function PaymentFormModal({
     setError('');
 
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/outsource-mechanic-payments/pay', {
+      const response = await fetch('http://localhost:5001/api/outsource-mechanic-payments/pay', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

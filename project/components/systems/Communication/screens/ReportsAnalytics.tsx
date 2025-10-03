@@ -192,7 +192,7 @@ const ReportsAnalytics = () => {
 
   const fetchAnalytics = async () => {
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/analytics');
+      const response = await fetch('http://localhost:5001/api/communication-center/analytics');
       const data = await response.json();
       if (data.success) {
         setAnalytics(data.data);
@@ -204,7 +204,7 @@ const ReportsAnalytics = () => {
 
   const fetchRequestVolume = async () => {
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/analytics/request-volume');
+      const response = await fetch('http://localhost:5001/api/communication-center/analytics/request-volume');
       const data = await response.json();
       if (data.success) {
         setRequestVolume(data.data);
@@ -216,7 +216,7 @@ const ReportsAnalytics = () => {
 
   const fetchRequestDistribution = async () => {
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/analytics/request-distribution');
+      const response = await fetch('http://localhost:5001/api/communication-center/analytics/request-distribution');
       const data = await response.json();
       if (data.success) {
         setRequestDistribution(data.data);

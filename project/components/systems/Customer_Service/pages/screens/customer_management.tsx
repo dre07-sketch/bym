@@ -8,7 +8,7 @@ import { Badge } from '../../../../ui/badge';
 import AddCustomerModal from '../pop up/AddCustomerModal';
 
 // === Interfaces ===
-const BASE_URL = 'https://ipasystem.bymsystem.com';
+const BASE_URL = 'http://localhost:5001';
 const IMAGE_BASE_URL = `${BASE_URL}/uploads`;
 
 interface Vehicle {

@@ -59,7 +59,7 @@ const InventoryManagement: React.FC = () => {
   // ✅ Fetch items directly
   const fetchItems = async () => {
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/items');
+      const response = await fetch('http://localhost:5001/api/inventory/items');
       if (!response.ok) throw new Error('Failed to fetch items');
 
       const result = await response.json();
@@ -297,7 +297,7 @@ const InventoryManagement: React.FC = () => {
                         <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-100 to-purple-100 rounded-lg sm:rounded-xl flex items-center justify-center">
                           {item.imageUrl ? (
                             <img
-                              src={`https://ipasystem.bymsystem.com${item.imageUrl}`}
+                              src={`http://localhost:5001${item.imageUrl}`}
                               alt={item.name}
                               className="w-full h-full object-cover rounded-lg sm:rounded-xl"
                             />

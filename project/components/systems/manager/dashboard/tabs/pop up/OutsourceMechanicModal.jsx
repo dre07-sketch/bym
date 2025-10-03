@@ -72,7 +72,7 @@ class OutsourceMechanicModal extends React.Component {
     }
 
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/active-progress/outsource-mechanic', {
+      const response = await fetch('http://localhost:5001/api/active-progress/outsource-mechanic', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

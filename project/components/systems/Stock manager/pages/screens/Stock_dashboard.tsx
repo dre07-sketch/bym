@@ -155,7 +155,7 @@ const barChartInstance = useRef<any>(null);
   const fetchInventoryData = async () => {
     setLoadingStats(true);
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/items');
+      const response = await fetch('http://localhost:5001/api/inventory/items');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message || 'API error');
@@ -187,7 +187,7 @@ const barChartInstance = useRef<any>(null);
   // Fetch top moving items
   const fetchTopMovingItems = async () => {
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/top-moving');
+      const response = await fetch('http://localhost:5001/api/inventory/top-moving');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
@@ -209,7 +209,7 @@ const barChartInstance = useRef<any>(null);
   // Fetch category-wise stock from backend
   const fetchCategoryStock = async () => {
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/categories/stock');
+      const response = await fetch('http://localhost:5001/api/inventory/categories/stock');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message);

@@ -159,8 +159,11 @@ router.get('/getappointment', (req, res) => {
         WHEN ic.customer_id IS NOT NULL THEN 'individual'
         WHEN cc.customer_id IS NOT NULL THEN 'company'
         ELSE NULL
-      END AS customerType,                      -- ✅ Determine actual customer type
+      END AS customerType,
       a.customer_name AS customerName,
+      -- 📞 pick phone from whichever table matches
+      COALESCE(ic.phone, cc.phone) AS customerPhone,
+      
       v.id AS vehicleId,
       v.make AS vehicleMake,
       v.model AS vehicleModel,
@@ -169,19 +172,20 @@ router.get('/getappointment', (req, res) => {
       v.vin,
       v.color,
       v.current_mileage,
+
       a.appointment_date AS appointmentDate,
       a.appointment_time AS appointmentTime,
       a.service_type AS serviceType,
       a.duration_minutes AS durationMinutes,
       a.service_bay AS serviceBay,
       a.notes,
-      a.status,                                 -- ✅ Include status in results
+      a.status,
       a.created_at AS createdAt
     FROM appointments a
     LEFT JOIN individual_customers ic ON a.customer_id = ic.customer_id
     LEFT JOIN company_customers cc ON a.customer_id = cc.customer_id
     LEFT JOIN vehicles v ON a.customer_id = v.customer_id
-    ORDER BY a.appointment_date DESC, a.appointment_time DESC
+    ORDER BY a.created_at DESC   -- newest first
   `;
 
   db.query(sql, (err, results) => {
@@ -193,6 +197,8 @@ router.get('/getappointment', (req, res) => {
     res.json(results);
   });
 });
+
+
 
 
 router.patch('/appointments/:id/status', (req, res) => {
@@ -223,4 +229,17 @@ router.put('/:id/status', (req, res) => {
   });
 });
 
+
+router.get('/converted/count', (req, res) => {
+  const sql = `SELECT COUNT(*) AS convertedCount FROM appointments WHERE status = 'converted'`;
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error('Error fetching converted appointments:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    res.json({ convertedCount: results[0].convertedCount });
+  });
+});
 module.exports = router;

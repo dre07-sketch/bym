@@ -43,7 +43,7 @@ const SupplierManagement = () => {
   const fetchSuppliers = async () => {
     setLoading(true);
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/suppliers');
+      const response = await fetch('http://localhost:5001/api/inventory/suppliers');
       const result = await response.json();
       if (result.success) {
         setSuppliers(result.data);
@@ -144,7 +144,7 @@ const SupplierManagement = () => {
       console.log("Sending data to API:", newSupplier);
 
       // Send to backend
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/suppliers', {
+      const response = await fetch('http://localhost:5001/api/inventory/suppliers', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -14,7 +14,7 @@ const Analytics = () => {
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const response = await fetch('https://ipasystem.bymsystem.com/api/part-cordinator-analytics/overview'); // Update if needed
+        const response = await fetch('http://localhost:5001/api/part-cordinator-analytics/overview'); // Update if needed
         if (!response.ok) throw new Error('Failed to fetch data');
         const data = await response.json();
         setMetrics(data);

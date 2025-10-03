@@ -31,7 +31,7 @@ interface PaymentHistory {
   status: 'Completed' | 'Pending' | 'Failed';
 }
 
-const API_BASE_URL = 'https://ipasystem.bymsystem.com/api';
+const API_BASE_URL = 'http://localhost:5001/api';
 
 const FinancePage = () => {
   // State
@@ -550,7 +550,7 @@ const FinancePage = () => {
                       <option value="bank">Bank Transfer</option>
                       <option value="cash">Cash</option>
                       <option value="check">Check</option>
-                      <option value="paypal">PayPal</option>
+                      
                       <option value="other">Other</option>
                     </select>
                   </div>

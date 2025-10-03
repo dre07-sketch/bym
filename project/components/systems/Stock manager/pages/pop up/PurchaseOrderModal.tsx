@@ -71,7 +71,7 @@ const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({ onClose }) => {
   
   setIsSubmitting(true);
   try {
-    const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/purchase-orders', {
+    const response = await fetch('http://localhost:5001/api/inventory/purchase-orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

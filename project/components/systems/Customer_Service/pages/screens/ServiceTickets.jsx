@@ -115,7 +115,7 @@ export default function ServiceTickets() {
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        const response = await fetch('https://ipasystem.bymsystem.com/api/tickets/service_tickets');
+        const response = await fetch('http://localhost:5001/api/tickets/service_tickets');
         if (!response.ok) throw new Error('Failed to fetch tickets');
         const data = await response.json();
         // Enrich each ticket with actual bill amount using your existing bill API
@@ -123,7 +123,7 @@ export default function ServiceTickets() {
           data.map(async (ticket) => {
             let actualBillAmount = null;
             try {
-              const billRes = await fetch(`https://ipasystem.bymsystem.com/api/bill/car-bills/${ticket.ticket_number}`);
+              const billRes = await fetch(`http://localhost:5001/api/bill/car-bills/${ticket.ticket_number}`);
               if (billRes.ok) {
                 const billData = await billRes.json();
                 if (billData.success && billData.bill && billData.bill.final_total) {
@@ -166,7 +166,7 @@ export default function ServiceTickets() {
     setBillLoading(true);
     setBillError(null);
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/bill/car-bills/${ticketNumber}`);
+      const response = await fetch(`http://localhost:5001/api/bill/car-bills/${ticketNumber}`);
       if (!response.ok) {
         if (response.status === 404) {
           setBill(null);
@@ -196,7 +196,7 @@ export default function ServiceTickets() {
   
   const fetchTicketDetails = async (ticketNumber) => {
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/tickets/service_tickets/${ticketNumber}`);
+      const response = await fetch(`http://localhost:5001/api/tickets/service_tickets/${ticketNumber}`);
       if (!response.ok) throw new Error('Failed to fetch ticket details');
       const data = await response.json();
       const normalizedTicket = {
@@ -214,7 +214,7 @@ export default function ServiceTickets() {
       setActiveTab('overview');
       
       try {
-        const paymentResponse = await fetch(`https://ipasystem.bymsystem.com/api/outsource-mechanic-payments/outsource-payments/${ticketNumber}`);
+        const paymentResponse = await fetch(`http://localhost:5001/api/outsource-mechanic-payments/outsource-payments/${ticketNumber}`);
         if (paymentResponse.ok) {
           const paymentData = await paymentResponse.json();
           setShowTicketDetails(prev => ({
@@ -253,7 +253,7 @@ export default function ServiceTickets() {
   // Handle payment request
   const handlePaymentRequest = async () => {
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/bill/update-to-payment-requested', {
+      const response = await fetch('http://localhost:5001/api/bill/update-to-payment-requested', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -301,7 +301,7 @@ export default function ServiceTickets() {
     }
 
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/bill/submit-payment', {
+      const response = await fetch('http://localhost:5001/api/bill/submit-payment', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -754,7 +754,7 @@ export default function ServiceTickets() {
                         <p><strong>Plate:</strong> {showTicketDetails.license_plate}</p>
                         {showTicketDetails.vehicle?.image && (
                           <img 
-                            src={`https://ipasystem.bymsystem.com/${showTicketDetails.vehicle.image}`} 
+                            src={`http://localhost:5001/${showTicketDetails.vehicle.image}`} 
                             alt="Vehicle" 
                             className="w-32 h-24 object-cover rounded-lg border mt-2 shadow"
                           />

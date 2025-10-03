@@ -1,10 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Image as ImageIcon, CheckCircle, Upload } from 'lucide-react';
+import { X, Image as ImageIcon, CheckCircle, Upload, ChevronDown } from 'lucide-react';
 
 interface AddItemModalProps {
   isOpen: boolean;
   onClose: () => void;
   onItemAdded: () => void;
+}
+
+interface Supplier {
+  id: string;
+  name: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  address: string;
+  paymentTerms: string;
+  leadTime: string;
+  categories: string[];
+  createdAt: string;
 }
 
 const categories = ['Engine Parts', 'Brake System', 'Electrical', 'Filters', 'Fluids', 'Tools', 'others'];
@@ -14,21 +27,18 @@ const qualityOptions = [
     id: 'original', 
     label: 'Original', 
     icon: '⭐',
-    
     color: 'bg-blue-500'
   },
   { 
     id: 'local', 
     label: 'Local', 
     icon: '🏭',
-    
     color: 'bg-green-500'
   },
   { 
     id: 'high-copy', 
     label: 'High Copy', 
     icon: '🔍',
-   
     color: 'bg-purple-500'
   }
 ];
@@ -37,6 +47,9 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
+  const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
@@ -51,6 +64,7 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
   });
   const [image, setImage] = useState<File | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const supplierInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (showSuccessPopup) {
@@ -59,6 +73,38 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
     }
   }, [showSuccessPopup]);
 
+  useEffect(() => {
+    if (isOpen) {
+      fetchSuppliers();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    // Close dropdown when clicking outside
+    const handleClickOutside = (event: MouseEvent) => {
+      if (supplierInputRef.current && !supplierInputRef.current.contains(event.target as Node)) {
+        setShowSupplierDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const fetchSuppliers = async () => {
+    try {
+      const response = await fetch('http://localhost:5001/api/inventory/suppliers');
+      const result = await response.json();
+      
+      if (result.success) {
+        setSuppliers(result.data);
+        setFilteredSuppliers(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+    }
+  };
+
   if (!isOpen) return null;
 
   const handleInputChange = (
@@ -66,6 +112,15 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    
+    // Filter suppliers when typing in the supplier field
+    if (name === 'supplier') {
+      const filtered = suppliers.filter(supplier => 
+        supplier.name.toLowerCase().includes(value.toLowerCase())
+      );
+      setFilteredSuppliers(filtered);
+      setShowSupplierDropdown(true);
+    }
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,8 +136,12 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
   };
 
   const handleQualityTypeSelect = (id: string) => {
-    console.log('Selected quality type:', id); // Debug
     setFormData((prev) => ({ ...prev, qualityType: id }));
+  };
+
+  const handleSupplierSelect = (supplierName: string) => {
+    setFormData(prev => ({ ...prev, supplier: supplierName }));
+    setShowSupplierDropdown(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -96,11 +155,8 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
       payload.append('image', image);
     }
 
-    // 🔍 Debug: Log all FormData
- 
-
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/items', {
+      const response = await fetch('http://localhost:5001/api/inventory/items', {
         method: 'POST',
         body: payload,
       });
@@ -228,6 +284,50 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
                 </select>
               </div>
 
+              {/* Supplier Dropdown */}
+              <div className="space-y-1 relative" ref={supplierInputRef}>
+                <label className="block text-sm font-semibold text-gray-800">Supplier</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    name="supplier"
+                    value={formData.supplier}
+                    onChange={handleInputChange}
+                    onFocus={() => setShowSupplierDropdown(true)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none pr-10"
+                    placeholder="e.g., ABC Auto Parts"
+                  />
+                  <button 
+                    type="button"
+                    className="absolute inset-y-0 right-0 flex items-center pr-3"
+                    onClick={() => setShowSupplierDropdown(!showSupplierDropdown)}
+                  >
+                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                  </button>
+                </div>
+                
+                {showSupplierDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-2xl shadow-lg max-h-60 overflow-y-auto">
+                    {filteredSuppliers.length > 0 ? (
+                      filteredSuppliers.map((supplier) => (
+                        <div
+                          key={supplier.id}
+                          className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                          onClick={() => handleSupplierSelect(supplier.name)}
+                        >
+                          <div className="font-medium text-gray-900">{supplier.name}</div>
+                          <div className="text-sm text-gray-500">{supplier.contactPerson}</div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-4 py-3 text-gray-500 text-center">
+                        No suppliers found. Type to add a new one.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Quality Type */}
               <div className="md:col-span-2 space-y-2">
                 <label className="block text-sm font-semibold text-gray-800">Quality Type *</label>
@@ -246,7 +346,6 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
                         <span className="text-2xl">{option.icon}</span>
                         <div>
                           <p className="font-bold text-gray-900">{option.label}</p>
-                         
                         </div>
                       </div>
                       {formData.qualityType === option.id && (
@@ -268,18 +367,6 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
                     </div>
                   ))}
                 </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-sm font-semibold text-gray-800">Supplier</label>
-                <input
-                  type="text"
-                  name="supplier"
-                  value={formData.supplier}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:ring-4 focus:ring-blue-100"
-                  placeholder="e.g., ABC Auto Parts"
-                />
               </div>
 
               <div className="space-y-1">

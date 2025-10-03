@@ -80,8 +80,8 @@ const InventoryManagement: React.FC = () => {
     const fetchData = async () => {
       try {
         const [toolsRes, statsRes] = await Promise.all([
-          fetch('https://ipasystem.bymsystem.com/api/tools/tools-get'),
-          fetch('https://ipasystem.bymsystem.com/api/tools/stats')
+          fetch('http://localhost:5001/api/tools/tools-get'),
+          fetch('http://localhost:5001/api/tools/stats')
         ]);
 
         // Handle tools
@@ -190,7 +190,7 @@ const InventoryManagement: React.FC = () => {
     if (!confirm) return;
 
     try {
-      const res = await fetch(`https://ipasystem.bymsystem.com/api/tools/${id}`, {
+      const res = await fetch(`http://localhost:5001/api/tools/${id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

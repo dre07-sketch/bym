@@ -5,7 +5,7 @@ const multer = require('multer');
 const bcrypt = require('bcrypt');
 
 
-const BASE_URL = 'https://ipasystem.bymsystem.com';
+const BASE_URL = 'http://localhost:5001';
 const IMAGE_BASE_URL = `${BASE_URL}`;
 const encode = (path) => encodeURIComponent(path).replace(/%2F/g, '/');
 
@@ -30,7 +30,7 @@ router.post('/', upload.array('images'), async (req, res) => {
     name,
     email,
     phone,
-    password, // added
+    password,
     emergencyContact,
     address,
     notes,
@@ -65,7 +65,7 @@ router.post('/', upload.array('images'), async (req, res) => {
   const customerImagePath = customerImageFile ? `uploads/${customerImageFile.filename}` : null;
 
   try {
-    // 🔐 hash password before storing
+    // hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
     db.getConnection((err, connection) => {
@@ -101,10 +101,11 @@ router.post('/', upload.array('images'), async (req, res) => {
             });
           }
 
+          // --- Vehicle Insert with next_service_mileage ---
           const insertVehicleQuery = `
             INSERT INTO vehicles
-            (customer_id, make, model, year, license_plate, vin, color, current_mileage, image)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (customer_id, make, model, year, license_plate, vin, color, current_mileage, last_service_mileage, next_service_mileage, image)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `;
 
           const vehicleInsertTasks = vehiclesArr.map((vehicle, i) => {
@@ -117,10 +118,32 @@ router.post('/', upload.array('images'), async (req, res) => {
             const imagePath = fileForVehicle ? `uploads/${fileForVehicle.filename}` : null;
 
             return new Promise((resolve, reject) => {
+              // fetch service interval for this vehicle
               connection.query(
-                insertVehicleQuery,
-                [customer_id, make, model, year, licensePlate, vin, color, current_mileage, imagePath],
-                (err) => err ? reject(err) : resolve()
+                'SELECT service_interval_km FROM car_models WHERE make = ? AND model = ? LIMIT 1',
+                [make, model],
+                (err, rows) => {
+                  if (err) return reject(err);
+
+                  const serviceInterval = rows.length > 0 ? rows[0].service_interval_km : null;
+                  let nextServiceMileage = null;
+                  if (current_mileage && serviceInterval) {
+                    nextServiceMileage = parseInt(current_mileage, 10) + serviceInterval;
+                  }
+
+                  connection.query(
+                    insertVehicleQuery,
+                    [
+                      customer_id,
+                      make, model, year, licensePlate, vin, color,
+                      current_mileage ? parseInt(current_mileage, 10) : null,
+                      0, // last_service_mileage default
+                      nextServiceMileage,
+                      imagePath
+                    ],
+                    (err) => err ? reject(err) : resolve()
+                  );
+                }
               );
             });
           });
@@ -158,6 +181,7 @@ router.post('/', upload.array('images'), async (req, res) => {
     res.status(500).json({ message: 'Internal server error.' });
   }
 });
+
 
 // =============================
 // GET ALL CUSTOMERS
@@ -279,7 +303,7 @@ router.get('/fetch', (req, res) => {
 // =============================
 // ADD VEHICLES TO EXISTING CUSTOMER
 // =============================
-router.post('/add-vehicles', upload.array('images'), (req, res) => {
+router.post('/add-vehicles', upload.array('images'), async (req, res) => {
   const customerId = req.body.customerId;
   let vehicles;
 
@@ -300,35 +324,50 @@ router.post('/add-vehicles', upload.array('images'), (req, res) => {
     }
   }
 
-  const insertValues = vehicles.map((vehicle, index) => {
-    const imageFile = req.files?.[index];
-    const year = vehicle.year ? parseInt(vehicle.year, 10) : null;
-    const current_mileage = vehicle.current_mileage ? parseInt(vehicle.current_mileage, 10) : null;
+  try {
+    const insertValues = [];
 
-    return [
-      customerId,
-      vehicle.make,
-      vehicle.model,
-      year,
-      vehicle.licensePlate || null,
-      vehicle.vin || null,
-      vehicle.color || null,
-      current_mileage,
-      imageFile ? `uploads/${imageFile.filename}` : null
-    ];
-  });
+    for (const [index, vehicle] of vehicles.entries()) {
+      const imageFile = req.files?.[index];
+      const year = vehicle.year ? parseInt(vehicle.year, 10) : null;
+      const current_mileage = vehicle.current_mileage ? parseInt(vehicle.current_mileage, 10) : null;
 
-  const query = `
-    INSERT INTO vehicles 
-    (customer_id, make, model, year, license_plate, vin, color, current_mileage, image) 
-    VALUES ?
-  `;
+      // 🔹 Fetch service interval from car_models
+      const [rows] = await db.promise().query(
+        `SELECT service_interval_km FROM car_models WHERE make = ? AND model = ? LIMIT 1`,
+        [vehicle.make, vehicle.model]
+      );
 
-  db.query(query, [insertValues], (err, result) => {
-    if (err) {
-      console.error('Error inserting vehicles:', err);
-      return res.status(500).json({ error: 'Failed to insert vehicles into the database.' });
+      const serviceInterval = rows.length > 0 ? rows[0].service_interval_km : null;
+
+      // 🔹 Calculate next service mileage
+      let next_service_mileage = null;
+      if (current_mileage !== null && serviceInterval !== null) {
+        next_service_mileage = current_mileage + serviceInterval;
+      }
+
+      insertValues.push([
+        customerId,
+        vehicle.make,
+        vehicle.model,
+        year,
+        vehicle.licensePlate || null,
+        vehicle.vin || null,
+        vehicle.color || null,
+        current_mileage,
+        0, // last_service_mileage default
+        next_service_mileage,
+        imageFile ? `uploads/${imageFile.filename}` : null
+      ]);
     }
+
+    const query = `
+      INSERT INTO vehicles 
+      (customer_id, make, model, year, license_plate, vin, color, current_mileage, last_service_mileage, next_service_mileage, image) 
+      VALUES ?
+    `;
+
+    const [result] = await db.promise().query(query, [insertValues]);
 
     const imageUrls = req.files.map(file => `${IMAGE_BASE_URL}/${encode(`uploads/${file.filename}`)}`);
 
@@ -338,8 +377,12 @@ router.post('/add-vehicles', upload.array('images'), (req, res) => {
       firstInsertedId: result.insertId,
       imageUrls
     });
-  });
+  } catch (err) {
+    console.error('Error inserting vehicles:', err);
+    return res.status(500).json({ error: 'Failed to insert vehicles into the database.' });
+  }
 });
+
 
 
 router.get('/car-models', (req, res) => {

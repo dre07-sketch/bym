@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Calendar, Clock, User, Car, FileText, Settings, MapPin, Users, Building2 } from 'lucide-react';
 
 interface Customer {
@@ -81,10 +81,24 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
 
   const serviceBays = ['Bay 1', 'Bay 2', 'Bay 3', 'Bay 4', 'Bay 5'];
 
-  const fetchCustomers = async () => {
+  // Initialize form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      resetForm();
+    }
+  }, [isOpen]);
+
+  // Fetch vehicles when customer changes
+  useEffect(() => {
+    if (selectedCustomer) {
+      fetchVehicles(selectedCustomer.customerId);
+    }
+  }, [selectedCustomer]);
+
+  const fetchCustomers = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/appointments/customers?type=${customerType}`);
+      const response = await fetch(`http://localhost:5001/api/appointments/customers?type=${customerType}`);
       const data = await response.json();
       setCustomers(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -93,12 +107,12 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
     } finally {
       setLoading(false);
     }
-  };
+  }, [customerType]);
 
-  const fetchVehicles = async (customerId: string) => {
+  const fetchVehicles = useCallback(async (customerId: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/app/vehicles/${customerId}`);
+      const response = await fetch(`http://localhost:5001/api/app/vehicles/${customerId}`);
       const data = await response.json();
       setVehicles(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -107,9 +121,10 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleCustomerTypeChange = (type: 'individual' | 'company') => {
+  const handleCustomerTypeChange = useCallback((type: 'individual' | 'company') => {
+    if (type === customerType) return; // Prevent unnecessary reset
     setCustomerType(type);
     setSelectedCustomer(null);
     setSelectedVehicle(null);
@@ -120,14 +135,15 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
       vehicle_Model: '',
       license_Plate: ''
     }));
-  };
+  }, [customerType]);
 
-  const handleOpenCustomerModal = () => {
+  const handleOpenCustomerModal = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setShowCustomerModal(true);
     fetchCustomers();
-  };
+  }, [fetchCustomers]);
 
-  const handleSelectCustomer = (customer: Customer) => {
+  const handleSelectCustomer = useCallback((customer: Customer) => {
     setSelectedCustomer(customer);
     const displayName = customer.personal_name || customer.name;
     setFormData(prev => ({
@@ -139,18 +155,19 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
     }));
     setSelectedVehicle(null);
     setShowCustomerModal(false);
-  };
+  }, []);
 
-  const handleOpenVehicleModal = () => {
+  const handleOpenVehicleModal = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (!selectedCustomer) {
       alert('Please select a customer first');
       return;
     }
     setShowVehicleModal(true);
     fetchVehicles(selectedCustomer.customerId);
-  };
+  }, [selectedCustomer, fetchVehicles]);
 
-  const handleSelectVehicle = (vehicle: Vehicle) => {
+  const handleSelectVehicle = useCallback((vehicle: Vehicle) => {
     setSelectedVehicle(vehicle);
     setFormData(prev => ({
       ...prev,
@@ -158,20 +175,20 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
       license_Plate: vehicle.license_plate
     }));
     setShowVehicleModal(false);
-  };
+  }, []);
 
-  const handleInputChange = (field: string, value: string | number) => {
+  const handleInputChange = useCallback((field: string, value: string | number) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
-  };
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitStatus('submitting');
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/appointments', {
+      const response = await fetch('http://localhost:5001/api/appointments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -191,9 +208,9 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
       console.error('Error creating appointment:', error);
       setSubmitStatus('error');
     }
-  };
+  }, [formData, onClose]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData({
       customer_Name: '',
       customerId: '',
@@ -211,12 +228,12 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
     setSelectedVehicle(null);
     setCustomerType('individual');
     setShowCustomServiceInput(false);
-  };
+  }, []);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     resetForm();
     onClose();
-  };
+  }, [resetForm, onClose]);
 
   if (!isOpen) return null;
 
@@ -237,7 +254,11 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
           </button>
         </div>
         {/* Form */}
-        <form className="p-6 space-y-6" onSubmit={handleSubmit}>
+        <form 
+          key="appointment-form" 
+          className="p-6 space-y-6" 
+          onSubmit={handleSubmit}
+        >
           {/* Customer Type Selection */}
           <div className="bg-gray-50 rounded-lg p-4">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Customer Type</h3>
@@ -369,7 +390,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
                       setShowCustomServiceInput(true);
                       setFormData(prev => ({ ...prev, serviceType: '' }));
                     } else {
-                      setFormData(prev => ({ ...prev, serviceType: value }));
+                      handleInputChange('serviceType', value);
                     }
                   }}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -388,7 +409,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
                     type="text"
                     name="serviceType"
                     value={formData.serviceType}
-                    onChange={(e) => setFormData(prev => ({ ...prev, serviceType: e.target.value }))}
+                    onChange={(e) => handleInputChange('serviceType', e.target.value)}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter custom service type"
                     required
@@ -626,4 +647,4 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
   );
 };
 
-export default NewAppointmentModal;
+export default React.memo(NewAppointmentModal);

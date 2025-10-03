@@ -155,7 +155,7 @@ const CompletedCars = () => {
     const fetchCompletedTickets = async () => {
       try {
         setLoading(true);
-        const response = await fetch('https://ipasystem.bymsystem.com/api/completed-cars/completed-tickets');
+        const response = await fetch('http://localhost:5001/api/completed-cars/completed-tickets');
         if (!response.ok) {
           throw new Error('Failed to fetch completed tickets');
         }
@@ -185,7 +185,7 @@ const CompletedCars = () => {
       
       try {
         setBillLoading(true);
-        const response = await fetch(`https://ipasystem.bymsystem.com/api/bill/car-bills/${selectedTicket.ticket_number}`);
+        const response = await fetch(`http://localhost:5001/api/bill/car-bills/${selectedTicket.ticket_number}`);
         if (!response.ok) {
           throw new Error('Failed to fetch bill details');
         }

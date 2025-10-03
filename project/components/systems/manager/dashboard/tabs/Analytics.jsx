@@ -75,10 +75,10 @@ const Analytics = () => {
           vehiclesRes,
           inspectionsRes
         ] = await Promise.all([
-          fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/total-employees`),
-          fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/active-customers`),
-          fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/vehicles-in-service`),
-          fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/pending-inspections`)
+          fetch(`http://localhost:5001/api/manager-analytics/total-employees`),
+          fetch(`http://localhost:5001/api/manager-analytics/active-customers`),
+          fetch(`http://localhost:5001/api/manager-analytics/vehicles-in-service`),
+          fetch(`http://localhost:5001/api/manager-analytics/pending-inspections`)
         ]);
 
         const results = await Promise.all([
@@ -110,7 +110,7 @@ const Analytics = () => {
     const fetchPendingRequests = async () => {
       setRequestsLoading(true);
       try {
-        const res = await fetch(`https://ipasystem.bymsystem.com/api/manager-analytics/pending`);
+        const res = await fetch(`http://localhost:5001/api/manager-analytics/pending`);
         if (!res.ok) throw new Error('Failed to fetch pending requests');
 
         const data = await res.json();
@@ -149,7 +149,7 @@ const Analytics = () => {
     const fetchStatusDistribution = async () => {
       setChartLoading(true);
       try {
-        const res = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/status-distribution');
+        const res = await fetch('http://localhost:5001/api/ticket-stats/status-distribution');
         if (!res.ok) throw new Error('Failed to fetch status distribution');
 
         const data = await res.json();
@@ -188,7 +188,7 @@ const Analytics = () => {
     const fetchWeeklyRepairTrends = async () => {
       setWeeklyTrendsLoading(true);
       try {
-        const res = await fetch('https://ipasystem.bymsystem.com/api/manager-analytics/weekly-repair-trends');
+        const res = await fetch('http://localhost:5001/api/manager-analytics/weekly-repair-trends');
         if (!res.ok) throw new Error('Failed to fetch weekly repair trends');
 
         const data = await res.json();
@@ -212,7 +212,7 @@ const Analytics = () => {
     const fetchMonthlyRevenue = async () => {
       setMonthlyRevenueLoading(true);
       try {
-        const res = await fetch('https://ipasystem.bymsystem.com/api/manager-analytics/monthly-revenue');
+        const res = await fetch('http://localhost:5001/api/manager-analytics/monthly-revenue');
         if (!res.ok) throw new Error('Failed to fetch monthly revenue');
 
         const data = await res.json();

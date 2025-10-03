@@ -95,7 +95,7 @@ const CompletedReports = () => {
     const controller = new AbortController();
     const fetchReports = async () => {
       try {
-        const response = await fetch('https://ipasystem.bymsystem.com/api/inspection-endpoint/completed-with-parts', {
+        const response = await fetch('http://localhost:5001/api/inspection-endpoint/completed-with-parts', {
           signal: controller.signal
         });
         if (!response.ok) throw new Error('Failed to fetch reports');

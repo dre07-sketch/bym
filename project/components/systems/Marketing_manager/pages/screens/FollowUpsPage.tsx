@@ -51,7 +51,7 @@ const FollowUpPage = () => {
   useEffect(() => {
     const fetchFollowUps = async () => {
       try {
-        const res = await fetch('https://ipasystem.bymsystem.com/api/marketing-activities');
+        const res = await fetch('http://localhost:5001/api/marketing-activities');
         const data = await res.json();
 
         // Filter: follow-up required + follow-up date set + status is awaiting/in-progress
@@ -79,7 +79,7 @@ const FollowUpPage = () => {
 
   const handleUpdateStatus = async (id: number, newStatus: 'completed' | 'lost' | 'in-progress') => {
     try {
-      await fetch(`https://ipasystem.bymsystem.com/api/marketing-activities/${id}`, {
+      await fetch(`http://localhost:5001/api/marketing-activities/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...activities.find(a => a.id === id), status: newStatus }),

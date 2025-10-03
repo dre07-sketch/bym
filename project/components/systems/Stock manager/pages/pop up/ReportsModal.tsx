@@ -40,7 +40,7 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ onClose }) => {
   // Fetch inventory report
   const fetchInventoryReport = async () => {
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/report/summary');
+      const response = await fetch('http://localhost:5001/api/inventory/report/summary');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
@@ -60,7 +60,7 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ onClose }) => {
   // Fetch sales/activity trend
   const fetchSalesTrend = async () => {
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/report/sales-trend');
+      const response = await fetch('http://localhost:5001/api/inventory/report/sales-trend');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message);

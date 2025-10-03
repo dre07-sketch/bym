@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../db/connection');
 
-const BASE_URL = 'https://ipasystem.bymsystem.com';
+const BASE_URL = 'http://localhost:5001';
 const IMAGE_BASE_URL = `${BASE_URL}`;
 
 const encode = (path) => encodeURIComponent(path).replace(/%2F/g, '/');

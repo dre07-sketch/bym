@@ -184,7 +184,7 @@ function Insurance() {
   // Function to refresh the converted proformas count
   const refreshConvertedCount = async () => {
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/insurance/converted-proformas/count');
+      const response = await fetch('http://localhost:5001/api/insurance/converted-proformas/count');
       const data = await response.json();
       
       if (data.success) {
@@ -208,11 +208,11 @@ function Insurance() {
       
       try {
         // Fetch the list of accepted proformas
-        const listResponse = await fetch('https://ipasystem.bymsystem.com/api/insurance/proformas/accepted');
+        const listResponse = await fetch('http://localhost:5001/api/insurance/proformas/accepted');
         const listData = await listResponse.json();
         
         // Fetch the count of converted proformas
-        const countResponse = await fetch('https://ipasystem.bymsystem.com/api/insurance/converted-proformas/count');
+        const countResponse = await fetch('http://localhost:5001/api/insurance/converted-proformas/count');
         const countData = await countResponse.json();
         
         if (listData.success && countData.success) {
@@ -317,7 +317,7 @@ function Insurance() {
     
     try {
       // Fetch the full proforma details with items using proforma_number
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/insurance/proformas/${proforma.proforma_number}`);
+      const response = await fetch(`http://localhost:5001/api/insurance/proformas/${proforma.proforma_number}`);
       const data = await response.json();
       
       if (data.success) {

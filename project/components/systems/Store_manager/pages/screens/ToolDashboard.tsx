@@ -169,7 +169,7 @@ export default function ToolDashboard() {
 const fetchRecentActivity = async () => {
   setLoadingActivity(true);
   try {
-    const res = await fetch('https://ipasystem.bymsystem.com/api/tools/recent-activity');
+    const res = await fetch('http://localhost:5001/api/tools/recent-activity');
     const data = await res.json();
 
     if (data.success && Array.isArray(data.data)) {
@@ -197,7 +197,7 @@ useEffect(() => {
 const fetchAssignedToTicket = async (ticketId: number) => {
   setLoadingAssignment(true);
   try {
-    const res = await fetch(`https://ipasystem.bymsystem.com/api/tools/assigned?ticketId=${ticketId}`);
+    const res = await fetch(`http://localhost:5001/api/tools/assigned?ticketId=${ticketId}`);
     const data = await res.json();
     if (data.success) {
       setAssignedToTicket(data.data);
@@ -238,7 +238,7 @@ useEffect(() => {
   const fetchStats = async () => {
     setStatsLoading(true);
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/stats');
+      const res = await fetch('http://localhost:5001/api/tools/stats');
       if (!res.ok) throw new Error('Failed to fetch dashboard stats');
       const result = await res.json();
       if (!result.success) {
@@ -261,7 +261,7 @@ useEffect(() => {
 
   const fetchAssignedTools = async () => {
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assigned');
+      const res = await fetch('http://localhost:5001/api/tools/assigned');
       const data = await res.json();
       setAssignedList(data.data || []);
     } catch (err) {
@@ -281,7 +281,7 @@ useEffect(() => {
     const confirm = window.confirm('Return this tool?');
     if (!confirm) return;
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/return', {
+      const res = await fetch('http://localhost:5001/api/tools/return', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignmentId, toolID: toolId, quantity }),
@@ -330,7 +330,7 @@ useEffect(() => {
   const fetchTickets = async () => {
     setLoadingTickets(true);
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tickets/service_tickets');
+      const res = await fetch('http://localhost:5001/api/tickets/service_tickets');
       if (!res.ok) throw new Error('Failed to fetch tickets');
       const data: ServiceTicket[] = await res.json();
       const inProgress = data.filter((t) =>
@@ -348,7 +348,7 @@ useEffect(() => {
   const fetchTools = async () => {
     setLoadingTools(true);
     try {
-      const res = await fetch('https://ipasystem.bymsystem.com/api/tools');
+      const res = await fetch('http://localhost:5001/api/tools');
       if (!res.ok) throw new Error('Failed to fetch tools');
       const data = await res.json();
       setTools(data.data || []);
@@ -404,7 +404,7 @@ useEffect(() => {
     setAssigning(true);
     try {
       for (const { tool, qty } of assignedTools) {
-        const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assign', {
+        const res = await fetch('http://localhost:5001/api/tools/assign', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -482,7 +482,7 @@ useEffect(() => {
   // === Active Assignments Fetch ===
  const fetchActiveAssignments = async () => {
   try {
-    const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assigned');
+    const res = await fetch('http://localhost:5001/api/tools/assigned');
     if (!res.ok) throw new Error('Network error');
 
     const { success, data } = await res.json();
@@ -512,21 +512,7 @@ useEffect(() => {
           <p className="text-gray-500 mt-1">Real-time tool tracking and management</p>
         </div>
         <div className="flex items-center space-x-4">
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="flex items-center space-x-2 px-4 py-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition-colors"
-          >
-            <Activity className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
-          <button
-            onClick={openModal}
-            className="px-4 py-2 bg-gradient-to-r from-orange-500 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105 flex items-center space-x-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Request</span>
-          </button>
+          
         </div>
       </div>
 

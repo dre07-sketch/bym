@@ -117,7 +117,7 @@ const [partsText, setPartsText] = useState('');
 
 const handleMarkForInspection = async () => {
   try {
-    const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/${selectedRepair.id}/status`, {
+    const response = await fetch(`http://localhost:5001/api/active-progress/${selectedRepair.id}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'Inspection' })
@@ -158,7 +158,7 @@ const handleMarkForInspection = async () => {
         if (!part.name || !part.category || !part.quantity) {
           throw new Error(`Missing required fields in part: ${JSON.stringify(part)}`);
         }
-        return fetch("https://ipasystem.bymsystem.com/api/active-progress/outsource", {
+        return fetch("http://localhost:5001/api/active-progress/outsource", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -258,7 +258,7 @@ const handleMarkForInspection = async () => {
     useEffect(() => {
       if (!ticketNumber) return;
       setLoading(true);
-      fetch(`https://ipasystem.bymsystem.com/api/active-progress/get-outsource-part`)
+      fetch(`http://localhost:5001/api/active-progress/get-outsource-part`)
         .then(res => res.json())
         .then(result => {
           if (result.success) {
@@ -376,7 +376,7 @@ const handleMarkForInspection = async () => {
   // Fetch single repair data
   const fetchRepairData = async (repairId) => {
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/${repairId}`);
+      const response = await fetch(`http://localhost:5001/api/active-progress/${repairId}`);
       if (!response.ok) throw new Error('Failed to fetch repair');
       const data = await response.json();
       return mapTicketToRepair(data);
@@ -407,7 +407,7 @@ const handleMarkForInspection = async () => {
   useEffect(() => {
     const fetchRepairs = async () => {
       try {
-        const response = await fetch('https://ipasystem.bymsystem.com/api/active-progress/in-progress');
+        const response = await fetch('http://localhost:5001/api/active-progress/in-progress');
         if (!response.ok) throw new Error('Failed to fetch repairs');
         const data = await response.json();
         const formattedRepairs = data.map(mapTicketToRepair);
@@ -425,7 +425,7 @@ const handleMarkForInspection = async () => {
   useEffect(() => {
     const fetchParts = async () => {
       try {
-        const response = await fetch('https://ipasystem.bymsystem.com/api/active-progress/parts');
+        const response = await fetch('http://localhost:5001/api/active-progress/parts');
         if (response.ok) {
           const data = await response.json();
           // Convert price to number for each part
@@ -447,7 +447,7 @@ const handleMarkForInspection = async () => {
   const fetchProgressLogs = async (ticketNumber) => {
     setLoadingProgressLogs(true);
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/progress/${ticketNumber}`);
+      const response = await fetch(`http://localhost:5001/api/active-progress/progress/${ticketNumber}`);
       if (!response.ok) throw new Error('Failed to fetch progress logs');
       const data = await response.json();
       setProgressLogs(data);
@@ -460,7 +460,7 @@ const handleMarkForInspection = async () => {
   const fetchDisassembledParts = async (ticketNumber) => {
     setLoadingDisassembledParts(true);
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/diassmbled/${ticketNumber}`);
+      const response = await fetch(`http://localhost:5001/api/active-progress/diassmbled/${ticketNumber}`);
       if (!response.ok) throw new Error('Failed to fetch disassembled parts');
       const data = await response.json();
       setDisassembledParts(data);
@@ -473,7 +473,7 @@ const handleMarkForInspection = async () => {
   const fetchUsedTools = async (ticketNumber) => {
     setLoadingUsedTools(true);
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/used-tools/${ticketNumber}`);
+      const response = await fetch(`http://localhost:5001/api/active-progress/used-tools/${ticketNumber}`);
       if (!response.ok) throw new Error('Failed to fetch used tools');
       const data = await response.json();
       setUsedTools(data);
@@ -486,7 +486,7 @@ const handleMarkForInspection = async () => {
   const fetchInspectionRecords = async (ticketNumber) => {
     setLoadingInspectionRecords(true);
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/inspection/${ticketNumber}`);
+      const response = await fetch(`http://localhost:5001/api/active-progress/inspection/${ticketNumber}`);
       if (!response.ok) throw new Error('Failed to fetch inspection records');
       const data = await response.json();
       setInspectionRecords(data);
@@ -574,7 +574,7 @@ const handleMarkForInspection = async () => {
       return;
     }
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/${selectedRepair.id}/completion`, {
+      const response = await fetch(`http://localhost:5001/api/active-progress/${selectedRepair.id}/completion`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ completion_date: completionTime })
@@ -707,7 +707,7 @@ const handleOrderParts = async () => {
       .map(part => `${part.name} (Quantity: ${part.quantity})`)
       .join('\n');
 
-    const response = await fetch('https://ipasystem.bymsystem.com/api/active-progress/parts-request', {
+    const response = await fetch('http://localhost:5001/api/active-progress/parts-request', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -770,7 +770,7 @@ const handleOrderParts = async () => {
   //     };
   //   });
   //   try {
-  //     const response = await fetch('https://ipasystem.bymsystem.com/api/active-progress/ordered-parts', {
+  //     const response = await fetch('http://localhost:5001/api/active-progress/ordered-parts', {
   //       method: 'POST',
   //       headers: {
   //         'Content-Type': 'application/json'
@@ -1396,12 +1396,7 @@ const formatInspectionChecklist = (inspection) => {
                         <div className="text-center py-10 bg-gray-50 rounded-xl">
                           <PackagePlus size={48} className="mx-auto text-gray-300 mb-3" />
                           <p className="text-gray-500">No stock parts ordered for this repair</p>
-                          <button 
-                            onClick={() => setShowPartsModal(true)}
-                            className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 mx-auto"
-                          >
-                            <PackagePlus size={16} /> Order Stock Part
-                          </button>
+                          
                         </div>
                       )}
                     </>
@@ -1411,12 +1406,7 @@ const formatInspectionChecklist = (inspection) => {
                     <>
                       <OutsourcedPartsTabContent ticketNumber={selectedRepair?.ticketNumber} />
                       <div className="mt-4 flex justify-end">
-                        <button
-                          onClick={() => setShowOutsourceModal(true)}
-                          className="px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center gap-2 text-sm"
-                        >
-                          <Plus size={16} /> Outsource New Part
-                        </button>
+                     
                       </div>
                     </>
                   )}

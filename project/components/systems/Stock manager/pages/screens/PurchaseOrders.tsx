@@ -54,33 +54,23 @@ interface OrderItem {
 }
 
 interface PurchaseOrder {
-  receivedDate: string;
   poNumber: string;
   supplier: string;
   status: 'pending' | 'approved' | 'rejected' | 'ordered' | 'received';
   orderDate: string;
-  expectedDate: string;
+  expectedDate: string | null;
+  receivedDate: string | null;
   totalAmount: number;
   itemCount: number;
   createdBy: string; // Now just the full name
-  notes?: string;
+  notes: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  items: Array<{
-    id: string;
-    name: string;
-    quantity: number;
-    price: number;
-  }>;
+  items: OrderItem[];
 }
 
 interface Supplier {
   id: number;
   name: string;
-}
-
-interface CreatedBy {
-  id: string;
-  full_name: string;
 }
 
 const PurchaseOrders: React.FC = () => {
@@ -92,7 +82,7 @@ const PurchaseOrders: React.FC = () => {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [viewingPO, setViewingPO] = useState<PurchaseOrder | null>(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; role: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: number; name: string; role: string } | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
 
@@ -129,16 +119,42 @@ const PurchaseOrders: React.FC = () => {
     if (userData) {
       try {
         const user = JSON.parse(userData);
+        console.log('Raw user data from localStorage:', user);
+        
+        // Extract user ID from JWT token as well for comparison
+        const decodedToken = parseJwt(token);
+        console.log('Decoded JWT token:', decodedToken);
+        
+        // Get user ID from token if available, otherwise from user data
+        let userId;
+        if (decodedToken && decodedToken.id) {
+          userId = decodedToken.id;
+          console.log('Using user ID from token:', userId);
+        } else if (user.id) {
+          userId = user.id;
+          console.log('Using user ID from user data:', userId);
+        } else {
+          throw new Error('User ID not found in token or user data');
+        }
+        
+        // Ensure ID is a number
+        const numericId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+        if (isNaN(numericId)) {
+          throw new Error(`Invalid user ID format: ${userId}`);
+        }
+        
+        console.log('Final user ID (numeric):', numericId);
+        
         setCurrentUser({
-          id: user.id,
-          name: user.full_name,
-          role: user.role
+          id: numericId,
+          name: user.full_name || user.name || 'Unknown User',
+          role: user.role || 'Unknown Role'
         });
-        console.log('Current user set:', user.full_name);
+        console.log('Current user set:', user.full_name || user.name, 'with ID:', numericId);
         return true;
       } catch (e) {
         console.error('Error parsing user data:', e);
-        setAuthError('Invalid user data. Please log in again.');
+        setAuthError(`Invalid user data: ${e instanceof Error ? e.message : 'Unknown error'}`);
         setDebugInfo('Invalid user data');
         handleLogout();
         return false;
@@ -170,9 +186,7 @@ const PurchaseOrders: React.FC = () => {
         return;
       }
 
-      console.log('Fetching purchase orders with token:', token.substring(0, 20) + '...');
-
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/purchase-orders', {
+      const response = await fetch('http://localhost:5001/api/inventory/purchase-orders', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -196,17 +210,33 @@ const PurchaseOrders: React.FC = () => {
       const result = await response.json();
       console.log('Fetch result:', result);
       
-      const poList = Array.isArray(result.data) 
-        ? result.data.map((po: any) => ({
-            ...po,
-            totalAmount: parseFloat(po.totalAmount) || 0,
-            orderDate: po.orderDate || 'N/A',
-            expectedDate: po.expectedDate || 'N/A',
-            createdBy: po.createdBy?.full_name || 'Unknown' // Extract full_name from createdBy object
-          }))
-        : [];
-
-      setPurchaseOrders(poList);
+      if (result.success && Array.isArray(result.data)) {
+        // Map the data to match our interface
+        const poList = result.data.map((po: any) => ({
+          poNumber: po.poNumber,
+          supplier: po.supplier,
+          status: po.status,
+          orderDate: po.orderDate || 'N/A',
+          expectedDate: po.expectedDate || null,
+          receivedDate: po.receivedDate || null,
+          totalAmount: parseFloat(po.totalAmount) || 0,
+          itemCount: parseInt(po.itemCount) || 0,
+          createdBy: po.createdBy || 'Unknown',
+          notes: po.notes || '',
+          priority: po.priority || 'medium',
+          items: Array.isArray(po.items) ? po.items.map((item: any) => ({
+            id: item.id?.toString() || '',
+            name: item.name || '',
+            quantity: parseInt(item.quantity) || 0,
+            price: parseFloat(item.price) || 0
+          })) : []
+        }));
+        
+        setPurchaseOrders(poList);
+      } else {
+        console.error('Invalid API response structure:', result);
+        setPurchaseOrders([]);
+      }
     } catch (err) {
       console.error('Error in fetchPurchaseOrders:', err);
       setPurchaseOrders([]);
@@ -231,7 +261,7 @@ const PurchaseOrders: React.FC = () => {
         return;
       }
 
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/inventory/purchase-orders/${poNumber}`, {
+      const response = await fetch(`http://localhost:5001/api/inventory/purchase-orders/${poNumber}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -513,8 +543,13 @@ const PurchaseOrders: React.FC = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{order.orderDate}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{order.receivedDate || '-'}</td>
+                     <td className="px-4 py-3 text-sm text-gray-900">
+  {order.orderDate ? new Date(order.orderDate).toLocaleString() : '-'}
+</td>
+<td className="px-4 py-3 text-sm text-gray-900">
+  {order.receivedDate ? new Date(order.receivedDate).toLocaleString() : '-'}
+</td>
+
                       <td className="px-4 py-3 text-sm font-bold text-gray-900">${order.totalAmount.toFixed(2)}</td>
                       <td className="px-4 py-3 text-sm">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
@@ -556,7 +591,7 @@ const PurchaseOrders: React.FC = () => {
 
       {/* View PO Modal */}
       {viewingPO && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fade-in">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fade-in text-black">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-slide-up">
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-xl font-bold text-gray-900">Purchase Order Details</h3>
@@ -575,18 +610,50 @@ const PurchaseOrders: React.FC = () => {
                     <span className="ml-1 capitalize">{viewingPO.status}</span>
                   </span>
                 </div>
+               <div>
+  <p className="text-sm text-gray-500">Order Date</p>
+  <p className="font-semibold">
+    {viewingPO.orderDate ? new Date(viewingPO.orderDate).toLocaleString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }) : '-'}
+  </p>
+</div>
+
+<div>
+  <p className="text-sm text-gray-500">Received Date</p>
+  <p className="font-semibold text-green-700">
+    {viewingPO.receivedDate ? new Date(viewingPO.receivedDate).toLocaleString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }) : '-'}
+  </p>
+</div>
+
                 <div>
-                  <p className="text-sm text-gray-500">Order Date</p>
-                  <p className="font-semibold">{viewingPO.orderDate}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Expected Delivery</p>
-                  <p className="font-semibold">{viewingPO.expectedDate || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Received Date</p>
-                  <p className="font-semibold text-green-700">{viewingPO.receivedDate}</p>
-                </div>
+  <p className="text-sm text-gray-500">Expected Delivery</p>
+  <p className="font-semibold">
+    {viewingPO.expectedDate 
+      ? new Date(viewingPO.expectedDate).toLocaleString('en-US', {
+          weekday: 'short',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) 
+      : '-'}
+  </p>
+</div>
+
                 <div>
                   <p className="text-sm text-gray-500">Total Amount</p>
                   <p className="font-bold">${viewingPO.totalAmount.toFixed(2)}</p>
@@ -693,7 +760,7 @@ const PurchaseOrders: React.FC = () => {
 interface RequestPOModalProps {
   onClose: () => void;
   onPOCreated: () => void;
-  currentUser: { id: string; name: string; role: string } | null;
+  currentUser: { id: number; name: string; role: string } | null;
   handleLogout: () => void;
 }
 
@@ -729,7 +796,7 @@ const RequestPOModal: React.FC<RequestPOModalProps> = ({
           return;
         }
 
-        const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/names', {
+        const response = await fetch('http://localhost:5001/api/inventory/names', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -822,23 +889,59 @@ const RequestPOModal: React.FC<RequestPOModalProps> = ({
       return;
     }
 
+    // Ensure we have current user info
+    if (!currentUser || !currentUser.name) {
+      setAuthError('User information is missing. Please log in again.');
+      setDebugInfo('Missing user info on submit');
+      handleLogout();
+      return;
+    }
+
+    // Get user ID from JWT token as the primary source
+    const decodedToken = parseJwt(token);
+    let userId = currentUser.id; // Default to current user state
+    
+    if (decodedToken && decodedToken.id) {
+      // Use the ID from the token if available
+      userId = typeof decodedToken.id === 'string' ? parseInt(decodedToken.id, 10) : decodedToken.id;
+      console.log('Using user ID from token:', userId);
+    } else {
+      console.log('Using user ID from state:', userId);
+    }
+
+    // Validate that user ID is a number
+    if (isNaN(userId) || userId <= 0) {
+      setAuthError('Invalid user ID. Please log in again.');
+      setDebugInfo(`Invalid user ID: ${userId}`);
+      handleLogout();
+      return;
+    }
+
+    // Convert to number explicitly to ensure it's not a string
+    const numericUserId = Number(userId);
+    console.log('Final user ID for submission:', numericUserId, typeof numericUserId);
+
     setIsSubmitting(true);
     try {
+      // Format the payload to match backend expectations
       const payload = {
         supplier: formData.supplier,
         orderDate: new Date().toISOString().split('T')[0], // Current date in YYYY-MM-DD format
-        expectedDate: formData.expectedDate,
-        totalAmount,
-        itemCount: orderItems.length,
-        notes: formData.notes,
+        expectedDate: formData.expectedDate || null,
+        receivedDate: null, // Not set when creating a new PO
+        createdBy: currentUser.name, // Send as string, not object
+        notes: formData.notes || '',
         priority: 'medium',
-        items: orderItems
+        items: orderItems.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price
+        }))
       };
 
-      console.log('Submitting PO with payload:', payload);
-      console.log('Using token:', token.substring(0, 20) + '...');
+      console.log('Submitting payload:', payload);
 
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/purchase-orders', {
+      const response = await fetch('http://localhost:5001/api/inventory/purchase-orders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -997,6 +1100,23 @@ const RequestPOModal: React.FC<RequestPOModalProps> = ({
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Created By Field */}
+          <div className="mt-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Created By
+            </label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                value={currentUser?.name || ''}
+                disabled
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl bg-gray-100 text-gray-700 cursor-not-allowed"
+                placeholder="Current user"
+              />
             </div>
           </div>
 

@@ -10,10 +10,7 @@ import {
   Send,
   X,
   AlertTriangle,
-  Star,
-  MessageSquare,
-  FileText,
-  Target,
+  Phone,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,20 +36,26 @@ import {
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-// === Types ===
+// === Vehicle Interface ===
+interface Vehicle {
+  id: number | null;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  licensePlate: string | null;
+  vin: string | null;
+  color: string | null;
+  current_mileage: number | null;
+}
+
+// === Appointment Interface using Vehicle ===
 interface Appointment {
   id: number;
   customerId: number;
   customerType: 'individual' | 'company' | null;
   customerName: string;
-  vehicleId: number | null;
-  vehicleMake: string | null;
-  vehicleModel: string | null;
-  vehicleYear: number | null;
-  licensePlate: string | null;
-  vin: string | null;
-  color: string | null;
-  current_mileage: number | null;
+  customerPhone?: string;
+  vehicle: Vehicle; // Using the Vehicle interface
   appointmentDate: string;
   appointmentTime: string;
   serviceType: string;
@@ -64,7 +67,7 @@ interface Appointment {
 }
 
 // === Import the NewAppointmentModal ===
-import NewAppointmentModal from '../pop up/NewAppointmentModal'; // Adjust the path as needed
+import NewAppointmentModal from '../pop up/NewAppointmentModal';
 
 // === Main Component ===
 export default function AppointmentList() {
@@ -75,50 +78,122 @@ export default function AppointmentList() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [convertedCount, setConvertedCount] = useState(0); // New state for converted count
 
   // === Modal States ===
   const [showDetailsModal, setShowDetailsModal] = useState<Appointment | null>(null);
   const [showGenerateTicketModal, setShowGenerateTicketModal] = useState(false);
   const [isGeneratingTicket, setIsGeneratingTicket] = useState(false);
   const [ticketGenerationError, setTicketGenerationError] = useState<string | null>(null);
+  
+  // Initialize all fields to avoid undefined values
   const [ticketFormData, setTicketFormData] = useState({
     title: '',
     description: '',
     priority: 'medium',
     urgencyLevel: 'moderate',
+    customer_type: 'individual',
+    customer_id: '',
+    individual_name: '',
+    individual_phone: '',
+    company_name: '',
+    company_phone: '',
+    vehicle_info: {
+      make: '',
+      model: '',
+      year: null as number | null,
+    },
+    license_plate: ''
   });
 
-  // --- NEW: State for the New Appointment Modal ---
+  // --- State for the New Appointment Modal ---
   const [showNewAppointmentModal, setShowNewAppointmentModal] = useState(false);
 
   const { addNotification } = useNotifications();
 
   // Fetch appointments
+  const fetchAppointments = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('http://localhost:5001/api/appointments/getappointment');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      // Transform the data to use the Vehicle interface
+      const data = await response.json();
+      const transformedData: Appointment[] = data.map((item: any) => ({
+        id: item.id,
+        customerId: item.customerId,
+        customerType: item.customerType,
+        customerName: item.customerName,
+        customerPhone: item.customerPhone,
+        vehicle: {
+          id: item.vehicleId,
+          make: item.vehicleMake,
+          model: item.vehicleModel,
+          year: item.vehicleYear,
+          licensePlate: item.licensePlate,
+          vin: item.vin,
+          color: item.color,
+          current_mileage: item.current_mileage,
+        },
+        appointmentDate: item.appointmentDate,
+        appointmentTime: item.appointmentTime,
+        serviceType: item.serviceType,
+        durationMinutes: item.durationMinutes,
+        serviceBay: item.serviceBay,
+        notes: item.notes,
+        status: item.status,
+        createdAt: item.createdAt,
+      }));
+      
+      // Filter out converted appointments from the list
+      const activeAppointments = transformedData.filter(apt => apt.status !== 'converted');
+      
+      // Update state without duplicates
+      setAppointments(prev => {
+        const appointmentMap = new Map<number, Appointment>();
+        // Add existing appointments
+        prev.forEach(apt => appointmentMap.set(apt.id, apt));
+        // Add or update with new appointments
+        activeAppointments.forEach(apt => appointmentMap.set(apt.id, apt));
+        return Array.from(appointmentMap.values());
+      });
+      
+      setError(null);
+    } catch (err: any) {
+      console.error('Error fetching appointments:', err);
+      setError('Failed to load appointments');
+      addNotification({
+        type: 'error',
+        title: 'Fetch Error',
+        message: 'Could not load appointments',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch converted count
+  const fetchConvertedCount = async () => {
+    try {
+      const response = await fetch('http://localhost:5001/api/appointments/converted/count');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const data = await response.json();
+      setConvertedCount(data.convertedCount);
+    } catch (err: any) {
+      console.error('Error fetching converted count:', err);
+      // We don't show a notification for this as it's not critical
+    }
+  };
+
   useEffect(() => {
-    const fetchAppointments = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('https://ipasystem.bymsystem.com/api/appointments/getappointment');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data: Appointment[] = await response.json();
-        // Filter out converted appointments from the list
-        const activeAppointments = data.filter(apt => apt.status !== 'converted');
-        setAppointments(activeAppointments);
-        setError(null);
-      } catch (err: any) {
-        console.error('Error fetching appointments:', err);
-        setError('Failed to load appointments');
-        addNotification({
-          type: 'error',
-          title: 'Fetch Error',
-          message: 'Could not load appointments',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchAppointments();
-    const interval = setInterval(fetchAppointments, 30000);
+    fetchConvertedCount(); // Fetch converted count
+    const interval = setInterval(() => {
+      fetchAppointments();
+      fetchConvertedCount(); // Also refresh converted count periodically
+    }, 30000);
     return () => clearInterval(interval);
   }, [addNotification]);
 
@@ -169,15 +244,35 @@ export default function AppointmentList() {
     setShowDetailsModal(apt);
   };
 
+  // Handle ticket form change
+  const handleTicketFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    
+    // Handle nested vehicle_info object
+    if (name.startsWith('vehicle_info.')) {
+      const field = name.split('.')[1];
+      setTicketFormData(prev => ({
+        ...prev,
+        vehicle_info: {
+          ...prev.vehicle_info,
+          [field]: field === 'year' ? (value ? parseInt(value) : null) : value
+        }
+      }));
+    } else {
+      setTicketFormData((prev) => ({ ...prev, [name]: value }));
+    }
+  };
+
   // Open generate ticket modal with pre-filled data
   const handleOpenGenerateTicket = (apt: Appointment) => {
-    setTicketFormData({
+    // Create a new object with all required fields initialized
+    const newTicketFormData = {
       title: `Service: ${apt.serviceType} - ${apt.customerName}`,
       description: `Converted from Appointment
 Customer: ${apt.customerName} (${apt.customerType === 'individual' ? 'Individual' : 'Company'})
-Vehicle: ${apt.vehicleYear} ${apt.vehicleMake} ${apt.vehicleModel} (${apt.licensePlate || 'No Plate'})
-current_mileage: ${apt.current_mileage ?? 'N/A'} miles
-Color: ${apt.color}
+Vehicle: ${apt.vehicle.year} ${apt.vehicle.make} ${apt.vehicle.model} (${apt.vehicle.licensePlate || 'No Plate'})
+Mileage: ${apt.vehicle.current_mileage ?? 'N/A'} miles
+Color: ${apt.vehicle.color || 'N/A'}
 Service Type: ${apt.serviceType}
 Duration: ${apt.durationMinutes} minutes
 Bay: ${apt.serviceBay || 'Not assigned'}
@@ -185,16 +280,34 @@ Appointment Time: ${formatDateTime(apt.appointmentDate, apt.appointmentTime)}
 Notes: ${apt.notes || 'No additional notes.'}`,
       priority: apt.status === 'pending' ? 'urgent' : 'medium',
       urgencyLevel: apt.status === 'pending' ? 'high' : 'moderate',
-    });
+      customer_type: apt.customerType || 'individual',
+      customer_id: apt.customerId.toString(),
+      vehicle_info: {
+        make: apt.vehicle.make || '',
+        model: apt.vehicle.model || '',
+        year: apt.vehicle.year || null
+      },
+      license_plate: apt.vehicle.licensePlate || '',
+      // Initialize all fields to avoid undefined
+      individual_name: '',
+      individual_phone: '',
+      company_name: '',
+      company_phone: '',
+    };
+
+    // Set customer fields based on type
+    if (apt.customerType === 'individual') {
+      newTicketFormData.individual_name = apt.customerName || '';
+      newTicketFormData.individual_phone = apt.customerPhone || '';
+    } else {
+      newTicketFormData.company_name = apt.customerName || '';
+      newTicketFormData.company_phone = apt.customerPhone || '';
+    }
+
+    setTicketFormData(newTicketFormData);
     setShowDetailsModal(apt);
     setShowGenerateTicketModal(true);
     setTicketGenerationError(null);
-  };
-
-  // Handle ticket form change
-  const handleTicketFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setTicketFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   // Handle ticket submission
@@ -204,13 +317,22 @@ Notes: ${apt.notes || 'No additional notes.'}`,
     setIsGeneratingTicket(true);
     setTicketGenerationError(null);
     try {
+      // Prepare the data to match backend expectations
       const ticketData = {
-        customer_type: showDetailsModal.customerType || 'individual',
-        customer_id: showDetailsModal.customerId,
-        customer_name: showDetailsModal.customerName,
-        vehicle_id: showDetailsModal.vehicleId || 'unregistered-appointment-vehicle',
-        vehicle_info: `${showDetailsModal.vehicleYear} ${showDetailsModal.vehicleMake} ${showDetailsModal.vehicleModel} (${showDetailsModal.licensePlate || 'No Plate'})`,
-        license_plate: showDetailsModal.licensePlate || '',
+        customer_type: ticketFormData.customer_type,
+        customer_id: ticketFormData.customer_id,
+        // Customer fields based on type
+        ...(ticketFormData.customer_type === 'individual' ? {
+          individual_name: ticketFormData.individual_name,
+          individual_phone: ticketFormData.individual_phone
+        } : {
+          company_name: ticketFormData.company_name,
+          company_phone: ticketFormData.company_phone
+        }),
+        // Vehicle info
+        vehicle_info: ticketFormData.vehicle_info,
+        license_plate: ticketFormData.license_plate,
+        // Ticket fields
         title: ticketFormData.title,
         description: ticketFormData.description,
         priority: ticketFormData.priority,
@@ -218,7 +340,7 @@ Notes: ${apt.notes || 'No additional notes.'}`,
         urgency_level: ticketFormData.urgencyLevel,
       };
 
-      const response = await fetch('https://ipasystem.bymsystem.com/api/tickets', {
+      const response = await fetch('http://localhost:5001/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ticketData),
@@ -232,7 +354,7 @@ Notes: ${apt.notes || 'No additional notes.'}`,
       const createdTicket = await response.json();
 
       // Update backend appointment status to 'converted'
-      const statusResponse = await fetch(`https://ipasystem.bymsystem.com/api/appointments/${showDetailsModal.id}/status`, {
+      const statusResponse = await fetch(`http://localhost:5001/api/appointments/${showDetailsModal.id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'converted' }),
@@ -244,6 +366,9 @@ Notes: ${apt.notes || 'No additional notes.'}`,
 
       // Remove the appointment from the list
       setAppointments((prev) => prev.filter((apt) => apt.id !== showDetailsModal.id));
+      
+      // Update converted count
+      setConvertedCount(prev => prev + 1);
 
       // Success
       setShowGenerateTicketModal(false);
@@ -261,20 +386,20 @@ Notes: ${apt.notes || 'No additional notes.'}`,
     }
   };
 
-  // --- NEW: Handle opening the New Appointment Modal ---
+  // Handle opening the New Appointment Modal
   const handleNewAppointment = () => {
     setShowNewAppointmentModal(true);
   };
 
-  // --- NEW: Callback for when a new appointment is successfully created ---
+  // Callback for when a new appointment is successfully created
   const handleAppointmentCreated = () => {
-    // Optionally, you could refetch the list here to show the new appointment immediately.
-    // For now, we'll rely on the polling mechanism (setInterval) to update the list.
-    addNotification({
-      type: 'success',
-      title: 'Appointment Created',
-      message: 'The new appointment has been scheduled.',
-    });
+    fetchAppointments();
+  };
+
+  // Handle closing the New Appointment Modal
+  const handleCloseNewAppointmentModal = () => {
+    setShowNewAppointmentModal(false);
+    fetchAppointments(); // Refresh list when modal closes
   };
 
   if (loading) {
@@ -343,14 +468,14 @@ Notes: ${apt.notes || 'No additional notes.'}`,
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white">
+        <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-orange-100">Avg Duration</p>
-                <p className="text-3xl font-bold">60m</p>
+                <p className="text-green-100">Converted</p>
+                <p className="text-3xl font-bold">{convertedCount}</p>
               </div>
-              <Clock className="w-8 h-8 text-orange-200" />
+              <CheckCircle className="w-8 h-8 text-green-200" />
             </div>
           </CardContent>
         </Card>
@@ -441,10 +566,12 @@ Notes: ${apt.notes || 'No additional notes.'}`,
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <div className="flex items-center space-x-2 text-gray-600 mb-1">
-                            <Car className="w-4 h-4" />
-                            <span className="font-medium">
-                              {apt.vehicleYear} {apt.vehicleMake} {apt.vehicleModel} ({apt.licensePlate})
-                            </span>
+                            <User className="w-4 h-4" />
+                            <span className="font-medium">{apt.customerName}</span>
+                          </div>
+                          <div className="flex items-center space-x-2 text-gray-600 mb-1">
+                            <Phone className="w-4 h-4" />
+                            <span>{apt.customerPhone || 'No phone'}</span>
                           </div>
                           <div className="flex items-center space-x-2 text-gray-600">
                             <Calendar className="w-4 h-4" />
@@ -453,6 +580,12 @@ Notes: ${apt.notes || 'No additional notes.'}`,
                         </div>
                         <div>
                           <p className="font-medium text-gray-800 mb-1">Service: {apt.serviceType}</p>
+                          <div className="flex items-center space-x-2 text-gray-600 mb-1">
+                            <Car className="w-4 h-4" />
+                            <span className="font-medium">
+                              {apt.vehicle.year} {apt.vehicle.make} {apt.vehicle.model} ({apt.vehicle.licensePlate})
+                            </span>
+                          </div>
                           <div className="flex items-center space-x-4 text-xs text-gray-500">
                             <span>Duration: {apt.durationMinutes}m</span>
                             {apt.serviceBay && <span>Bay: {apt.serviceBay}</span>}
@@ -463,10 +596,6 @@ Notes: ${apt.notes || 'No additional notes.'}`,
                     </div>
                   </div>
                   <div className="text-right space-y-3">
-                    <div>
-                      <span className="text-sm text-gray-500">current_mileage: </span>
-                      <span className="font-medium">{apt.current_mileage ?? 'N/A'}</span>
-                    </div>
                     <div className="space-x-2">
                       <Button size="sm" variant="outline" onClick={() => openDetails(apt)}>
                         <Eye className="w-3 h-3 mr-1" />
@@ -519,6 +648,12 @@ Notes: ${apt.notes || 'No additional notes.'}`,
                       <span className="text-sm text-gray-500">Type: </span>
                       <span className="font-medium capitalize">{showDetailsModal.customerType}</span>
                     </div>
+                    {showDetailsModal.customerPhone && (
+                      <div>
+                        <span className="text-sm text-gray-500">Phone: </span>
+                        <span className="font-medium">{showDetailsModal.customerPhone}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -543,50 +678,59 @@ Notes: ${apt.notes || 'No additional notes.'}`,
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg border-b pb-2">Vehicle Information</h3>
-                  <div className="space-y-2">
-                    <div>
-                      <span className="text-sm text-gray-500">Vehicle: </span>
-                      <span className="font-medium">
-                        {showDetailsModal.vehicleYear} {showDetailsModal.vehicleMake} {showDetailsModal.vehicleModel}
-                      </span>
+              
+              {/* Vehicle Information Section */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-lg border-b pb-2">Vehicle Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="space-y-2">
+                      <div>
+                        <span className="text-sm text-gray-500">Vehicle: </span>
+                        <span className="font-medium">
+                          {showDetailsModal.vehicle.year} {showDetailsModal.vehicle.make} {showDetailsModal.vehicle.model}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-500">Plate: </span>
+                        <span className="font-medium">{showDetailsModal.vehicle.licensePlate}</span>
+                      </div>
+                    
                     </div>
-                    <div>
-                      <span className="text-sm text-gray-500">Plate: </span>
-                      <span className="font-medium">{showDetailsModal.licensePlate}</span>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-500">Color: </span>
-                      <span className="font-medium">{showDetailsModal.color}</span>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-500">current_mileage: </span>
-                      <span className="font-medium">{showDetailsModal.current_mileage ?? 'N/A'} miles</span>
+                  </div>
+                  <div>
+                    <div className="space-y-2">
+                    
+                      {showDetailsModal.vehicle.vin && (
+                        <div>
+                          <span className="text-sm text-gray-500">VIN: </span>
+                          <span className="font-mono text-sm">{showDetailsModal.vehicle.vin}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg border-b pb-2">Additional Info</h3>
-                  <div className="space-y-2">
-                    <div>
-                      <span className="text-sm text-gray-500">Duration: </span>
-                      <span className="font-medium">{showDetailsModal.durationMinutes} minutes</span>
-                    </div>
-                    {showDetailsModal.serviceBay && (
-                      <div>
-                        <span className="text-sm text-gray-500">Bay: </span>
-                        <span className="font-medium">{showDetailsModal.serviceBay}</span>
-                      </div>
-                    )}
-                    {showDetailsModal.notes && (
-                      <div>
-                        <span className="text-sm text-gray-500">Notes: </span>
-                        <p className="mt-1 p-3 bg-gray-50 rounded-lg text-sm">{showDetailsModal.notes}</p>
-                      </div>
-                    )}
+              </div>
+              
+              <div className="space-y-4">
+                <h3 className="font-semibold text-lg border-b pb-2">Additional Info</h3>
+                <div className="space-y-2">
+                  <div>
+                    <span className="text-sm text-gray-500">Duration: </span>
+                    <span className="font-medium">{showDetailsModal.durationMinutes} minutes</span>
                   </div>
+                  {showDetailsModal.serviceBay && (
+                    <div>
+                      <span className="text-sm text-gray-500">Bay: </span>
+                      <span className="font-medium">{showDetailsModal.serviceBay}</span>
+                    </div>
+                  )}
+                  {showDetailsModal.notes && (
+                    <div>
+                      <span className="text-sm text-gray-500">Notes: </span>
+                      <p className="mt-1 p-3 bg-gray-50 rounded-lg text-sm">{showDetailsModal.notes}</p>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex space-x-4 pt-4 border-t">
@@ -626,6 +770,138 @@ Notes: ${apt.notes || 'No additional notes.'}`,
                   <AlertDescription>{ticketGenerationError}</AlertDescription>
                 </Alert>
               )}
+              
+              {/* Customer Type */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="customer_type" className="text-right">
+                  Customer Type
+                </Label>
+                <div className="col-span-3">
+                  <Select 
+                    name="customer_type" 
+                    value={ticketFormData.customer_type} 
+                    onValueChange={(value) => setTicketFormData(prev => ({ ...prev, customer_type: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select customer type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="individual">Individual</SelectItem>
+                      <SelectItem value="company">Company</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              {/* Customer Name - Conditional based on type */}
+              {ticketFormData.customer_type === 'individual' ? (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="individual_name" className="text-right">
+                    Customer Name *
+                  </Label>
+                  <div className="col-span-3">
+                    <Input
+                      id="individual_name"
+                      name="individual_name"
+                      value={ticketFormData.individual_name}
+                      onChange={handleTicketFormChange}
+                      required
+                      placeholder="Enter customer name"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="company_name" className="text-right">
+                    Company Name *
+                  </Label>
+                  <div className="col-span-3">
+                    <Input
+                      id="company_name"
+                      name="company_name"
+                      value={ticketFormData.company_name}
+                      onChange={handleTicketFormChange}
+                      required
+                      placeholder="Enter company name"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {/* Customer Phone - Conditional based on type */}
+              {ticketFormData.customer_type === 'individual' ? (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="individual_phone" className="text-right">
+                    Phone
+                  </Label>
+                  <div className="col-span-3">
+                    <Input
+                      id="individual_phone"
+                      name="individual_phone"
+                      value={ticketFormData.individual_phone}
+                      onChange={handleTicketFormChange}
+                      placeholder="Enter phone number"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="company_phone" className="text-right">
+                    Phone
+                  </Label>
+                  <div className="col-span-3">
+                    <Input
+                      id="company_phone"
+                      name="company_phone"
+                      value={ticketFormData.company_phone}
+                      onChange={handleTicketFormChange}
+                      placeholder="Enter phone number"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {/* Vehicle Information */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Vehicle</Label>
+                <div className="col-span-3 grid grid-cols-3 gap-2">
+                  <Input
+                    name="vehicle_info.year"
+                    value={ticketFormData.vehicle_info.year || ''}
+                    onChange={handleTicketFormChange}
+                    placeholder="Year"
+                    type="number"
+                  />
+                  <Input
+                    name="vehicle_info.make"
+                    value={ticketFormData.vehicle_info.make}
+                    onChange={handleTicketFormChange}
+                    placeholder="Make"
+                  />
+                  <Input
+                    name="vehicle_info.model"
+                    value={ticketFormData.vehicle_info.model}
+                    onChange={handleTicketFormChange}
+                    placeholder="Model"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="license_plate" className="text-right">
+                  License Plate
+                </Label>
+                <div className="col-span-3">
+                  <Input
+                    id="license_plate"
+                    name="license_plate"
+                    value={ticketFormData.license_plate}
+                    onChange={handleTicketFormChange}
+                    placeholder="Enter license plate"
+                  />
+                </div>
+              </div>
+              
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="title" className="text-right">
                   Title *
@@ -641,6 +917,7 @@ Notes: ${apt.notes || 'No additional notes.'}`,
                   />
                 </div>
               </div>
+              
               <div className="grid grid-cols-4 items-start gap-4">
                 <Label htmlFor="description" className="text-right pt-2">
                   Description *
@@ -657,6 +934,7 @@ Notes: ${apt.notes || 'No additional notes.'}`,
                   />
                 </div>
               </div>
+              
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="priority" className="text-right">
                   Priority
@@ -679,6 +957,7 @@ Notes: ${apt.notes || 'No additional notes.'}`,
                   </Select>
                 </div>
               </div>
+              
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="urgencyLevel" className="text-right">
                   Urgency Level
@@ -732,13 +1011,12 @@ Notes: ${apt.notes || 'No additional notes.'}`,
         </DialogContent>
       </Dialog>
 
-      {/* --- NEW: New Appointment Modal --- */}
+      {/* New Appointment Modal */}
       <NewAppointmentModal
         isOpen={showNewAppointmentModal}
-        onClose={() => setShowNewAppointmentModal(false)}
+        onClose={handleCloseNewAppointmentModal}
         
       />
-
     </div>
   );
 }

@@ -29,7 +29,7 @@ interface PurchaseOrder {
 }
 
 // API base URL - adjust as needed
-const API_BASE_URL = 'https://ipasystem.bymsystem.com/api';
+const API_BASE_URL = 'http://localhost:5001/api';
 
 // Runtime validation helpers
 const VALID_STATUSES = ['pending', 'approved', 'rejected', 'ordered', 'delivered', 'cancelled'] as const;
@@ -274,9 +274,7 @@ const PurchaseOrderModal = ({
             >
               Close
             </button>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-              Print Order
-            </button>
+            
           </div>
         </div>
       </div>

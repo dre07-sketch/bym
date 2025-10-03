@@ -114,7 +114,7 @@ router.get('/me', (req, res) => {
 
       // Map avatar URL
       user.avatar = user.image_url
-        ? `https://ipasystem.bymsystem.com/uploads/${user.image_url}`
+        ? `http://localhost:5001/uploads/${user.image_url}`
         : null;
 
       // Optional UI status

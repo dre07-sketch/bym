@@ -18,7 +18,7 @@ interface NotificationItem {
 }
 
 interface UserInfo {
-  id: string; // Added ID field for API calls
+  id: string;
   name: string;
   role: string;
   email: string;
@@ -87,9 +87,9 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false); // Added saving state
-  const [saveSuccess, setSaveSuccess] = useState(false); // Added success state
-  const [saveError, setSaveError] = useState<string | null>(null); // Added error state
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const router = useRouter();
   
   // Sidebar states
@@ -129,7 +129,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
       }
 
       try {
-        const response = await fetch('https://ipasystem.bymsystem.com/api/auth/me', {
+        const response = await fetch('http://localhost:5001/api/auth/me', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -144,7 +144,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         // Set user role and info
         setUserRole(user.role);
         setUserInfo({
-          id: user.id, // Added ID field
+          id: user.id,
           name: user.full_name,
           role: user.role,
           email: user.email,
@@ -294,7 +294,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         throw new Error('Authentication token not found');
       }
 
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/auth/employees/${effectiveUserInfo.id}`, {
+      const response = await fetch(`http://localhost:5001/api/auth/employees/${effectiveUserInfo.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -584,8 +584,13 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                   <h1 className="text-2xl md:text-3xl font-black bg-gradient-to-r from-white via-blue-100 to-indigo-100 bg-clip-text text-transparent">
                     {title}
                   </h1>
-                  <p className="text-slate-300 dark:text-slate-400 font-medium text-sm md:text-base">
+                  <p className="text-slate-300 dark:text-slate-400 font-medium text-sm md:text-base flex items-center flex-wrap">
                     {subtitle} {effectiveUserInfo?.name ? `, ${effectiveUserInfo.name}` : ''}
+                    {effectiveUserInfo?.role && (
+                      <span className="ml-2 px-2.5 py-0.5 bg-gradient-to-r from-blue-600/30 to-indigo-600/30 text-blue-200 rounded-full text-xs font-semibold shadow-md shadow-blue-500/20 border border-blue-400/30">
+                        {effectiveUserInfo.role}
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>

@@ -132,11 +132,11 @@ const Reports: React.FC = () => {
         activityRes,
         damageRes
       ] = await Promise.all([
-        fetch('https://ipasystem.bymsystem.com/api/tools/stats').then(r => r.json()),
-        fetch('https://ipasystem.bymsystem.com/api/tools/reports/summary').then(r => r.json()),
-        fetch('https://ipasystem.bymsystem.com/api/tools/reports/category-distribution').then(r => r.json()),
-        fetch('https://ipasystem.bymsystem.com/api/tools/recent-activity').then(r => r.json()),
-        fetch('https://ipasystem.bymsystem.com/api/damage-reports').then(r => r.json())
+        fetch('http://localhost:5001/api/tools/stats').then(r => r.json()),
+        fetch('http://localhost:5001/api/tools/reports/summary').then(r => r.json()),
+        fetch('http://localhost:5001/api/tools/reports/category-distribution').then(r => r.json()),
+        fetch('http://localhost:5001/api/tools/recent-activity').then(r => r.json()),
+        fetch('http://localhost:5001/api/damage-reports').then(r => r.json())
       ]);
 
       // Handle responses
@@ -279,17 +279,7 @@ const Reports: React.FC = () => {
                 <p className="text-gray-600 mt-2 text-lg">Comprehensive tool management insights and reports</p>
               </div>
               <div className="flex space-x-3">
-                <button
-                  onClick={fetchData}
-                  className="bg-gradient-to-r from-slate-800 to-slate-700 text-white px-6 py-3 rounded-xl hover:from-slate-700 hover:to-slate-600 transition-all duration-200 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                >
-                  <RefreshCw className="h-5 w-5" />
-                  <span className="font-medium">Refresh</span>
-                </button>
-                <button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
-                  <Download className="h-5 w-5" />
-                  <span className="font-medium">Export</span>
-                </button>
+               
               </div>
             </div>
           </div>

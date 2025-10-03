@@ -316,7 +316,7 @@ router.get('/completed-with-parts', (req, res) => {
       ON st.ticket_number = dp.ticket_number
     LEFT JOIN inspections i 
       ON i.ticket_number = st.ticket_number
-    WHERE st.status IN ('completed', 'awaiting bill')
+    WHERE st.status IN ('completed', 'awaiting bill','awaiting survey','awaiting salvage form','Payment Requested','Request Payment')
       AND i.id = (
         SELECT id 
         FROM inspections 

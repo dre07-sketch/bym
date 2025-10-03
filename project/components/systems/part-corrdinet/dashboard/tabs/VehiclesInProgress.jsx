@@ -28,7 +28,7 @@ const VehiclesInProgress = () => {
   useEffect(() => {
     const fetchActiveTickets = async () => {
       try {
-        const response = await fetch('https://ipasystem.bymsystem.com/api/active-tickets/active-tickets');
+        const response = await fetch('http://localhost:5001/api/active-tickets/active-tickets');
         if (!response.ok) throw new Error('Failed to fetch data');
         const data = await response.json();
 
@@ -103,7 +103,7 @@ const VehiclesInProgress = () => {
 
     try {
       // Fetch Progress Logs
-      const logsRes = await fetch(`https://ipasystem.bymsystem.com/api/progress/progress-logs/${ticketNumber}`);
+      const logsRes = await fetch(`http://localhost:5001/api/progress/progress-logs/${ticketNumber}`);
       let logs = [];
       if (logsRes.ok) {
         const logsData = await logsRes.json();
@@ -113,7 +113,7 @@ const VehiclesInProgress = () => {
       }
 
       // Fetch Disassembled Parts
-      const partsRes = await fetch(`https://ipasystem.bymsystem.com/api/disassmbled/disassembled-parts/${ticketNumber}`);
+      const partsRes = await fetch(`http://localhost:5001/api/disassmbled/disassembled-parts/${ticketNumber}`);
       let disassembledParts = [];
       if (partsRes.ok) {
         const partsData = await partsRes.json();

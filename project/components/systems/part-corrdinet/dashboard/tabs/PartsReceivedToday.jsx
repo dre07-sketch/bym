@@ -28,7 +28,7 @@ const PartsReceivedToday = () => {
   useEffect(() => {
     const fetchParts = async () => {
       try {
-        const response = await fetch('https://ipasystem.bymsystem.com/api/disassmbled/today-parts');
+        const response = await fetch('http://localhost:5001/api/disassmbled/today-parts');
         if (!response.ok) throw new Error('Failed to fetch parts');
         const data = await response.json();
 

@@ -23,6 +23,11 @@ interface Customer {
   name: string;
   personal_name?: string;
   phone: string;
+  email?: string;
+  emergency_contact?: string;
+  address?: string;
+  notes?: string;
+  image?: string;
 }
 
 interface Vehicle {
@@ -33,10 +38,11 @@ interface Vehicle {
   license_plate: string;
   vin: string;
   color: string;
-  mileage: number;
+  current_mileage: number;
   vehicle_type: string;
   customerId: string;
   customerName: string;
+  image?: string;
 }
 
 interface Appointment {
@@ -76,6 +82,16 @@ interface FormData {
   type: string;
   urgencyLevel: 'moderate' | 'high' | 'critical';
   appointmentId?: string;
+  // Insurance fields
+  insuranceCompany?: string;
+  insurancePhone?: string;
+  accidentDate?: string;
+  ownerName?: string;
+  ownerPhone?: string;
+  ownerEmail?: string;
+  insuranceDescription?: string;
+  // Proforma field
+  proformaId?: string;
 }
 
 const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
@@ -92,6 +108,7 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [searchFilter, setSearchFilter] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState(''); // New state for customer search
   const [formData, setFormData] = useState<FormData>({
     customerType: 'individual',
     customerId: '',
@@ -104,6 +121,16 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
     priority: 'medium',
     type: 'regular',
     urgencyLevel: 'moderate',
+    // Insurance fields
+    insuranceCompany: '',
+    insurancePhone: '',
+    accidentDate: '',
+    ownerName: '',
+    ownerPhone: '',
+    ownerEmail: '',
+    insuranceDescription: '',
+    // Proforma field
+    proformaId: '',
   });
 
   // --- Fetch appointments when the appointments tab is active ---
@@ -112,7 +139,7 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
       const fetchAppointments = async () => {
         try {
           setLoading(true);
-          const response = await fetch('https://ipasystem.bymsystem.com/api/appointments/getappointment');
+          const response = await fetch('http://localhost:5001/api/appointments/getappointment');
           if (!response.ok) {
             throw new Error('Network response was not ok');
           }
@@ -138,7 +165,7 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/tickets/customers?type=${formData.customerType}`);
+      const response = await fetch(`http://localhost:5001/api/tickets/customers?type=${formData.customerType}`);
       const data = await response.json();
       // Ensure data is always an array
       const customersArray = Array.isArray(data) ? data : data?.data || [];
@@ -154,7 +181,7 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
   const fetchVehicles = async (customerId: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`https://ipasystem.bymsystem.com/api/tickets/vehicles/${customerId}`);
+      const response = await fetch(`http://localhost:5001/api/tickets/vehicles/${customerId}`);
       const data = await response.json();
       // Ensure data is always an array
       const vehiclesArray = Array.isArray(data) ? data : data?.data || [];
@@ -183,6 +210,7 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
 
   const handleOpenCustomerModal = () => {
     setShowCustomerModal(true);
+    setCustomerSearchTerm(''); // Reset search term when opening modal
     fetchCustomers();
   };
 
@@ -215,7 +243,7 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
     setFormData(prev => ({
       ...prev,
       vehicleId: String(vehicle.vehicleId),
-      vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model} (${vehicle.color}, ${vehicle.mileage} mi)`,
+      vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model} (${vehicle.color}, ${vehicle.current_mileage ? vehicle.current_mileage.toLocaleString() : 'N/A'} mi)`,
       licensePlate: vehicle.license_plate || '',
     }));
     setShowVehicleModal(false);
@@ -251,6 +279,22 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
         appointment.vehicleModel.toLowerCase().includes(searchTerm) ||
         appointment.serviceType.toLowerCase().includes(searchTerm))
     );
+  });
+
+  // --- Filtered Customers based on search term ---
+  const filteredCustomers = customers.filter(customer => {
+    const searchTerm = customerSearchTerm.toLowerCase();
+    
+    if (formData.customerType === 'company') {
+      // For companies, search by company name and contact person name
+      return (
+        customer.name.toLowerCase().includes(searchTerm) ||
+        (customer.personal_name && customer.personal_name.toLowerCase().includes(searchTerm))
+      );
+    } else {
+      // For individuals, search by personal name
+      return customer.personal_name?.toLowerCase().includes(searchTerm);
+    }
   });
 
   // --- handleGenerateTicketFromAppointment function ---
@@ -291,7 +335,17 @@ Notes: ${appointment.notes}` : ''}`,
       priority: 'medium',
       type: 'appointment',
       urgencyLevel: 'moderate',
-      appointmentId: appointment.id
+      appointmentId: appointment.id,
+      // Insurance fields
+      insuranceCompany: '',
+      insurancePhone: '',
+      accidentDate: '',
+      ownerName: '',
+      ownerPhone: '',
+      ownerEmail: '',
+      insuranceDescription: '',
+      // Proforma field
+      proformaId: '',
     });
 
     // Clear the selected vehicle state
@@ -309,6 +363,12 @@ Notes: ${appointment.notes}` : ''}`,
       'title',
       'description',
     ];
+    
+    // Additional validation for insurance tickets
+    if (formData.type === 'insurance') {
+      requiredFields.push('insuranceCompany', 'ownerName');
+    }
+    
     for (const field of requiredFields) {
       const value = formData[field as keyof FormData];
       if (value === '' || value === null || value === undefined) {
@@ -328,25 +388,79 @@ Notes: ${appointment.notes}` : ''}`,
     setSubmitError(null);
 
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/tickets', {
+      // Prepare customer data based on type
+      let customerData: any = {
+        customer_type: formData.customerType,
+        customer_id: formData.customerId,
+      };
+
+      if (formData.customerType === 'company') {
+        customerData = {
+          ...customerData,
+          company_name: selectedCustomer?.name || '',
+          contact_person_name: selectedCustomer?.personal_name || '',
+          company_email: selectedCustomer?.email || '',
+          company_phone: selectedCustomer?.phone || '',
+          emergency_contact: selectedCustomer?.emergency_contact || '',
+          company_address: selectedCustomer?.address || '',
+          company_notes: selectedCustomer?.notes || '',
+          company_image: selectedCustomer?.image || '',
+        };
+      } else {
+        customerData = {
+          ...customerData,
+          individual_name: selectedCustomer?.personal_name || '',
+          individual_email: selectedCustomer?.email || '',
+          individual_phone: selectedCustomer?.phone || '',
+          individual_emergency_contact: selectedCustomer?.emergency_contact || '',
+          individual_address: selectedCustomer?.address || '',
+          individual_notes: selectedCustomer?.notes || '',
+          individual_image: selectedCustomer?.image || '',
+        };
+      }
+
+      // Prepare vehicle data as object
+      const vehicleData = {
+        make: selectedVehicle?.make || '',
+        model: selectedVehicle?.model || '',
+        year: selectedVehicle?.year || '',
+        vin: selectedVehicle?.vin || '',
+        color: selectedVehicle?.color || '',
+        current_mileage: selectedVehicle?.current_mileage || 0,
+        image: selectedVehicle?.image || '',
+      };
+
+      // Prepare the request body
+      const requestBody: any = {
+        ...customerData,
+        vehicle_info: vehicleData,
+        license_plate: formData.licensePlate,
+        title: formData.title,
+        description: formData.description,
+        priority: formData.priority,
+        type: formData.type,
+        urgency_level: formData.type === 'sos' ? formData.urgencyLevel : null,
+        appointment_id: formData.type === 'appointment' ? formData.appointmentId : null,
+        proforma_id: formData.proformaId || null,
+      };
+
+      // Add insurance fields if ticket type is insurance
+      if (formData.type === 'insurance') {
+        requestBody.insurance_company = formData.insuranceCompany;
+        requestBody.insurance_phone = formData.insurancePhone;
+        requestBody.accident_date = formData.accidentDate;
+        requestBody.owner_name = formData.ownerName;
+        requestBody.owner_phone = formData.ownerPhone;
+        requestBody.owner_email = formData.ownerEmail;
+        requestBody.insurance_description = formData.insuranceDescription;
+      }
+
+      const response = await fetch('http://localhost:5001/api/tickets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          customer_type: formData.customerType,
-          customer_id: formData.customerId,
-          customer_name: formData.customerName,
-          vehicle_id: formData.vehicleId,
-          vehicle_info: formData.vehicleName,
-          license_plate: formData.licensePlate,
-          title: formData.title,
-          description: formData.description,
-          priority: formData.priority,
-          type: formData.type,
-          urgency_level: formData.type === 'sos' ? formData.urgencyLevel : null,
-          appointment_id: formData.type === 'appointment' ? formData.appointmentId : null,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -359,7 +473,7 @@ Notes: ${appointment.notes}` : ''}`,
       // After successful ticket creation, update appointment status to 'converted'
       if (formData.appointmentId) {
         try {
-          await fetch(`https://ipasystem.bymsystem.com/api/appointments/${formData.appointmentId}/status`, {
+          await fetch(`http://localhost:5001/api/appointments/${formData.appointmentId}/status`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'converted' }),
@@ -397,6 +511,16 @@ Notes: ${appointment.notes}` : ''}`,
       priority: 'medium',
       type: 'regular',
       urgencyLevel: 'moderate',
+      // Insurance fields
+      insuranceCompany: '',
+      insurancePhone: '',
+      accidentDate: '',
+      ownerName: '',
+      ownerPhone: '',
+      ownerEmail: '',
+      insuranceDescription: '',
+      // Proforma field
+      proformaId: '',
     });
     setSelectedCustomer(null);
     setSelectedVehicle(null);
@@ -590,6 +714,7 @@ Notes: ${appointment.notes}` : ''}`,
                   >
                     <option value="regular">Regular Service</option>
                     <option value="appointment">Scheduled Appointment</option>
+                    <option value="insurance">Insurance Claim</option>
                   </select>
                 </div>
                 <div>
@@ -611,7 +736,137 @@ Notes: ${appointment.notes}` : ''}`,
                     <option value="urgent">Urgent</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Proforma ID
+                  </label>
+                  <input
+                    type="text"
+                    name="proforma_id"
+                    value={formData.proformaId}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, proformaId: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter proforma ID if applicable"
+                  />
+                </div>
               </div>
+
+              {/* Insurance Fields (conditionally rendered) */}
+              {formData.type === 'insurance' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Insurance Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Insurance Company *
+                      </label>
+                      <input
+                        type="text"
+                        name="insurance_company"
+                        value={formData.insuranceCompany}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, insuranceCompany: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Insurance company name"
+                        required={formData.type === 'insurance'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Insurance Phone
+                      </label>
+                      <input
+                        type="text"
+                        name="insurance_phone"
+                        value={formData.insurancePhone}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, insurancePhone: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Insurance company phone"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Accident Date
+                      </label>
+                      <input
+                        type="date"
+                        name="accident_date"
+                        value={formData.accidentDate}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, accidentDate: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Owner Name *
+                      </label>
+                      <input
+                        type="text"
+                        name="owner_name"
+                        value={formData.ownerName}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, ownerName: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Vehicle owner name"
+                        required={formData.type === 'insurance'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Owner Phone
+                      </label>
+                      <input
+                        type="text"
+                        name="owner_phone"
+                        value={formData.ownerPhone}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, ownerPhone: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Owner phone number"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Owner Email
+                      </label>
+                      <input
+                        type="email"
+                        name="owner_email"
+                        value={formData.ownerEmail}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, ownerEmail: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Owner email address"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Insurance Description
+                    </label>
+                    <textarea
+                      name="insurance_description"
+                      value={formData.insuranceDescription}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, insuranceDescription: e.target.value }))
+                      }
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Describe the incident and insurance details"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Issue Title */}
               <div>
@@ -841,6 +1096,23 @@ Notes: ${appointment.notes}` : ''}`,
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              
+              {/* Customer Search Input */}
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder={`Search by ${formData.customerType === 'company' ? 'company name or contact person' : 'customer name'}...`}
+                    value={customerSearchTerm}
+                    onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              
               <div className="p-6">
                 {loading ? (
                   <div className="flex items-center justify-center py-8">
@@ -848,44 +1120,49 @@ Notes: ${appointment.notes}` : ''}`,
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {customers.map((customer) => (
-                      <div
-                        key={customer.id}
-                        onClick={() => handleSelectCustomer(customer)}
-                        className="p-4 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 cursor-pointer transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          {formData.customerType === 'individual' ? (
-                            <User className="w-5 h-5 text-blue-600" />
-                          ) : (
-                            <Building2 className="w-5 h-5 text-blue-600" />
-                          )}
-                          <div>
-                            {formData.customerType === 'company' ? (
-                              <>
-                                <div className="font-medium text-gray-800">{customer.name}</div>
-                                <div className="text-sm text-blue-600 font-medium">
-                                  Contact: {customer.personal_name}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  ID: {customer.customerId} | Phone: {customer.phone}
-                                </div>
-                              </>
+                    {filteredCustomers.length > 0 ? (
+                      filteredCustomers.map((customer) => (
+                        <div
+                          key={customer.id}
+                          onClick={() => handleSelectCustomer(customer)}
+                          className="p-4 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            {formData.customerType === 'individual' ? (
+                              <User className="w-5 h-5 text-blue-600" />
                             ) : (
-                              <>
-                                <div className="font-medium text-gray-800">{customer.personal_name}</div>
-                                <div className="text-sm text-gray-500">
-                                  ID: {customer.customerId} | Phone: {customer.phone}
-                                </div>
-                              </>
+                              <Building2 className="w-5 h-5 text-blue-600" />
                             )}
+                            <div>
+                              {formData.customerType === 'company' ? (
+                                <>
+                                  <div className="font-medium text-gray-800">{customer.name}</div>
+                                  <div className="text-sm text-blue-600 font-medium">
+                                    Contact: {customer.personal_name}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    ID: {customer.customerId} | Phone: {customer.phone}
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="font-medium text-gray-800">{customer.personal_name}</div>
+                                  <div className="text-sm text-gray-500">
+                                    ID: {customer.customerId} | Phone: {customer.phone}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                    {customers.length === 0 && (
+                      ))
+                    ) : (
                       <div className="text-center py-8 text-gray-500">
-                        No {formData.customerType} customers found
+                        {customerSearchTerm ? (
+                          <p>No customers found matching "{customerSearchTerm}"</p>
+                        ) : (
+                          <p>No {formData.customerType} customers found</p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -932,7 +1209,7 @@ Notes: ${appointment.notes}` : ''}`,
                             </div>
                             <div className="text-sm text-gray-500">
                               License: {vehicle.license_plate} | Color: {vehicle.color} |
-                              Type: {vehicle.vehicle_type} | Mileage: {vehicle.mileage.toLocaleString()}
+                              Type: {vehicle.vehicle_type} | Mileage: {vehicle.current_mileage ? vehicle.current_mileage.toLocaleString() : 'N/A'}
                             </div>
                             <div className="text-xs text-gray-400">
                               VIN: {vehicle.vin}
@@ -955,8 +1232,6 @@ Notes: ${appointment.notes}` : ''}`,
       </div>
     </div>
   );
-
-  
 };
 
 export default NewTicketModal;

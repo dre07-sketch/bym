@@ -36,7 +36,7 @@ const DashboardOverview = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('https://ipasystem.bymsystem.com/api/inspection-analysis/inspection-stats');
+        const response = await fetch('http://localhost:5001/api/inspection-analysis/inspection-stats');
         if (!response.ok) throw new Error('Failed to fetch stats');
         const data = await response.json();
 

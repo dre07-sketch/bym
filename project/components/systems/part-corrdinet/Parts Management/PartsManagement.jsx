@@ -45,7 +45,7 @@ const PartsManagement = () => {
   });
   
   // API endpoint configuration
-  const API_BASE_URL = 'https://ipasystem.bymsystem.com/api';
+  const API_BASE_URL = 'http://localhost:5001/api';
   
   // Fetch active tickets
   useEffect(() => {

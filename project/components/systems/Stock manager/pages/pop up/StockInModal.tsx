@@ -31,7 +31,7 @@ const StockInModal: React.FC<StockInModalProps> = ({ onClose }) => {
   useEffect(() => {
     const fetchItems = async () => {
       try {
-        const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/items');
+        const response = await fetch('http://localhost:5001/api/inventory/items');
         if (!response.ok) throw new Error('Failed to fetch items');
         const result = await response.json();
         setItems(result.data || []);
@@ -63,7 +63,7 @@ const StockInModal: React.FC<StockInModalProps> = ({ onClose }) => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/stock-in', {
+      const response = await fetch('http://localhost:5001/api/inventory/stock-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

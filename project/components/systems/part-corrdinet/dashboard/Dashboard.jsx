@@ -9,7 +9,7 @@ const Dashboard = () => {
   const [vehiclesInProgressCount, setVehiclesInProgressCount] = useState(0);
 
   useEffect(() => {
-    fetch("https://ipasystem.bymsystem.com/api/part-cordinator-analytics/dashboard-counts")
+    fetch("http://localhost:5001/api/part-cordinator-analytics/dashboard-counts")
       .then((res) => res.json())
       .then((data) => {
         setPartsReceivedCount(data.partsReceivedCount);
