@@ -115,7 +115,7 @@ export default function AppointmentList() {
   const fetchAppointments = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5001/api/appointments/getappointment');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/appointments/getappointment');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       
       // Transform the data to use the Vehicle interface
@@ -176,7 +176,7 @@ export default function AppointmentList() {
   // Fetch converted count
   const fetchConvertedCount = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/appointments/converted/count');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/appointments/converted/count');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       
       const data = await response.json();
@@ -340,7 +340,7 @@ Notes: ${apt.notes || 'No additional notes.'}`,
         urgency_level: ticketFormData.urgencyLevel,
       };
 
-      const response = await fetch('http://localhost:5001/api/tickets', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ticketData),
@@ -354,7 +354,7 @@ Notes: ${apt.notes || 'No additional notes.'}`,
       const createdTicket = await response.json();
 
       // Update backend appointment status to 'converted'
-      const statusResponse = await fetch(`http://localhost:5001/api/appointments/${showDetailsModal.id}/status`, {
+      const statusResponse = await fetch(`https://ipasystem.bymsystem.com/api/appointments/${showDetailsModal.id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'converted' }),

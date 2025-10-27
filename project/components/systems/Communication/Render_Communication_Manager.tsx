@@ -6,6 +6,7 @@ import {
   BarChart3,
   PersonStanding,
   FormInputIcon,
+  DollarSign,
 } from 'lucide-react';
 
 import SidebarHeader from '../../layout/SidebarHeader';
@@ -16,6 +17,7 @@ import ReportsAnalytics from './screens/ReportsAnalytics';
 import SettingsPage from './screens/SettingsPage';
 import RequestSurveyor from './screens/RequestSurveyor';
 import RequestSalvage from './screens/RequestSalvage';
+import PaymentRequestedPage from './screens/PaymentRequestedPage';
 
 interface Render_Communication_ManagerDashboardProps {
   onLogout: () => void;
@@ -31,6 +33,7 @@ const Render_Communication_Manager: React.FC<Render_Communication_ManagerDashboa
     { id: 'outsource', label: 'OutsourceStock', icon: Users },
     { id: 'request surveyor', label: 'Request surveyor', icon: PersonStanding },
     { id: 'request salvage', label: 'Request salvage', icon: FormInputIcon },
+    { id: 'payment requested', label: 'Payment Requested', icon: DollarSign },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
   ];
 
@@ -76,6 +79,8 @@ const Render_Communication_Manager: React.FC<Render_Communication_ManagerDashboa
         return <RequestSurveyor />;
       case 'request salvage':
         return <RequestSalvage />;
+      case 'payment requested':
+        return <PaymentRequestedPage />;
       case 'settings':
         return <SettingsPage />;
       default:

@@ -71,7 +71,7 @@ const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({ onClose }) => {
   
   setIsSubmitting(true);
   try {
-    const response = await fetch('http://localhost:5001/api/inventory/purchase-orders', {
+    const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/purchase-orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -120,7 +120,7 @@ const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({ onClose }) => {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 text-black">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">

@@ -186,7 +186,7 @@ Original SOS Description:
 
       console.log("Sending Ticket Data:", ticketData);
 
-      const response = await fetch('http://localhost:5001/api/tickets', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ticketData),
@@ -210,7 +210,7 @@ Original SOS Description:
 
       // Optional: Update backend status
       try {
-        await fetch(`http://localhost:5001/api/sos-request/update/${showSOSDetails.id}`, {
+        await fetch(`https://ipasystem.bymsystem.com/api/sos-request/update/${showSOSDetails.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'converted' }),
@@ -238,7 +238,7 @@ Original SOS Description:
     const fetchSOSRequests = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:5001/api/sos-request/all-sos-request');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/sos-request/all-sos-request');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
 
@@ -289,7 +289,7 @@ Original SOS Description:
     const fetchConvertedRequests = async () => {
       try {
         setConvertedLoading(true);
-        const response = await fetch('http://localhost:5001/api/sos-request/converted');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/sos-request/converted');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
         setConvertedRequests(data);
@@ -317,7 +317,7 @@ Original SOS Description:
     const fetchConvertedCount = async () => {
       try {
         setConvertedLoading(true);
-        const response = await fetch('http://localhost:5001/api/sos-request/count-converted');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/sos-request/count-converted');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
         setConvertedCount(data.convertedCount);
@@ -846,39 +846,6 @@ Original SOS Description:
         </div>
       )}
 
-      {/* Tow Truck Directory */}
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Truck className="w-5 h-5 text-blue-600" />
-            <span>Tow Truck Directory</span>
-          </CardTitle>
-          <CardDescription>Available tow trucks and their current status</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {towTrucks.map(truck => (
-              <div key={truck.id} className={`p-4 rounded-lg border ${truck.available ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold">{truck.name}</h3>
-                  <div className={`w-3 h-3 rounded-full ${truck.available ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                </div>
-                <p className="text-sm text-gray-600 mb-1">Driver: {truck.driver}</p>
-                <p className="text-sm text-gray-600 mb-1">Coverage: {truck.coverage}</p>
-                <div className="flex items-center justify-between mt-3">
-                  <div className="flex items-center space-x-1">
-                    <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                    <span className="text-sm">{truck.rating}</span>
-                  </div>
-                  <span className="text-sm font-medium">{truck.eta}</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">{truck.capacity}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Dispatch Modal */}
       {showDispatchModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -937,7 +904,7 @@ Original SOS Description:
         </div>
       )}
 
-      {/* SOS Details Modal */}
+      {/* SOS Details Modal - Made Uneditable */}
       {showSOSDetails && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-scale-in">
@@ -1102,12 +1069,6 @@ Original SOS Description:
                     Generate Ticket
                   </Button>
                 )}
-                {showSOSDetails.status !== 'converted' && (
-                  <Button variant="outline">
-                    <Edit className="w-4 h-4 mr-2" />
-                    Update Status
-                  </Button>
-                )}
                 <Button variant="outline" onClick={() => setShowSOSDetails(null)}>
                   Close
                 </Button>
@@ -1146,6 +1107,7 @@ Original SOS Description:
                     name="customer_type" 
                     value={ticketFormData.customer_type} 
                     onValueChange={(value) => setTicketFormData(prev => ({ ...prev, customer_type: value }))}
+                    disabled
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select customer type" />
@@ -1172,6 +1134,7 @@ Original SOS Description:
                       onChange={handleTicketFormChange}
                       required
                       placeholder="Enter customer name"
+                      readOnly
                     />
                   </div>
                 </div>
@@ -1188,6 +1151,7 @@ Original SOS Description:
                       onChange={handleTicketFormChange}
                       required
                       placeholder="Enter company name"
+                      readOnly
                     />
                   </div>
                 </div>
@@ -1207,6 +1171,7 @@ Original SOS Description:
                       onChange={handleTicketFormChange}
                       required
                       placeholder="Enter phone number"
+                      readOnly
                     />
                   </div>
                 </div>
@@ -1223,6 +1188,7 @@ Original SOS Description:
                       onChange={handleTicketFormChange}
                       required
                       placeholder="Enter phone number"
+                      readOnly
                     />
                   </div>
                 </div>
@@ -1238,18 +1204,21 @@ Original SOS Description:
                     onChange={handleTicketFormChange}
                     placeholder="Year"
                     type="number"
+                    readOnly
                   />
                   <Input
                     name="vehicle_info.make"
                     value={ticketFormData.vehicle_info.make}
                     onChange={handleTicketFormChange}
                     placeholder="Make"
+                    readOnly
                   />
                   <Input
                     name="vehicle_info.model"
                     value={ticketFormData.vehicle_info.model}
                     onChange={handleTicketFormChange}
                     placeholder="Model"
+                    readOnly
                   />
                 </div>
               </div>
@@ -1265,6 +1234,7 @@ Original SOS Description:
                     value={ticketFormData.license_plate}
                     onChange={handleTicketFormChange}
                     placeholder="Enter license plate"
+                    readOnly
                   />
                 </div>
               </div>

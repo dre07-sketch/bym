@@ -1,7 +1,7 @@
 // components/marketing/modals/LogActivityModal.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Calendar,
   MapPin,
@@ -18,7 +18,7 @@ import {
   Loader2,
   Check,
   AlertCircle,
-  Activity, // ← Added for status
+  Activity,
 } from 'lucide-react';
 
 // Helper to generate unique IDs
@@ -45,7 +45,7 @@ interface LogActivityModalProps {
     followUpRequired: boolean;
     followUpDate?: string;
     followUpNotes?: string;
-    status?: string; // ← Added
+    status?: string;
   };
   isEditing?: boolean;
   onSuccess?: () => void;
@@ -57,8 +57,15 @@ interface LogActivityModalProps {
     followUpRequired: boolean;
     followUpDate?: string;
     followUpNotes?: string;
-    status: string; // ← Added
+    status: string;
   }) => void;
+}
+
+interface UserInfo {
+  id: number;
+  full_name: string;
+  email: string;
+  role: string;
 }
 
 const LogActivityModal: React.FC<LogActivityModalProps> = ({
@@ -87,12 +94,50 @@ const LogActivityModal: React.FC<LogActivityModalProps> = ({
     followUpRequired: initialData?.followUpRequired || false,
     followUpDate: initialData?.followUpDate || '',
     followUpNotes: initialData?.followUpNotes || '',
-    status: initialData?.status || 'completed', // ← Added
+    status: initialData?.status || 'completed',
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch user information when component mounts
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          setErrorMessage('Authentication token not found. Please log in again.');
+          setIsLoading(false);
+          return;
+        }
+
+        const response = await fetch('https://ipasystem.bymsystem.com/api/auth/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch user data');
+        }
+
+        const data = await response.json();
+        setUserInfo(data.user);
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error fetching user info:', error);
+        setErrorMessage('Failed to load user information. Please try again.');
+        setIsLoading(false);
+      }
+    };
+
+    if (isOpen) {
+      fetchUserInfo();
+    }
+  }, [isOpen]);
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -171,27 +216,42 @@ const LogActivityModal: React.FC<LogActivityModalProps> = ({
     if (!validateForm()) return;
 
     const filteredContacts = formData.contacts.filter((c) => c.name.trim() !== '');
+    
+    // Create payload with user information
     const payload = {
       ...formData,
       contacts: filteredContacts,
+      // Add employee information from userInfo
+      employeeName: userInfo?.full_name, // Use full_name from userInfo
     };
 
     setIsSubmitting(true);
     setSubmitStatus('idle');
     setErrorMessage(null);
 
-    const API_BASE = 'http://localhost:5001';
+    const API_BASE = 'https://ipasystem.bymsystem.com';
 
     try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setErrorMessage('Authentication token not found. Please log in again.');
+        setSubmitStatus('error');
+        setIsSubmitting(false);
+        return;
+      }
+
       const url = isEditing && initialData?.id
         ? `${API_BASE}/api/marketing-activities/${initialData.id}`
-        : `${API_BASE}/api/marketing-activities`;
+        : `${API_BASE}/api/marketing-activities/activity-post`;
 
       const method = isEditing && initialData?.id ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
 
@@ -209,7 +269,7 @@ const LogActivityModal: React.FC<LogActivityModalProps> = ({
     } catch (err) {
       console.error('Network error:', err);
       setErrorMessage(
-        'Failed to connect to server. Make sure the backend is running at http://localhost:5001'
+        'Failed to connect to server. Make sure the backend is running at https://ipasystem.bymsystem.com'
       );
       setSubmitStatus('error');
     } finally {
@@ -218,6 +278,17 @@ const LogActivityModal: React.FC<LogActivityModalProps> = ({
   };
 
   if (!isOpen) return null;
+
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-2xl p-8 flex flex-col items-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <p className="mt-4 text-gray-700">Loading user information...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-slate-900/20 via-blue-900/10 to-purple-900/20 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-all duration-500">
@@ -241,7 +312,9 @@ const LogActivityModal: React.FC<LogActivityModalProps> = ({
                 <h2 className="text-3xl font-bold bg-gradient-to-r from-slate-800 via-blue-700 to-purple-700 bg-clip-text text-transparent">
                   {isEditing ? 'Edit Activity' : 'Log Daily Activity'}
                 </h2>
-                <p className="text-slate-600 mt-1">Track your daily interactions and activities</p>
+                <p className="text-slate-600 mt-1">
+                  {userInfo ? `Logging as ${userInfo.full_name}` : 'Track your daily interactions and activities'}
+                </p>
               </div>
             </div>
             <button
@@ -286,6 +359,23 @@ const LogActivityModal: React.FC<LogActivityModalProps> = ({
                   </div>
                   <h3 className="text-xl font-semibold text-slate-800">Basic Information</h3>
                 </div>
+                
+                {/* Employee Name Field */}
+                <div className="group">
+                  <label className="block text-sm font-semibold text-slate-700 mb-3 flex items-center space-x-2">
+                    <User className="w-4 h-4 text-slate-500" />
+                    <span>Employee Name</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={userInfo?.full_name || ''}
+                      readOnly
+                      className="w-full px-5 py-4 bg-slate-100 border-2 border-slate-200 rounded-2xl text-slate-900 font-medium shadow-sm"
+                    />
+                  </div>
+                </div>
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="group">
                     <label className="block text-sm font-semibold text-slate-700 mb-3 flex items-center space-x-2">
@@ -308,15 +398,17 @@ const LogActivityModal: React.FC<LogActivityModalProps> = ({
                       <MapPin className="w-4 h-4 text-slate-500" />
                       <span>Location</span>
                     </label>
-                    <input
-                      type="text"
-                      placeholder="Where did you go today?"
-                      value={formData.location}
-                      onChange={(e) => handleInputChange('location', e.target.value)}
-                      required
-                      disabled={isSubmitting}
-                      className="w-full px-5 py-4 bg-white border-2 border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all duration-300 text-slate-900 placeholder-slate-400 shadow-sm hover:shadow-md group-hover:border-slate-300 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Where did you go today?"
+                        value={formData.location}
+                        onChange={(e) => handleInputChange('location', e.target.value)}
+                        required
+                        disabled={isSubmitting}
+                        className="w-full px-5 py-4 bg-white border-2 border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all duration-300 text-slate-900 placeholder-slate-400 shadow-sm hover:shadow-md group-hover:border-slate-300 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="group">
@@ -501,20 +593,20 @@ const LogActivityModal: React.FC<LogActivityModalProps> = ({
                       id="followUp"
                       checked={formData.followUpRequired}
                       onChange={(e) => {
-  const checked = e.target.checked;
-  handleInputChange('followUpRequired', checked);
-  
-  if (checked) {
-    // If follow-up is required, set status to awaiting-follow-up
-    handleInputChange('status', 'awaiting-follow-up');
-  } else {
-    // If unchecked, only change if it was previously "awaiting-follow-up"
-    if (formData.status === 'awaiting-follow-up') {
-      handleInputChange('status', 'completed');
-    }
-    // Otherwise, leave status as-is (e.g., 'converted', 'lost')
-  }
-}}
+                        const checked = e.target.checked;
+                        handleInputChange('followUpRequired', checked);
+                        
+                        if (checked) {
+                          // If follow-up is required, set status to awaiting-follow-up
+                          handleInputChange('status', 'awaiting-follow-up');
+                        } else {
+                          // If unchecked, only change if it was previously "awaiting-follow-up"
+                          if (formData.status === 'awaiting-follow-up') {
+                            handleInputChange('status', 'completed');
+                          }
+                          // Otherwise, leave status as-is (e.g., 'converted', 'lost')
+                        }
+                      }}
                       disabled={isSubmitting}
                       className="w-5 h-5 text-blue-600 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 accent-blue-600 transition-all duration-200 disabled:cursor-not-allowed"
                     />

@@ -7,7 +7,7 @@ const SystemStatusChecker: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkSystemStatus = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/system/status');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/system/status');
       if (!response.ok) throw new Error('Failed to check system status');
       const { is_active, message } = await response.json();
       

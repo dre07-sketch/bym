@@ -36,7 +36,7 @@ const CreateAccount = () => {
   'Stock Manager',    // → maps to "stock-manager"
   'tool-manager',    // → maps to "tool-manager"
   'Inspection',       // → maps to "inspector"
-  'Finance/HR',       // → maps to "finance"
+        // → maps to "finance"
   'Reception',        // → maps to "customer-service"
   'Communication',    // → maps to "communication"
   'Marketing',        // → maps to "marketing"
@@ -129,7 +129,7 @@ const CreateAccount = () => {
         formPayload.append('image', formData.image);
       }
 
-      const response = await axios.post('http://localhost:5001/api/employees', formPayload, {
+      const response = await axios.post('https://ipasystem.bymsystem.com/api/employees', formPayload, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }

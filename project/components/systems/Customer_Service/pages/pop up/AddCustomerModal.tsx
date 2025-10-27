@@ -71,7 +71,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
   useEffect(() => {
     const fetchCarModels = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/customers/car-models');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/customers/car-models');
         if (!response.ok) throw new Error('Failed to load car models');
         const data: Record<string, { model: string; serviceInterval: number }[]> = await response.json();
         setCarModelsByMake(data);
@@ -294,7 +294,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
       formData.append('vehicles', JSON.stringify(vehiclesData));
 
       // Submit
-      const response = await fetch('http://localhost:5001/api/customers', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/customers', {
         method: 'POST',
         body: formData,
       });

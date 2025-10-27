@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import {
   Search,
@@ -17,6 +15,7 @@ import {
   Key,
   RefreshCw
 } from 'lucide-react';
+
 const Employees = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('All');
@@ -29,21 +28,26 @@ const Employees = () => {
   const [attendanceData, setAttendanceData] = useState([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceError, setAttendanceError] = useState(null);
-  const roles = ['All', 'Mechanic', 'Part Coordinator', 'Stockroom', 'Inspection', 'Finance/HR', 'Reception'];
+
+  const roles = ['All', 'Mechanic', 'Part Coordinator', 'Stockroom', 'Inspection', 'Reception'];
   const departments = ['All', 'Engine Repair', 'Diagnostics', 'Brake Systems', 'Electrical'];
-  const getImageUrl = (imagePath) => {
-    if (!imagePath) {
-      return 'http://localhost:5001/uploads/default-profile.png';
+
+  // Function to handle image loading with fallback
+  const handleImageError = (e, employee) => {
+    // If the first image URL fails, try the second one if available
+    if (employee.imageUrls && employee.imageUrls.length > 1 && e.target.src === employee.imageUrls[0]) {
+      e.target.src = employee.imageUrls[1];
+    } else {
+      // If all URLs fail, show placeholder
+      e.target.onerror = null;
+      e.target.src = 'https://via.placeholder.com/80';
     }
-    const normalizedPath = imagePath.replace(/\\/g, '/');
-    const parts = normalizedPath.split('/');
-    const filename = parts[parts.length - 1];
-    return `http://localhost:5001/uploads/${filename}`;
   };
+
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/employees/getemployees');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/employees/getemployees');
         if (!response.ok) {
           throw new Error('Failed to fetch employees');
         }
@@ -57,13 +61,14 @@ const Employees = () => {
     };
     fetchEmployees();
   }, []);
+
   useEffect(() => {
     const fetchAttendance = async () => {
       if (!showAttendance || !selectedEmployee) return;
       setAttendanceLoading(true);
       setAttendanceError(null);
       try {
-        const response = await fetch(`http://localhost:5001/api/employeeattendance/getempsattendance?employeeId=${selectedEmployee.id}`);
+        const response = await fetch(`https://ipasystem.bymsystem.com/api/employeeattendance/getempsattendance?employeeId=${selectedEmployee.id}`);
         if (!response.ok) {
           throw new Error('Failed to fetch attendance data');
         }
@@ -77,6 +82,7 @@ const Employees = () => {
     };
     fetchAttendance();
   }, [showAttendance, selectedEmployee]);
+
   const filteredEmployees = employees.filter(employee => {
     const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          employee.role.toLowerCase().includes(searchTerm.toLowerCase());
@@ -86,12 +92,14 @@ const Employees = () => {
                        employee.role.toLowerCase().includes(selectedRole.toLowerCase());
     return matchesSearch && matchesDepartment && matchesRole;
   });
+
   if (loading) {
     return <div className="p-6 text-center">Loading employees...</div>;
   }
   if (error) {
     return <div className="p-6 text-center text-red-500">Error: {error}</div>;
   }
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -153,15 +161,12 @@ const Employees = () => {
             className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all transform hover:-translate-y-1 cursor-pointer p-4 flex items-center gap-4"
             onClick={() => setSelectedEmployee(employee)}
           >
-            {employee.image ? (
+            {employee.imageUrls && employee.imageUrls.length > 0 ? (
               <img
-                src={getImageUrl(employee.image)}
+                src={employee.imageUrls[0]}
                 alt={employee.name}
                 className="w-16 h-16 object-cover rounded-lg"
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = 'https://via.placeholder.com/80';
-                }}
+                onError={(e) => handleImageError(e, employee)}
               />
             ) : (
               <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center">
@@ -184,15 +189,12 @@ const Employees = () => {
           <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in">
             <div className="p-6 border-b border-gray-200 flex justify-between items-start sticky top-0 bg-white z-10">
               <div className="flex items-center gap-4">
-                {selectedEmployee.image ? (
+                {selectedEmployee.imageUrls && selectedEmployee.imageUrls.length > 0 ? (
                   <img
-                     src={getImageUrl(selectedEmployee.image)}
+                    src={selectedEmployee.imageUrls[0]}
                     alt={selectedEmployee.name}
                     className="w-20 h-20 rounded-lg object-cover shadow-md"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = 'https://via.placeholder.com/80';
-                    }}
+                    onError={(e) => handleImageError(e, selectedEmployee)}
                   />
                 ) : (
                   <div className="w-20 h-20 rounded-lg bg-gray-200 flex items-center justify-center">
@@ -367,4 +369,5 @@ const Employees = () => {
     </div>
   );
 };
+
 export default Employees;

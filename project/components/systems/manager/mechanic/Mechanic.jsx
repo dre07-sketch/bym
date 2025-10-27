@@ -43,7 +43,7 @@ class Mechanic extends React.Component {
   }
 
   fetchMechanics = () => {
-    fetch('http://localhost:5001/api/mechanic/mechanics-fetch')
+    fetch('https://ipasystem.bymsystem.com/api/mechanic/mechanics-fetch')
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch mechanics');
         return res.json();
@@ -58,7 +58,7 @@ class Mechanic extends React.Component {
           rating: parseFloat((4.5 + Math.random() * 0.5).toFixed(1)),
           completedJobs: 0,
           avatar: mech.image_url
-            ? `http://localhost:5001/uploads/${encodeURIComponent(mech.image_url)}`
+            ? `https://ipasystem.bymsystem.com/uploads/${encodeURIComponent(mech.image_url)}`
             : 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=150',
           availability: mech.mechanic_status === 'available'
             ? 'Available'
@@ -79,7 +79,7 @@ class Mechanic extends React.Component {
           try {
             // 1. Fetch Current Assignments: status = 'in progress', 'ready for inspection'
             const currentRes = await fetch(
-              `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/tickets`
+              `https://ipasystem.bymsystem.com/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/tickets`
             );
             const currentTickets = currentRes.ok ? await currentRes.json() : [];
             const formattedCurrent = currentTickets.map((ticket) => ({
@@ -110,7 +110,7 @@ class Mechanic extends React.Component {
             
             // 2. Fetch Work History: status = 'awaiting inspection', 'ready for inspection', etc.
             const historyRes = await fetch(
-              `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/tickets-history`
+              `https://ipasystem.bymsystem.com/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/tickets-history`
             );
             const historyTickets = historyRes.ok ? await historyRes.json() : [];
             const formattedHistory = historyTickets.map((ticket) => ({
@@ -144,7 +144,7 @@ class Mechanic extends React.Component {
             let completedJobs = 0;
             try {
               const countRes = await fetch(
-                `http://localhost:5001/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/awaiting-bill-count`
+                `https://ipasystem.bymsystem.com/api/mechanic/${encodeURIComponent(mechanic.name.trim())}/awaiting-bill-count`
               );
               if (countRes.ok) {
                 const countData = await countRes.json();

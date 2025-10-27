@@ -43,7 +43,7 @@
     "components/systems/manager/customer/Customer.jsx",
     "components/dashboard/DashboardSelector.jsx",
     "components/layout/SidebarHeader.jsx"
-  ],
+, "app/page.jsx", "app/page.jsx"  ],
   "exclude": [
     "node_modules"
   ]

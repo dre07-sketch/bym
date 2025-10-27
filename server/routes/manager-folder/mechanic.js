@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../db/connection');
+const events = require('../../utils/events');
 
-const BASE_URL = 'http://localhost:5001';
+const BASE_URL = 'https://ipasystem.bymsystem.com';
 const IMAGE_BASE_URL = `${BASE_URL}/uploads`; // important!
 const encode = (path) => encodeURIComponent(path).replace(/%2F/g, '/');
 
@@ -122,6 +123,10 @@ router.post("/mechanics-status", (req, res) => {
           if (err4) {
             return res.status(500).json({ message: "Failed to update ticket status." });
           }
+          events.emit('ticket_in_progress', {
+            ticketId: ticketId,
+            ticketNumber: ticketNumber
+          });
 
           // 5. Update mechanic status (optional, can be kept or removed)
           const updateMechanicQuery = `

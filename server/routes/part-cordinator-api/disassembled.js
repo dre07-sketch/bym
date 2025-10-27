@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../db/connection'); // adjust to your DB connection file
+const EventEmitter = require('events');
+const events = new EventEmitter(); // 👈 create an event emitter instance
+
 
 router.post('/disassembled-parts', (req, res) => {
   const { ticket_number, part_name, condition, status, notes } = req.body;
@@ -61,6 +64,8 @@ router.get('/disassembled-parts/:ticket_number', (req, res) => {
 
 
 // PUT: Update disassembled part status
+// In the PUT /disassembled-parts/:id route, after updating the part status:
+
 router.put('/disassembled-parts/:id', (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -77,6 +82,27 @@ router.put('/disassembled-parts/:id', (req, res) => {
       return res.status(500).json({ error: 'Database error.' });
     }
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Part not found.' });
+
+    // ✅ Emit event only if status is "returned"
+    if (status === 'returned') {
+      const getTicketQuery = `SELECT ticket_number FROM disassembled_parts WHERE id = ?`;
+      db.query(getTicketQuery, [id], (err2, partResult) => {
+        if (err2) {
+          console.error('Error getting ticket number:', err2);
+        } else if (partResult.length > 0) {
+          const ticketNumber = partResult[0].ticket_number;
+
+          events.emit('parts_returned', {
+            recordId: id,
+            ticketNumber,
+            coordinatorName: 'Part Coordinator'
+          });
+
+          console.log(`🔔 Emitted parts_returned event for part ${id} in ticket ${ticketNumber}`);
+        }
+      });
+    }
+
     res.json({ message: 'Status updated successfully.' });
   });
 });

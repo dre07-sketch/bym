@@ -172,13 +172,6 @@ router.get('/all-sos-request', (req, res) => {
   });
 });
 
-
-// Example adjustment to your /all-sos-request endpoint
-
-// Add this new route (e.g., in your sos-request routes file)
-
-// PUT /api/sos-request/update/:id
-// Updates an existing SOS request (e.g., to change status to 'converted')
 router.put('/update/:id', (req, res) => {
   const { id } = req.params; // Get the SOS request ID (likely sos_ticket_number) from the URL
   const { status } = req.body; // Get the new status from the request body

@@ -4,7 +4,7 @@ import {
   ChevronLeft, ChevronRight, LogOut, Sparkles, Zap, Activity, Star, Award, Palette,
   Cpu, Wifi, Battery, Bell, User, ChevronDown, Moon, Sun, Maximize, Minimize,
   Settings, Sliders, Command, CheckCircle2, Clock, AlertTriangle,  
-  Mail, X, Volume2, VolumeX, Monitor, Smartphone
+  Mail, X, Volume2, VolumeX, Monitor, Smartphone, RotateCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -24,6 +24,8 @@ interface UserInfo {
   email: string;
   avatar: string | null;
   status: 'online' | 'offline' | 'away';
+  image_url?: string;        // The path in uploads folder
+  image_urls?: string[];     // Array of full URLs from both domains
 }
 
 interface NavigationItem {
@@ -45,44 +47,57 @@ interface SidebarHeaderProps {
   children?: React.ReactNode;
 }
 
+// Avatar Image Component with Fallback
+const AvatarImage: React.FC<{
+  imageUrls?: string[];
+  name: string;
+  className?: string;
+}> = ({ imageUrls, name, className }) => {
+  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
+  const [hasError, setHasError] = useState(false);
+
+  const handleImageError = () => {
+    if (imageUrls && currentUrlIndex < imageUrls.length - 1) {
+      // Try the next URL
+      setCurrentUrlIndex(currentUrlIndex + 1);
+    } else {
+      // All URLs failed, show fallback
+      setHasError(true);
+    }
+  };
+
+  if (hasError || !imageUrls || imageUrls.length === 0) {
+    // Fallback to initial - centered
+    return (
+      <span className={`${className} flex items-center justify-center font-bold`}>
+        {name?.charAt(0).toUpperCase() || 'U'}
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={imageUrls[currentUrlIndex]}
+      alt={name}
+      className={className}
+      onError={handleImageError}
+    />
+  );
+};
+
 const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   title = "Dashboard",
   subtitle = "Welcome back",
   sidebarTitle = "BYM Trading PLC",
   navigation = [],
-  notifications = [
-    {
-      id: '1',
-      title: 'New Message',
-      message: 'You have a new message from Sarah',
-      time: '2 min ago',
-      read: false,
-      type: 'info'
-    },
-    {
-      id: '2',
-      title: 'Task Completed',
-      message: 'Project deployment finished successfully',
-      time: '10 min ago',
-      read: false,
-      type: 'success'
-    },
-    {
-      id: '3',
-      title: 'System Alert',
-      message: 'Server maintenance scheduled for tonight',
-      time: '1 hour ago',
-      read: true,
-      type: 'warning'
-    }
-  ],
+  notifications: propNotifications,
   userInfo: propUserInfo,
   activeTab: propActiveTab,
   setActiveTab: propSetActiveTab,
   onLogout: propOnLogout,
   children
 }) => {
-  // Add state for user info fetching
+  // State for user info fetching
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -105,7 +120,12 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [activeModalTab, setActiveModalTab] = useState<'profile' | 'preferences'>('profile');
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [notificationsList, setNotificationsList] = useState(notifications);
+  
+  // Notifications states
+  const [notificationsList, setNotificationsList] = useState<NotificationItem[]>(propNotifications || []);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  
   const [formData, setFormData] = useState({
     name: propUserInfo?.name || '',
     email: propUserInfo?.email || ''
@@ -129,7 +149,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
       }
 
       try {
-        const response = await fetch('http://localhost:5001/api/auth/me', {
+        const response = await fetch('https://ipasystem.bymsystem.com/api/auth/me', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -141,15 +161,18 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
         const { user } = await response.json();
 
-        // Set user role and info
+        // Set user role and info with all fields
         setUserRole(user.role);
         setUserInfo({
           id: user.id,
           name: user.full_name,
           role: user.role,
           email: user.email,
-          avatar: user.avatar || null,
+          avatar: user.avatar, // This is already set by the API
           status: user.status || 'online',
+          // Include additional fields for display only
+          image_url: user.image_url,
+          image_urls: user.image_urls,
         });
 
         // Update form data with fetched user info
@@ -188,6 +211,128 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     localStorage.removeItem('authToken');
     router.push('/login');
   });
+
+  // Fetch notifications from API
+  const fetchNotifications = async () => {
+    if (!effectiveUserInfo?.role) return;
+    
+    setNotificationsLoading(true);
+    setNotificationsError(null);
+    
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/notifications/notifiy/${effectiveUserInfo.role}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch notifications');
+      }
+
+      const data = await response.json();
+      
+      // Transform API data to match our interface
+      const transformedNotifications = data.map((notif: any) => ({
+        id: notif.id.toString(),
+        title: notif.title || 'Notification',
+        message: notif.message || '',
+        time: formatTimeAgo(new Date(notif.created_at)),
+        read: !!notif.is_read,
+        type: notif.type || 'info'
+      }));
+      
+      setNotificationsList(transformedNotifications);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      setNotificationsError(error instanceof Error ? error.message : 'Failed to load notifications');
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  // Helper function to format time ago
+  const formatTimeAgo = (date: Date) => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hour ago`;
+    return `${Math.floor(seconds / 86400)} day ago`;
+  };
+
+  // Update markNotificationAsRead to use API
+  const markNotificationAsRead = async (id: string) => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/notifications/read/${id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to mark notification as read');
+      }
+
+      // Update local state
+      setNotificationsList(prev => 
+        prev.map(notification => 
+          notification.id === id ? { ...notification, read: true } : notification
+        )
+      );
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  // Update markAllAsRead to use API
+  const markAllAsRead = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      // Mark each unread notification as read
+      const unreadNotifications = notificationsList.filter(n => !n.read);
+      
+      await Promise.all(
+        unreadNotifications.map(notification =>
+          fetch(`https://ipasystem.bymsystem.com/api/notifications/read/${notification.id}`, {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          })
+        )
+      );
+
+      // Update local state
+      setNotificationsList(prev => 
+        prev.map(notification => ({ ...notification, read: true }))
+      );
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  // Add effect to fetch notifications when user info is available
+  useEffect(() => {
+    if (effectiveUserInfo?.role) {
+      fetchNotifications();
+    }
+  }, [effectiveUserInfo?.role]);
 
   // Effects
   useEffect(() => {
@@ -247,20 +392,6 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     }
   };
 
-  const markNotificationAsRead = (id: string) => {
-    setNotificationsList(prev => 
-      prev.map(notification => 
-        notification.id === id ? { ...notification, read: true } : notification
-      )
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotificationsList(prev => 
-      prev.map(notification => ({ ...notification, read: true }))
-    );
-  };
-
   const unreadCount = notificationsList.filter(n => !n.read).length;
 
   const getNotificationIcon = (type: NotificationItem['type']) => {
@@ -294,7 +425,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         throw new Error('Authentication token not found');
       }
 
-      const response = await fetch(`http://localhost:5001/api/auth/employees/${effectiveUserInfo.id}`, {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/auth/employees/${effectiveUserInfo.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -428,8 +559,9 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
           {/* Header Section with Enhanced Logo */}
           <div className="relative z-10 p-6 border-b border-blue-200/20">
-            <div className="flex items-center justify-between">
-              <div className={`flex items-center ${isCollapsed ? 'justify-center w-full' : 'space-x-4'}`}>
+            {isCollapsed ? (
+              // Centered logo when collapsed
+              <div className="flex justify-center">
                 <div className="relative group/logo">
                   {/* Enhanced Logo container with multiple glow layers */}
                   <div className="relative">
@@ -463,8 +595,44 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                   </div>
                 </div>
               </div>
+            ) : (
+              // Normal layout when not collapsed
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="relative group/logo">
+                    {/* Enhanced Logo container with multiple glow layers */}
+                    <div className="relative">
+                      {/* Outer glow effect - largest */}
+                      <div className="absolute -inset-6 bg-gradient-to-r from-blue-400/40 via-purple-400/40 to-indigo-400/40 rounded-3xl blur-3xl opacity-0 group-hover/logo:opacity-100 transition-all duration-700 scale-150 animate-pulse"></div>
+                     
+                      {/* Middle glow effect */}
+                      <div className="absolute -inset-3 bg-gradient-to-r from-blue-300/50 via-purple-300/50 to-indigo-300/50 rounded-2xl blur-2xl opacity-70 group-hover/logo:opacity-100 transition-all duration-500 scale-125"></div>
+                     
+                      {/* Inner glow effect */}
+                      <div className="absolute -inset-1 bg-gradient-to-r from-blue-200/60 via-purple-200/60 to-indigo-200/60 rounded-xl blur-xl opacity-50 group-hover/logo:opacity-90 transition-all duration-300"></div>
+                     
+                      {/* Logo image - much larger size */}
+                      <img
+                        src="./photo_2025-06-05_14-35-04-removebg-preview.png"
+                        alt="BYM Trading PLC Logo"
+                        className="relative w-16 h-16 object-contain transition-all duration-500 group-hover/logo:scale-110 group-hover/logo:brightness-125 filter drop-shadow-2xl"
+                        style={{
+                          filter: 'drop-shadow(0 0 20px rgba(99, 102, 241, 0.6)) drop-shadow(0 0 40px rgba(139, 92, 246, 0.4))'
+                        }}
+                        draggable={false}
+                      />
+                     
+                      {/* Animated ring around logo */}
+                      <div className="absolute inset-0 rounded-3xl border-2 border-blue-300/30 group-hover/logo:border-purple-300/60 transition-all duration-500 animate-pulse"></div>
+                     
+                      {/* Rotating glow ring */}
+                      <div className="absolute inset-0 rounded-3xl border border-purple-400/40 group-hover/logo:animate-spin group-hover/logo:border-blue-400/70 transition-all duration-1000" style={{
+                        animationDuration: '4s'
+                      }}></div>
+                    </div>
+                  </div>
+                </div>
              
-              {!isCollapsed && (
                 <button
                   onClick={toggleSidebar}
                   className="relative group/toggle bg-blue-900/40 backdrop-blur-xl border border-blue-300/30 hover:bg-blue-800/50 hover:scale-110 transition-all duration-500 rounded-xl p-3 shadow-lg shadow-blue-500/20"
@@ -472,17 +640,17 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-400/40 to-purple-400/40 rounded-xl opacity-0 group-hover/toggle:opacity-100 transition-opacity duration-300 blur-sm"></div>
                   <ChevronLeft className="w-5 h-5 text-blue-100 group-hover/toggle:text-white group-hover/toggle:animate-pulse relative z-10 drop-shadow-lg" />
                 </button>
-              )}
+              </div>
+            )}
              
-              {isCollapsed && (
-                <button
-                  onClick={toggleSidebar}
-                  className="absolute -right-3 top-1/2 -translate-y-1/2 bg-slate-800/95 backdrop-blur-xl border border-blue-300/40 hover:bg-slate-700/95 hover:scale-110 transition-all duration-500 rounded-full p-2 shadow-xl shadow-blue-400/30"
-                >
-                  <ChevronRight className="w-4 h-4 text-blue-200 hover:text-white" />
-                </button>
-              )}
-            </div>
+            {isCollapsed && (
+              <button
+                onClick={toggleSidebar}
+                className="absolute -right-3 top-1/2 -translate-y-1/2 bg-slate-800/95 backdrop-blur-xl border border-blue-300/40 hover:bg-slate-700/95 hover:scale-110 transition-all duration-500 rounded-full p-2 shadow-xl shadow-blue-400/30"
+              >
+                <ChevronRight className="w-4 h-4 text-blue-200 hover:text-white" />
+              </button>
+            )}
           </div>
 
           {/* Navigation Section */}
@@ -630,14 +798,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
                 {/* Settings */}
                 <div className="relative">
-                  <Button 
-                    onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                    variant="ghost" 
-                    size="icon" 
-                    className="rounded-xl text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-300 transform hover:scale-105"
-                  >
-                    <Sliders className="w-5 h-5 text-indigo-400" />
-                  </Button>
+               
                 </div>
 
                 {/* Notifications */}
@@ -669,26 +830,11 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                       <div className={`w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm ${
                         effectiveUserInfo?.status === 'online' ? 'ring-2 ring-green-400' : ''
                       }`}>
-                        {effectiveUserInfo?.avatar ? (
-                          <img 
-                            src={effectiveUserInfo.avatar} 
-                            alt={effectiveUserInfo.name} 
-                            className="w-full h-full rounded-full object-cover"
-                            onError={(e) => {
-                              // Fallback to initial if image fails to load
-                              e.currentTarget.style.display = 'none';
-                              const parent = e.currentTarget.parentElement;
-                              if (parent) {
-                                const fallback = document.createElement('span');
-                                fallback.textContent = effectiveUserInfo?.name?.charAt(0).toUpperCase() || 'U';
-                                fallback.className = 'text-white font-semibold';
-                                parent.appendChild(fallback);
-                              }
-                            }}
-                          />
-                        ) : (
-                          effectiveUserInfo?.name?.charAt(0).toUpperCase() || 'U'
-                        )}
+                        <AvatarImage 
+                          imageUrls={effectiveUserInfo?.image_urls} 
+                          name={effectiveUserInfo?.name || ''} 
+                          className="w-full h-full rounded-full object-cover" 
+                        />
                       </div>
                       <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
                         effectiveUserInfo?.status === 'online' ? 'bg-green-400' : 
@@ -801,6 +947,24 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Notifications</h3>
               <div className="flex items-center space-x-2">
+                {/* Refresh button */}
+                <Button 
+                  onClick={fetchNotifications} 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-blue-600 hover:text-blue-700"
+                  disabled={notificationsLoading}
+                  title="Refresh notifications"
+                >
+                  {notificationsLoading ? (
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    <RotateCw className="h-4 w-4" />
+                  )}
+                </Button>
                 {unreadCount > 0 && (
                   <Button onClick={markAllAsRead} variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700">
                     Mark all as read
@@ -816,35 +980,58 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             </div>
             
             <div className="max-h-96 overflow-y-auto">
-              {notificationsList.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`p-4 border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer transition-colors ${
-                    !notification.read ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                  }`}
-                  onClick={() => markNotificationAsRead(notification.id)}
-                >
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0 mt-1">
-                      {getNotificationIcon(notification.type)}
-                    </div>
-                    <div className="flex-1">
-                      <h4 className={`font-medium text-sm ${!notification.read ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>
-                        {notification.title}
-                      </h4>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        {notification.message}
-                      </p>
-                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                        {notification.time}
-                      </p>
-                    </div>
-                    {!notification.read && (
-                      <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></div>
-                    )}
-                  </div>
+              {notificationsLoading ? (
+                <div className="flex items-center justify-center p-8">
+                  <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
-              ))}
+              ) : notificationsError ? (
+                <div className="p-6 text-center">
+                  <AlertTriangle className="w-10 h-10 text-red-500 mx-auto mb-3" />
+                  <p className="text-slate-600 dark:text-slate-400">{notificationsError}</p>
+                  <Button 
+                    onClick={fetchNotifications} 
+                    variant="outline" 
+                    className="mt-4"
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              ) : notificationsList.length === 0 ? (
+                <div className="p-6 text-center">
+                  <Bell className="w-10 h-10 text-slate-400 mx-auto mb-3" />
+                  <p className="text-slate-600 dark:text-slate-400">No notifications</p>
+                </div>
+              ) : (
+                notificationsList.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={`p-4 border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer transition-colors ${
+                      !notification.read ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                    }`}
+                    onClick={() => markNotificationAsRead(notification.id)}
+                  >
+                    <div className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 mt-1">
+                        {getNotificationIcon(notification.type)}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className={`font-medium text-sm ${!notification.read ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>
+                          {notification.title}
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          {notification.message}
+                        </p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                          {notification.time}
+                        </p>
+                      </div>
+                      {!notification.read && (
+                        <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -873,26 +1060,11 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             <div className="flex justify-center mb-6">
               <div className="relative">
                 <div className="w-24 h-24 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-lg overflow-hidden">
-                  {effectiveUserInfo?.avatar ? (
-                    <img 
-                      src={effectiveUserInfo.avatar} 
-                      alt={effectiveUserInfo.name} 
-                      className="w-full h-full rounded-full object-cover"
-                      onError={(e) => {
-                        // Fallback to initial if image fails to load
-                        e.currentTarget.style.display = 'none';
-                        const parent = e.currentTarget.parentElement;
-                        if (parent) {
-                          const fallback = document.createElement('span');
-                          fallback.textContent = effectiveUserInfo?.name?.charAt(0).toUpperCase() || 'U';
-                          fallback.className = 'text-white font-bold text-2xl';
-                          parent.appendChild(fallback);
-                        }
-                      }}
-                    />
-                  ) : (
-                    effectiveUserInfo?.name?.charAt(0).toUpperCase() || 'U'
-                  )}
+                  <AvatarImage 
+                    imageUrls={effectiveUserInfo?.image_urls} 
+                    name={effectiveUserInfo?.name || ''} 
+                    className="w-full h-full rounded-full object-cover" 
+                  />
                 </div>
               </div>
             </div>
@@ -933,6 +1105,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                       className="w-full pl-12 pr-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     />
                   </div>
+                  
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                     <input

@@ -47,7 +47,7 @@ const StockMovements: React.FC = () => {
   useEffect(() => {
     const fetchStockHistory = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/inventory/stock-history');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/stock-history');
         if (!response.ok) throw new Error('Failed to fetch stock history');
         const result = await response.json();
 
@@ -153,7 +153,7 @@ const StockMovements: React.FC = () => {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-6 text-black">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>

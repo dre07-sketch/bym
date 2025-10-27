@@ -255,7 +255,7 @@ const SalvageFormPage: React.FC = () => {
   useEffect(() => {
     const fetchSalvageData = async () => {
       try {
-        const response = await axios.get('http://localhost:5001/api/communication-center/awaiting-salvage-form');
+        const response = await axios.get('https://ipasystem.bymsystem.com/api/communication-center/awaiting-salvage-form');
         setSalvageData(response.data);
       } catch (error) {
         console.error('Error fetching salvage form data:', error);
@@ -279,7 +279,7 @@ const SalvageFormPage: React.FC = () => {
     
     setPaymentLoading(true);
     try {
-      const response = await axios.post('http://localhost:5001/api/communication-center/service-tickets/request-payment', {
+      const response = await axios.post('https://ipasystem.bymsystem.com/api/communication-center/service-tickets/request-payment', {
         ticket_number: selectedTicket.ticket_number
       });
       

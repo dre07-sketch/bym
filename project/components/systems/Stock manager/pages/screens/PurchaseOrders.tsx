@@ -186,7 +186,7 @@ const PurchaseOrders: React.FC = () => {
         return;
       }
 
-      const response = await fetch('http://localhost:5001/api/inventory/purchase-orders', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/purchase-orders', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -261,7 +261,7 @@ const PurchaseOrders: React.FC = () => {
         return;
       }
 
-      const response = await fetch(`http://localhost:5001/api/inventory/purchase-orders/${poNumber}`, {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/inventory/purchase-orders/${poNumber}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -796,7 +796,7 @@ const RequestPOModal: React.FC<RequestPOModalProps> = ({
           return;
         }
 
-        const response = await fetch('http://localhost:5001/api/inventory/names', {
+        const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/names', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -941,7 +941,7 @@ const RequestPOModal: React.FC<RequestPOModalProps> = ({
 
       console.log('Submitting payload:', payload);
 
-      const response = await fetch('http://localhost:5001/api/inventory/purchase-orders', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/purchase-orders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

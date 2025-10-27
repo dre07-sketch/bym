@@ -10,6 +10,9 @@ import {
   Plus,
   Loader2,
   TrendingUp,
+  User,
+  AlertCircle,
+  AlertTriangle,
 } from 'lucide-react';
 
 import LogActivityModal from '../popup/LogActivityModal';
@@ -38,6 +41,13 @@ interface MarketingActivity {
   status: 'completed' | 'awaiting-follow-up' | 'in-progress' | 'converted' | 'lost';
 }
 
+interface UserInfo {
+  id: number;
+  full_name: string;
+  email: string;
+  role: string;
+}
+
 interface DashboardPageProps {
   userRole: string;
 }
@@ -46,14 +56,83 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ userRole }) => {
   const [activities, setActivities] = useState<MarketingActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [authError, setAuthError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchUserInfo = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch('https://ipasystem.bymsystem.com/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      setUserInfo(data.user);
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+      setAuthError(true);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUserInfo();
+  }, []);
 
   // Reusable fetch function
   const fetchActivities = async () => {
+    if (!userInfo) return;
+    
+    setLoading(true);
+    setError(null);
+    
     try {
-      const res = await fetch('http://localhost:5001/api/marketing-activities');
-      if (!res.ok) throw new Error('Network response was not ok');
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      // Use the employee's full name as a query parameter
+      const res = await fetch(
+        `https://ipasystem.bymsystem.com/api/marketing-activities/get-activities?employeeName=${encodeURIComponent(userInfo.full_name)}`, 
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+      
+      if (!res.ok) {
+        if (res.status === 401) {
+          setAuthError(true);
+        } else {
+          throw new Error('Network response was not ok');
+        }
+        return;
+      }
 
       const data = await res.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to fetch activities');
+      }
 
       // Safely map and ensure status exists
       const safeActivities = (data.data || []).map((act: any) => ({
@@ -67,17 +146,20 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ userRole }) => {
 
       // Debug: Check data
       console.log('Fetched & processed activities:', safeActivities);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load recent activities', err);
+      setError(err.message || 'Failed to load activities');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch on mount
+  // Fetch on mount and when userInfo changes
   useEffect(() => {
-    fetchActivities();
-  }, []);
+    if (userInfo) {
+      fetchActivities();
+    }
+  }, [userInfo]);
 
   // ✅ Stats by Status
   const totalActivities = activities.length;
@@ -110,6 +192,42 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ userRole }) => {
     }, [] as { date: string; count: number }[])
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+  if (authError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen py-16">
+        <div className="text-center max-w-md bg-white rounded-3xl shadow-lg p-8 border border-red-200">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h3 className="text-2xl font-bold text-red-700 mb-2">Authentication Required</h3>
+          <p className="text-red-600 mb-6">
+            You need to be logged in to view your dashboard. Please log in to continue.
+          </p>
+          <button
+            onClick={() => window.location.href = '/login'}
+            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-16 bg-red-50 rounded-3xl border-2 border-red-200">
+        <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+        <h3 className="text-2xl font-semibold text-red-700 mb-2">Error Loading Dashboard</h3>
+        <p className="text-red-600 mb-6">{error}</p>
+        <button
+          onClick={fetchActivities}
+          className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -118,6 +236,16 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ userRole }) => {
           Marketing Dashboard
         </h1>
         <p className="text-slate-600 mt-2">Track your outreach, contacts, and follow-ups</p>
+        
+        {/* Current user indicator */}
+        {userInfo && (
+          <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-full">
+            <User className="w-5 h-5 text-blue-600" />
+            <span className="text-blue-800 font-medium">
+              Viewing dashboard for: {userInfo.full_name}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -179,104 +307,103 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ userRole }) => {
         </div>
 
         {/* Pie Chart: Status Distribution */}
-        {/* Pie Chart: Status Distribution */}
-<div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 hover:shadow-xl transition-shadow duration-300">
-  <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 space-y-3 md:space-y-0">
-    <div>
-      <h3 className="text-xl font-semibold text-slate-800">Activity Status Distribution</h3>
-      <p className="text-sm text-slate-500">Breakdown of all marketing activities</p>
-    </div>
-    <div className="flex items-center space-x-4 text-xs">
-      {statusData.map((entry, index) => (
-        <div key={entry.name} className="flex items-center space-x-1">
-          <div
-            className="w-3 h-3 rounded-full"
-            style={{ backgroundColor: COLORS[index] }}
-          />
-          <span className="text-slate-700 font-medium">{entry.name}</span>
-        </div>
-      ))}
-    </div>
-  </div>
-
-  <div className="h-80 flex items-center justify-center">
-    <ResponsiveContainer width="100%" height="100%">
-      <PieChart>
-        {/* Center Label (Optional: Total) */}
-        <text
-          x="50%"
-          y="45%"
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="fill-slate-600 text-lg font-semibold"
-        >
-          Total
-        </text>
-        <text
-          x="50%"
-          y="55%"
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="fill-slate-800 text-2xl font-bold"
-        >
-          {totalActivities}
-        </text>
-
-        <Pie
-          data={statusData}
-          cx="50%"
-          cy="50%"
-          innerRadius="60%"  
-          outerRadius="90%"
-          paddingAngle={1}
-          dataKey="value"
-          animationBegin={0}
-          animationDuration={800}
-          animationEasing="ease-out"
-        >
-          {statusData.map((entry, index) => (
-           <Cell
-  key={`cell-${index}`}
-  fill={COLORS[index]}
-  stroke="white"
-  strokeWidth={2}
-  className="transition-all duration-200 hover:filter hover:brightness-110 hover:drop-shadow-sm"
-/>
-          ))}
-        </Pie>
-
-        {/* Custom Labels with Lines */}
-        <Tooltip
-          content={({ payload }) => {
-            if (payload && payload.length) {
-              const data = payload[0].payload;
-              return (
-                <div className="bg-white border border-slate-300 rounded-lg shadow-lg px-4 py-2 text-sm">
-                  <p className="font-semibold text-slate-800">{data.name}</p>
-                  <p className="text-slate-600">
-                    <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: payload[0].color }}></span>
-                    {data.value} activities ({((data.value / totalActivities) * 100).toFixed(0)}%)
-                  </p>
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 hover:shadow-xl transition-shadow duration-300">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 space-y-3 md:space-y-0">
+            <div>
+              <h3 className="text-xl font-semibold text-slate-800">Activity Status Distribution</h3>
+              <p className="text-sm text-slate-500">Breakdown of all marketing activities</p>
+            </div>
+            <div className="flex items-center space-x-4 text-xs">
+              {statusData.map((entry, index) => (
+                <div key={entry.name} className="flex items-center space-x-1">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: COLORS[index] }}
+                  />
+                  <span className="text-slate-700 font-medium">{entry.name}</span>
                 </div>
-              );
-            }
-            return null;
-          }}
-        />
+              ))}
+            </div>
+          </div>
 
-        {/* Optional: Label List */}
-        <text
-          x="50%"
-          y="95%"
-          textAnchor="middle"
-          className="fill-slate-500 text-xs"
-        >
-          Hover to see details
-        </text>
-      </PieChart>
-    </ResponsiveContainer>
-  </div>
-</div>
+          <div className="h-80 flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                {/* Center Label (Optional: Total) */}
+                <text
+                  x="50%"
+                  y="45%"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="fill-slate-600 text-lg font-semibold"
+                >
+                  Total
+                </text>
+                <text
+                  x="50%"
+                  y="55%"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="fill-slate-800 text-2xl font-bold"
+                >
+                  {totalActivities}
+                </text>
+
+                <Pie
+                  data={statusData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius="60%"  
+                  outerRadius="90%"
+                  paddingAngle={1}
+                  dataKey="value"
+                  animationBegin={0}
+                  animationDuration={800}
+                  animationEasing="ease-out"
+                >
+                  {statusData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={COLORS[index]}
+                      stroke="white"
+                      strokeWidth={2}
+                      className="transition-all duration-200 hover:filter hover:brightness-110 hover:drop-shadow-sm"
+                    />
+                  ))}
+                </Pie>
+
+                {/* Custom Labels with Lines */}
+                <Tooltip
+                  content={({ payload }) => {
+                    if (payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-white border border-slate-300 rounded-lg shadow-lg px-4 py-2 text-sm">
+                          <p className="font-semibold text-slate-800">{data.name}</p>
+                          <p className="text-slate-600">
+                            <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: payload[0].color }}></span>
+                            {data.value} activities ({((data.value / totalActivities) * 100).toFixed(0)}%)
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+
+                {/* Optional: Label List */}
+                <text
+                  x="50%"
+                  y="95%"
+                  textAnchor="middle"
+                  className="fill-slate-500 text-xs"
+                >
+                  Hover to see details
+                </text>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       {/* Recent Activities */}

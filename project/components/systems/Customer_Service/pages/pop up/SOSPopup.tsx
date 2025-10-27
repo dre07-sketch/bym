@@ -43,7 +43,7 @@ const CustomerSelectionPopup: React.FC<{
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
-      fetch(`http://localhost:5001/api/sos-request/customers?type=${customerType}`)
+      fetch(`https://ipasystem.bymsystem.com/api/sos-request/customers?type=${customerType}`)
         .then(response => response.json())
         .then(data => {
           setCustomers(data);
@@ -172,7 +172,7 @@ const VehicleSelectionPopup: React.FC<{
   useEffect(() => {
     if (isOpen && customerId) {
       setLoading(true);
-      fetch(`http://localhost:5001/api/sos-request/vehicles/${customerId}`)
+      fetch(`https://ipasystem.bymsystem.com/api/sos-request/vehicles/${customerId}`)
         .then(response => response.json())
         .then(data => {
           setVehicles(data);
@@ -333,7 +333,7 @@ const SOSPopup: React.FC<SOSPopupProps> = ({ isOpen, onClose }) => {
         priority_level: formData.priorityLevel
       };
 
-      const response = await fetch('http://localhost:5001/api/sos-request/sos', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/sos-request/sos', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

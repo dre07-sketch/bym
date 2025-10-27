@@ -25,6 +25,9 @@ import {
   Activity,
   CheckCircle,
   AlertTriangle,
+  User,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 
 interface MarketingActivity {
@@ -50,83 +53,165 @@ interface ReportData {
   completionTrend: { month: string; activities: number; completed: number }[];
 }
 
+interface UserInfo {
+  id: number;
+  full_name: string;
+  email: string;
+  role: string;
+}
+
 const ReportsPage = () => {
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [authError, setAuthError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchUserInfo = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch('https://ipasystem.bymsystem.com/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      const userData = await response.json();
+      setUserInfo(userData.user);
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+      setAuthError(true);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch('http://localhost:5001/api/marketing-activities');
-        const result = await res.json();
-        const activities: MarketingActivity[] = result.data || [];
-
-        // Process data
-        const totalActivities = activities.length;
-        const totalContacts = activities.reduce((sum, a) => sum + a.contacts.length, 0);
-        const completed = activities.filter((a) => a.status === 'completed').length;
-        const awaitingFollowUp = activities.filter((a) => a.status === 'awaiting-follow-up').length;
-        const inProgress = activities.filter((a) => a.status === 'in-progress').length;
-        const lost = activities.filter((a) => a.status === 'lost').length;
-
-        // Activity by Week
-        const weekly = activities.reduce((acc, act) => {
-          const weekStart = getWeekStart(new Date(act.date));
-          const key = weekStart.toISOString().split('T')[0];
-          acc[key] = (acc[key] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
-
-        const activityByWeek = Object.entries(weekly)
-          .map(([date, count]) => ({
-            name: `Week of ${new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-            count,
-          }))
-          .sort((a, b) => new Date(a.name).getTime() - new Date(b.name).getTime());
-
-        // Status Distribution
-        const statusDistribution = [
-          { name: 'Awaiting Follow-up', value: awaitingFollowUp },
-          { name: 'In Progress', value: inProgress },
-          { name: 'Completed', value: completed },
-          { name: 'Lost', value: lost },
-        ];
-
-        // Completion Trend (Monthly)
-        const monthly = activities.reduce((acc, act) => {
-          const month = new Date(act.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
-          if (!acc[month]) acc[month] = { activities: 0, completed: 0 };
-          acc[month].activities += 1;
-          if (act.status === 'completed') acc[month].completed += 1;
-          return acc;
-        }, {} as Record<string, { activities: number; completed: number }>);
-
-        const completionTrend = Object.entries(monthly).map(([month, data]) => ({
-          month,
-          activities: data.activities,
-          completed: data.completed,
-        }));
-
-        setData({
-          totalActivities,
-          totalContacts,
-          completed,
-          awaitingFollowUp,
-          inProgress,
-          lost,
-          activityByWeek,
-          statusDistribution,
-          completionTrend,
-        });
-      } catch (err) {
-        console.error('Failed to load report data', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    fetchUserInfo();
   }, []);
+
+  useEffect(() => {
+    if (userInfo) {
+      fetchData();
+    }
+  }, [userInfo]);
+
+  const fetchData = async () => {
+    if (!userInfo) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      // Use the employee's full name as a query parameter
+      const res = await fetch(
+        `https://ipasystem.bymsystem.com/api/marketing-activities/get-activities?employeeName=${encodeURIComponent(userInfo.full_name)}`, 
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+      
+      if (!res.ok) {
+        if (res.status === 401) {
+          setAuthError(true);
+        } else {
+          throw new Error(`Failed to fetch activities: ${res.status}`);
+        }
+        return;
+      }
+      
+      const result = await res.json();
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to fetch activities');
+      }
+      
+      const activities: MarketingActivity[] = result.data || [];
+
+      // Process data
+      const totalActivities = activities.length;
+      const totalContacts = activities.reduce((sum, a) => sum + a.contacts.length, 0);
+      const completed = activities.filter((a) => a.status === 'completed').length;
+      const awaitingFollowUp = activities.filter((a) => a.status === 'awaiting-follow-up').length;
+      const inProgress = activities.filter((a) => a.status === 'in-progress').length;
+      const lost = activities.filter((a) => a.status === 'lost').length;
+
+      // Activity by Week
+      const weekly = activities.reduce((acc, act) => {
+        const weekStart = getWeekStart(new Date(act.date));
+        const key = weekStart.toISOString().split('T')[0];
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const activityByWeek = Object.entries(weekly)
+        .map(([date, count]) => ({
+          name: `Week of ${new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+          count,
+        }))
+        .sort((a, b) => new Date(a.name).getTime() - new Date(b.name).getTime());
+
+      // Status Distribution
+      const statusDistribution = [
+        { name: 'Awaiting Follow-up', value: awaitingFollowUp },
+        { name: 'In Progress', value: inProgress },
+        { name: 'Completed', value: completed },
+        { name: 'Lost', value: lost },
+      ];
+
+      // Completion Trend (Monthly)
+      const monthly = activities.reduce((acc, act) => {
+        const month = new Date(act.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+        if (!acc[month]) acc[month] = { activities: 0, completed: 0 };
+        acc[month].activities += 1;
+        if (act.status === 'completed') acc[month].completed += 1;
+        return acc;
+      }, {} as Record<string, { activities: number; completed: number }>);
+
+      const completionTrend = Object.entries(monthly).map(([month, data]) => ({
+        month,
+        activities: data.activities,
+        completed: data.completed,
+      }));
+
+      setData({
+        totalActivities,
+        totalContacts,
+        completed,
+        awaitingFollowUp,
+        inProgress,
+        lost,
+        activityByWeek,
+        statusDistribution,
+        completionTrend,
+      });
+    } catch (err: any) {
+      console.error('Failed to load report data', err);
+      setError(err.message || 'Failed to load report data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const COLORS = ['#F59E0B', '#3B82F6', '#10B981', '#EF4444']; // Awaiting, In Progress, Completed, Lost
 
@@ -137,13 +222,49 @@ const ReportsPage = () => {
     return new Date(d.setDate(diff));
   };
 
+  if (authError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen py-16">
+        <div className="text-center max-w-md bg-white rounded-3xl shadow-lg p-8 border border-red-200">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h3 className="text-2xl font-bold text-red-700 mb-2">Authentication Required</h3>
+          <p className="text-red-600 mb-6">
+            You need to be logged in to view your reports. Please log in to continue.
+          </p>
+          <button
+            onClick={() => window.location.href = '/login'}
+            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
           <p className="text-slate-600">Loading analytics...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-16 bg-red-50 rounded-3xl border-2 border-red-200">
+        <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+        <h3 className="text-2xl font-semibold text-red-700 mb-2">Error Loading Reports</h3>
+        <p className="text-red-600 mb-6">{error}</p>
+        <button
+          onClick={fetchData}
+          className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition"
+        >
+          Try Again
+        </button>
       </div>
     );
   }
@@ -164,7 +285,17 @@ const ReportsPage = () => {
         <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-800 via-blue-700 to-purple-700 bg-clip-text text-transparent">
           Marketing Reports & Analytics
         </h1>
-        <p className="text-slate-600 text-lg">Performance insights for </p>
+        <p className="text-slate-600 text-lg">Performance insights for your marketing activities</p>
+        
+        {/* Current user indicator */}
+        {userInfo && (
+          <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-full">
+            <User className="w-5 h-5 text-blue-600" />
+            <span className="text-blue-800 font-medium">
+              Viewing reports for: {userInfo.full_name}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Stats Grid */}

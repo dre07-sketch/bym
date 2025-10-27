@@ -125,6 +125,51 @@ interface ConversionModalProps {
   formatCurrency: (amount: number) => string;
 }
 
+// Image compression utility
+const compressImage = (file: File, maxWidth: number = 800, maxHeight: number = 600, quality: number = 0.7): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Calculate new dimensions
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // Get compressed base64
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+};
+
+// Image size validation utility
+const validateImageSize = (file: File, maxSizeInMB: number = 2): boolean => {
+  const maxSize = maxSizeInMB * 1024 * 1024; // Convert MB to bytes
+  return file.size <= maxSize;
+};
+
 const ConversionModal: React.FC<ConversionModalProps> = ({
   showTicketModal,
   selectedProforma,
@@ -201,7 +246,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
       const fetchCustomers = async () => {
         setIsLoadingCustomers(true);
         try {
-          const response = await fetch('http://localhost:5001/api/customers/fetch');
+          const response = await fetch('https://ipasystem.bymsystem.com/api/customers/fetch');
           const data = await response.json();
           
           if (response.ok) {
@@ -227,7 +272,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
       const fetchCarModels = async () => {
         setIsLoadingCarModels(true);
         try {
-          const response = await fetch('http://localhost:5001/api/customers/car-models');
+          const response = await fetch('https://ipasystem.bymsystem.com/api/customers/car-models');
           const data = await response.json();
           
           if (response.ok) {
@@ -254,7 +299,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
       const fetchProformaDetails = async () => {
         setIsLoadingProformaDetails(true);
         try {
-          const response = await fetch(`http://localhost:5001/api/insurance/proformas/${selectedProforma.proforma_number}`);
+          const response = await fetch(`https://ipasystem.bymsystem.com/api/insurance/proformas/${selectedProforma.proforma_number}`);
           const data = await response.json();
           
           if (data.success) {
@@ -399,22 +444,12 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
     }]);
   };
   
-  // Helper function to convert File to base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
-    });
-  };
-  
   // Helper function to get models for a make
   const getModelsForMake = (make: string) => {
     return carModelsData[make] || [];
   };
   
-  // Updated handleGenerateTicket function
+  // Updated handleGenerateTicket function with image compression
   const handleGenerateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (localIsSubmitting) return;
@@ -425,27 +460,43 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
       const customerId = selectedCustomer 
         ? selectedCustomer.customerId.toString() 
         : Date.now().toString();
-      // Convert images to base64 if they exist
+      
+      // Compress and convert images to base64 if they exist
       let customerImageBase64: string | null = null;
       if (customerImage) {
-        customerImageBase64 = await fileToBase64(customerImage);
+        try {
+          customerImageBase64 = await compressImage(customerImage, 600, 400, 0.6);
+        } catch (error) {
+          console.error('Error compressing customer image:', error);
+          setError('Failed to process customer image');
+          return;
+        }
       }
+      
       // Get the first vehicle
       const vehicle = vehicles[0];
       let vehicleImageBase64: string | null = null;
       if (vehicle.image) {
-        vehicleImageBase64 = await fileToBase64(vehicle.image);
+        try {
+          vehicleImageBase64 = await compressImage(vehicle.image, 600, 400, 0.6);
+        } catch (error) {
+          console.error('Error compressing vehicle image:', error);
+          setError('Failed to process vehicle image');
+          return;
+        }
       }
-      // Prepare vehicle info
+      
+      // Prepare vehicle info - FIX: Change 'mileage' to 'current_mileage' to match backend
       const vehicleInfo = {
         make: vehicle.make,
         model: vehicle.model,
         year: vehicle.year,
         vin: vehicle.vin,
         color: vehicle.color,
-        mileage: vehicle.mileage,
+        current_mileage: vehicle.mileage, // Changed from 'mileage' to 'current_mileage'
         image: vehicleImageBase64
       };
+      
       // Prepare the request body
       const requestBody: any = {
         customer_type: customerData.customerType,
@@ -462,6 +513,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
         urgency_level: ticketForm.urgencyLevel,
         proforma_id: selectedProforma.id // Add proforma ID for bill creation
       };
+      
       // If insurance ticket, add insurance details
       if (ticketForm.ticketType === 'insurance') {
         requestBody.insurance_company = insuranceForm.insuranceCompany;
@@ -472,6 +524,7 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
         requestBody.owner_email = insuranceForm.ownerEmail;
         requestBody.insurance_description = insuranceForm.description;
       }
+      
       // Add customer specific fields
       if (customerData.customerType === 'company') {
         requestBody.company_name = customerData.companyName;
@@ -491,18 +544,21 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
         requestBody.individual_notes = customerData.notes;
         requestBody.individual_image = customerImageBase64;
       }
+      
       // Send the request
-      const response = await fetch('http://localhost:5001/api/tickets', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/tickets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody),
       });
+      
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create ticket');
       }
+      
       // Success
       setLocalIsSuccess(true);
     } catch (err: any) {
@@ -510,6 +566,54 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
       setError(err.message || 'An error occurred while creating the ticket');
     } finally {
       setLocalIsSubmitting(false);
+    }
+  };
+  
+  // Updated handleCustomerImageUpload with validation
+  const updatedHandleCustomerImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      
+      // Validate image size (2MB max)
+      if (!validateImageSize(file, 2)) {
+        setError('Customer image size must be less than 2MB');
+        return;
+      }
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setCustomerImagePreview(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+      
+      setCustomerImage(file);
+    }
+  };
+  
+  // Updated handleImageUpload with validation
+  const updatedHandleImageUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      
+      // Validate image size (2MB max)
+      if (!validateImageSize(file, 2)) {
+        setError('Vehicle image size must be less than 2MB');
+        return;
+      }
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const newVehicles = [...vehicles];
+        newVehicles[index].imagePreview = event.target?.result as string;
+        setVehicles(newVehicles);
+      };
+      reader.readAsDataURL(file);
+      
+      const newVehicles = [...vehicles];
+      newVehicles[index].image = file;
+      setVehicles(newVehicles);
     }
   };
   
@@ -751,13 +855,13 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
               {currentStep === 2 && (
                 <div className="space-y-6">
                   <div className="bg-blue-50 rounded-lg p-6">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <h4 className="text-lg font-semibold text-black mb-4 flex items-center">
                       <Building className="w-5 h-5 mr-2" />
                       Insurance Company Information
                     </h4>
                     
                     {ticketForm.ticketType === 'insurance' ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-black">
                         <div>
                           <label className="text-sm font-medium text-gray-700 mb-2">Insurance Company *</label>
                           <input
@@ -1268,12 +1372,12 @@ const ConversionModal: React.FC<ConversionModalProps> = ({
                                     <input
                                       type="file"
                                       accept="image/*"
-                                      onChange={(e) => handleImageUpload(index, e)}
+                                      onChange={(e) => updatedHandleImageUpload(index, e)}
                                       className="hidden"
                                       disabled={localIsSubmitting}
                                     />
                                   </label>
-                                  <p className="text-xs text-gray-500 mt-1">JPG, PNG (Max 5MB)</p>
+                                  <p className="text-xs text-gray-500 mt-1">JPG, PNG (Max 2MB)</p>
                                 </div>
                               </div>
                             </div>

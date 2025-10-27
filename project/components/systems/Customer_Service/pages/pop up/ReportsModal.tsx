@@ -66,23 +66,23 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
         let response;
         switch(selectedReport) {
           case 'overview':
-            response = await fetch('http://localhost:5001/api/ticket-stats/reports/overview');
+            response = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/reports/overview');
             const overview = await response.json();
             setOverviewData(overview);
             break;
           case 'tickets':
-            response = await fetch('http://localhost:5001/api/ticket-stats/reports/tickets');
+            response = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/reports/tickets');
             const tickets = await response.json();
             setTicketAnalytics(tickets);
             break;
           case 'revenue':
             // Pass dateRange to the API for dynamic data
-            response = await fetch(`http://localhost:5001/api/ticket-stats/reports/revenue?dateRange=${dateRange}`);
+            response = await fetch(`https://ipasystem.bymsystem.com/api/ticket-stats/reports/revenue?dateRange=${dateRange}`);
             const revenue = await response.json();
             setRevenueData(revenue);
             break;
           case 'customer':
-            response = await fetch('http://localhost:5001/api/ticket-stats/reports/customers');
+            response = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/reports/customers');
             const customers = await response.json();
             setCustomerAnalytics(customers);
             break;
@@ -125,7 +125,7 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
   const enhancedRevenueData = getEnhancedRevenueData();
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="fixed inset-0 z-50 overflow-y-auto text-black">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={onClose} />
         
@@ -229,7 +229,7 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="text-sm text-green-600">Revenue</p>
-                              <p className="text-2xl font-bold text-green-900">${overviewData.revenue?.toLocaleString()}</p>
+                              <p className="text-2xl font-bold text-green-900">ETB {overviewData.revenue?.toLocaleString()}</p>
                             </div>
                             <DollarSign className="w-8 h-8 text-green-600" />
                           </div>
@@ -307,7 +307,7 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
                         <div className="bg-green-50 rounded-lg p-4">
                           <p className="text-sm text-green-600">Total Revenue</p>
                           <p className="text-2xl font-bold text-green-900">
-                            ${enhancedRevenueData.reduce((sum: number, item: RevenueDataItem) => sum + (item.revenue || 0), 0).toLocaleString()}
+                            ETB {enhancedRevenueData.reduce((sum: number, item: RevenueDataItem) => sum + (item.revenue || 0), 0).toLocaleString()}
                           </p>
                         </div>
                         <div className="bg-blue-50 rounded-lg p-4">

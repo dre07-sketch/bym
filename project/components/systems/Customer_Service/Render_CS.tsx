@@ -15,6 +15,7 @@ import {
   DollarSign,
   TicketPlus,
   TicketCheck,
+  Clock,
 } from 'lucide-react';
 
 import SidebarHeader from '../../layout/SidebarHeader';
@@ -30,6 +31,7 @@ import Feedback from './pages/screens/Feedback';
 import FinancePage from './pages/screens/FinancePage';
 import Insurance from './pages/screens/Insurance';
 import ConvertedProformasPage from './pages/screens/ConvertedProformasPage';
+import NextMileagePage from './pages/screens/NextMileagePage';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -48,6 +50,7 @@ const Render_CS: React.FC<DashboardProps> = ({ onLogout, userRole }) => {
      {id: 'converted-proformas', label: 'Converted Proformas', icon: TicketCheck },
     { id: 'customers', label: 'Customers', icon: Users },
     { id: 'employees', label: 'Employee Management', icon: UserCheck },
+    { id: 'next-mileage', label: 'Next Mileage', icon: Clock },
     { id: 'vehicle-status', label: 'Vehicle Status', icon: Car },
     { id: 'finance', label: 'Finance', icon: DollarSign },
     { id: 'feedback', label: 'Feedback', icon: MessageSquare },
@@ -100,6 +103,7 @@ const Render_CS: React.FC<DashboardProps> = ({ onLogout, userRole }) => {
       case 'customers': return <CustomerManagement />;
       case 'employees': return <Employees />;
       case 'vehicle-status': return <VehicleStatus />;
+      case 'next-mileage': return <NextMileagePage />;
       // case 'vin-search': return <SOSManagement />;
       case 'finance': return <FinancePage />;
       case 'feedback': return <Feedback />;

@@ -93,7 +93,7 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
 
   const fetchSuppliers = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/inventory/suppliers');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/suppliers');
       const result = await response.json();
       
       if (result.success) {
@@ -156,7 +156,7 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
     }
 
     try {
-      const response = await fetch('http://localhost:5001/api/inventory/items', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/items', {
         method: 'POST',
         body: payload,
       });
@@ -239,7 +239,7 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps) => {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-6 space-y-7" ref={formRef}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-black">
               <div className="space-y-1">
                 <label className="block text-sm font-semibold text-gray-800">Item Name *</label>
                 <input

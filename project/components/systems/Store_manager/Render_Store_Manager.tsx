@@ -34,7 +34,7 @@ const Render_Store_Manager: React.FC<Render_Store_ManagerDashboardProps> = ({ on
     { id: 'inventory', label: 'Inventory Management', icon: Package },
     { id: 'assignments', label: 'Assignment & Return', icon: UserCheck },
     { id: 'returns', label: 'Returned Tools', icon: Check },
-    { id: 'damage-reports', label: 'Damage Reports', icon: AlertTriangle },
+   //{ id: 'damage-reports', label: 'Damage Reports', icon: AlertTriangle },
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
     
   ];
@@ -73,7 +73,7 @@ const Render_Store_Manager: React.FC<Render_Store_ManagerDashboardProps> = ({ on
       case 'inventory': return <InventoryManagement />;
       case 'assignments': return <AssignmentReturn />;
       case 'returns': return <ReturnedToolsList />;
-      case 'damage-reports': return <DamageReportPage />;
+     // case 'damage-reports': return <DamageReportPage />;
       case 'reports': return <Reports />;
      
       default: return <ToolDashboard />; // Removed props

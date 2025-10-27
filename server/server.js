@@ -34,8 +34,11 @@ const marketingRoutes = require('./routes/marketing-management-system/marketing-
 const insuranceRoutes = require('./routes/reception/insurance'); // Importing insurance routes
 const purchaseOrdersRoutes = require('./routes/manager-folder/purchaseOrders'); // Importing purchase orders routes
 const loginRoutes = require('./routes/auth/login'); // Importing login routesW
-const resetPasswordRoutes = require('./routes/auth/reset-password'); // Importing reset password routes
-
+const resetPasswordRoutes = require('./routes/auth/reset-password'); // Importing reset password routes\
+const notificationRoutes = require('./routes/notification/notifications'); // Importing notification routes
+const nextmilageRoutes = require('./routes/reception/nextmilage'); // Importing next mileage routes
+const { initSocket } = require('./utils/socket');
+require('./utils/notify-listener'); // load event listeners
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -141,6 +144,11 @@ app.use('/api/insurance', insuranceRoutes);
 //----------------purchase orders----------------
 app.use('/api/purchase-orders', purchaseOrdersRoutes);
 
+//----------------notifications----------------
+app.use('/api/notifications', notificationRoutes);
+
+//----------------next mileage----------------
+app.use('/api/next-mileage', nextmilageRoutes);
 
 
 
@@ -155,8 +163,11 @@ db.getConnection((err, connection) => {
     connection.release();
 
     const PORT = 5001;
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`🚀 Server running at http://localhost:${PORT}`);
     });
+
+    // Initialize socket.io
+    const io = initSocket(server);
   }
 });

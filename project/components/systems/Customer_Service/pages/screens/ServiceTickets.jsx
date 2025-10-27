@@ -115,38 +115,20 @@ export default function ServiceTickets() {
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/tickets/service_tickets');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/tickets/service_tickets');
         if (!response.ok) throw new Error('Failed to fetch tickets');
         const data = await response.json();
-        // Enrich each ticket with actual bill amount using your existing bill API
-        const ticketsWithBillAmount = await Promise.all(
-          data.map(async (ticket) => {
-            let actualBillAmount = null;
-            try {
-              const billRes = await fetch(`http://localhost:5001/api/bill/car-bills/${ticket.ticket_number}`);
-              if (billRes.ok) {
-                const billData = await billRes.json();
-                if (billData.success && billData.bill && billData.bill.final_total) {
-                  const total = parseFloat(billData.bill.final_total);
-                  if (!isNaN(total)) {
-                    actualBillAmount = total;
-                  }
-                }
-              }
-              // If 404 or no bill, leave as null
-            } catch (err) {
-              console.warn(`No bill for ticket ${ticket.ticket_number}`, err);
-              // Just skip; keep actualBillAmount = null
-            }
-            return {
-              ...ticket,
-              status: ticket.status === 'in progress'
-                ? 'in-progress'
-                : ticket.status.toLowerCase().replace(/\s+/g, '-'),
-              bill_amount: actualBillAmount, // Add actual bill amount here
-            };
-          })
-        );
+
+        // Normalize tickets and include customer_id
+        const ticketsWithBillAmount = data.map((ticket) => ({
+          ...ticket,
+          customer_id: ticket.customer_id, // Include customer_id
+          status: ticket.status === 'in progress'
+            ? 'in-progress'
+            : ticket.status.toLowerCase().replace(/\s+/g, '-'),
+          bill_amount: null, // lazy load bill later when needed
+        }));
+
         setTickets(ticketsWithBillAmount);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -166,7 +148,7 @@ export default function ServiceTickets() {
     setBillLoading(true);
     setBillError(null);
     try {
-      const response = await fetch(`http://localhost:5001/api/bill/car-bills/${ticketNumber}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/bill/car-bills/${ticketNumber}`);
       if (!response.ok) {
         if (response.status === 404) {
           setBill(null);
@@ -196,11 +178,12 @@ export default function ServiceTickets() {
   
   const fetchTicketDetails = async (ticketNumber) => {
     try {
-      const response = await fetch(`http://localhost:5001/api/tickets/service_tickets/${ticketNumber}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/tickets/service_tickets/${ticketNumber}`);
       if (!response.ok) throw new Error('Failed to fetch ticket details');
       const data = await response.json();
       const normalizedTicket = {
         ...data,
+        customer_id: data.customer_id, // Include customer_id
         status: data.status === 'in progress' 
           ? 'in-progress' 
           : data.status.toLowerCase().replace(/\s+/g, '-')
@@ -214,7 +197,7 @@ export default function ServiceTickets() {
       setActiveTab('overview');
       
       try {
-        const paymentResponse = await fetch(`http://localhost:5001/api/outsource-mechanic-payments/outsource-payments/${ticketNumber}`);
+        const paymentResponse = await fetch(`https://ipasystem.bymsystem.com/api/outsource-mechanic-payments/outsource-payments/${ticketNumber}`);
         if (paymentResponse.ok) {
           const paymentData = await paymentResponse.json();
           setShowTicketDetails(prev => ({
@@ -253,7 +236,7 @@ export default function ServiceTickets() {
   // Handle payment request
   const handlePaymentRequest = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/bill/update-to-payment-requested', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/bill/update-to-payment-requested', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -301,7 +284,7 @@ export default function ServiceTickets() {
     }
 
     try {
-      const response = await fetch('http://localhost:5001/api/bill/submit-payment', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/bill/submit-payment', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -309,6 +292,7 @@ export default function ServiceTickets() {
         body: JSON.stringify({
           ticketNumber: showTicketDetails.ticket_number,
           paymentType: selectedPaymentTerm,
+          customerId: showTicketDetails.customer_id // Added customerId
         }),
       });
 
@@ -370,6 +354,7 @@ export default function ServiceTickets() {
       'inspection-failed': 'bg-red-100 text-red-800 border-red-200',
       completed: 'bg-green-200 text-green-900 border-green-300',
       'payment-requested': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      billed: 'bg-indigo-100 text-indigo-800 border-indigo-200',
     };
     return colorMap[status] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
@@ -542,6 +527,7 @@ export default function ServiceTickets() {
                 <SelectItem value="successful-inspection">Successful Inspection</SelectItem>
                 <SelectItem value="inspection-failed">Inspection Failed</SelectItem>
                 <SelectItem value="payment-requested">Payment Requested</SelectItem>
+                <SelectItem value="billed">Billed</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
               </SelectContent>
             </Select>
@@ -638,19 +624,7 @@ export default function ServiceTickets() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-green-600">
-                    {ticket.bill_amount !== null ? (
-                      <>
-                        ETB {ticket.bill_amount.toFixed(2)}
-                        <span className="text-xs text-gray-500 ml-1">(Billed)</span>
-                      </>
-                    ) : (
-                      <>
-                        ETB {ticket.estimated_cost?.toFixed(2) || '0.00'}
-                        <span className="text-xs text-gray-500 ml-1">(Est.)</span>
-                      </>
-                    )}
-                  </div>
+                 
                   <Button 
                     size="sm" 
                     variant="outline"
@@ -754,7 +728,7 @@ export default function ServiceTickets() {
                         <p><strong>Plate:</strong> {showTicketDetails.license_plate}</p>
                         {showTicketDetails.vehicle?.image && (
                           <img 
-                            src={`http://localhost:5001/${showTicketDetails.vehicle.image}`} 
+                            src={`https://ipasystem.bymsystem.com/${showTicketDetails.vehicle.image}`} 
                             alt="Vehicle" 
                             className="w-32 h-24 object-cover rounded-lg border mt-2 shadow"
                           />
@@ -1818,14 +1792,14 @@ export default function ServiceTickets() {
                               {/* Payment Request Button */}
                               {bill.status !== 'paid' && (
                                 <Button
-                                  disabled={bill.status !== 'pending'}
+                                  disabled={bill.status !== 'pending' || showTicketDetails.status === 'billed' || showTicketDetails.type !== 'insurance'}
                                   className={`${
-                                    bill.status === 'payment_requested'
+                                    bill.status === 'payment_requested' || showTicketDetails.status === 'billed' || showTicketDetails.type !== 'insurance'
                                       ? 'blur-sm opacity-60 cursor-not-allowed'
                                       : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
                                   } text-white font-medium px-6 py-2 rounded-xl shadow-lg transition-all`}
                                   onClick={() => {
-                                    if (bill.status === 'pending') {
+                                    if (bill.status === 'pending' && showTicketDetails.status !== 'billed' && showTicketDetails.type === 'insurance') {
                                       setIsPaymentRequestModalOpen(true);
                                     }
                                   }}

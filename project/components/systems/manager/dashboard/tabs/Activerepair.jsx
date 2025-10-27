@@ -71,7 +71,7 @@ const Activerepair = () => {
   const [loadingInspectionRecords, setLoadingInspectionRecords] = useState(false);
   const [showOutsourceMechanicModal, setShowOutsourceMechanicModal] = useState(false);
   // Add this with your other state variables
-const [partsText, setPartsText] = useState('');
+  const [partsText, setPartsText] = useState('');
   // Add new state variables for the outsource modal
   const [showOutsourceModal, setShowOutsourceModal] = useState(false);
   const [outsourcedParts, setOutsourcedParts] = useState([]);
@@ -93,6 +93,16 @@ const [partsText, setPartsText] = useState('');
     check_door_locks_central_locks: "Door Locks & Central Locks",
     check_customer_work_order_reception_book: "Customer Work Order & Reception Book"
   };
+
+  // Helper function to format service type
+  const formatServiceType = (type) => {
+    if (!type) return 'General Repair';
+    return type
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   // Helper functions for status styling
   const getStatusStyle = (status) => {
     switch(status) {
@@ -115,31 +125,31 @@ const [partsText, setPartsText] = useState('');
     }
   };
 
-const handleMarkForInspection = async () => {
-  try {
-    const response = await fetch(`http://localhost:5001/api/active-progress/${selectedRepair.id}/status`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'Inspection' })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to update status');
+  const handleMarkForInspection = async () => {
+    try {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/${selectedRepair.id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Inspection' })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update status');
+      }
+
+      const updatedRepair = { ...selectedRepair, status: 'Inspection' };
+      setSelectedRepair(updatedRepair);
+      setRepairs(prev => 
+        prev.map(repair => repair.id === selectedRepair.id ? updatedRepair : repair)
+      );
+
+      setShowInspectionModal(false);
+      alert('Repair marked as Inspection!');
+    } catch (err) {
+      console.error('Error updating status:', err);
+      alert(`Error: ${err.message}`);
     }
-
-    const updatedRepair = { ...selectedRepair, status: 'Inspection' };
-    setSelectedRepair(updatedRepair);
-    setRepairs(prev => 
-      prev.map(repair => repair.id === selectedRepair.id ? updatedRepair : repair)
-    );
-
-    setShowInspectionModal(false);
-    alert('Repair marked as Inspection!');
-  } catch (err) {
-    console.error('Error updating status:', err);
-    alert(`Error: ${err.message}`);
-  }
-};
+  };
 
   // Handle form changes
   const handleFinalOutsourceSubmit = async () => {
@@ -158,7 +168,7 @@ const handleMarkForInspection = async () => {
         if (!part.name || !part.category || !part.quantity) {
           throw new Error(`Missing required fields in part: ${JSON.stringify(part)}`);
         }
-        return fetch("http://localhost:5001/api/active-progress/outsource", {
+        return fetch("https://ipasystem.bymsystem.com/api/active-progress/outsource", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -258,7 +268,7 @@ const handleMarkForInspection = async () => {
     useEffect(() => {
       if (!ticketNumber) return;
       setLoading(true);
-      fetch(`http://localhost:5001/api/active-progress/get-outsource-part`)
+      fetch(`https://ipasystem.bymsystem.com/api/active-progress/get-outsource-part`)
         .then(res => res.json())
         .then(result => {
           if (result.success) {
@@ -330,53 +340,64 @@ const handleMarkForInspection = async () => {
   };
   // Map ticket data to repair format
   const mapTicketToRepair = (ticket) => {
-    const customerName = ticket.customer_name || 'Unknown Customer';
-    const email = ticket.email || 'N/A';
-    const phone = ticket.phone || 'N/A';
-    const vehicle = ticket.vehicle_info || 'Unknown Vehicle';
-    const licensePlate = ticket.license_plate || 'N/A';
-    const issueSeverity = ticket.urgency_level
-      ? ticket.urgency_level === 'Critical' ? 'Critical'
-      : ticket.urgency_level === 'High' ? 'Critical'
-      : ticket.urgency_level === 'Medium' ? 'Moderate'
-      : 'Minor'
-      : 'Moderate';
-    // Get the first mechanic from the mechanics array if available
-    const assignedMechanic = ticket.mechanics && ticket.mechanics.length > 0 
-      ? ticket.mechanics[0].mechanic_name 
-      : 'Unassigned';
-    return {
-      id: ticket.id,
-      ticketNumber: ticket.ticket_number || `TKT-${ticket.id}`,
-      customerName,
-      licensePlate,
-      vehicle,
-      status: ticket.status || 'In Progress',
-      carStatus: issueSeverity,
-      startDate: ticket.created_at
-        ? new Date(ticket.created_at).toISOString().split('T')[0]
-        : null,
-      estimatedCompletion: ticket.estimated_completion_date
-        ? new Date(ticket.estimated_completion_date).toISOString().split('T')[0]
-        : null,
-      assignedMechanic,
-      assignedInspector: ticket.inspector_assign || null,
-      serviceType: ticket.title || ticket.type || 'General Repair',
-      contact: phone,
-      email,
-      location: 'Main Bay',
-      progress: 0,
-      notes: ticket.description || 'No additional notes provided for this repair.',
-      parts: ticket.ordered_parts || [],
-      tools: [],
-      mechanics: ticket.mechanics || [], // Store the mechanics array
-      outsource_mechanic: ticket.outsource_mechanic || null,
-    };
+  const customerName = ticket.customer_name || 'Unknown Customer';
+  const email = ticket.email || 'N/A';
+  const phone = ticket.phone || 'N/A';
+  const vehicle = ticket.vehicle_info || 'Unknown Vehicle';
+  const licensePlate = ticket.license_plate || 'N/A';
+  const issueSeverity = ticket.urgency_level
+    ? ticket.urgency_level === 'Critical' ? 'Critical'
+    : ticket.urgency_level === 'High' ? 'Critical'
+    : ticket.urgency_level === 'Medium' ? 'Moderate'
+    : 'Minor'
+    : 'Moderate';
+  
+  // Get the first mechanic from the mechanics array if available
+  const assignedMechanic = ticket.mechanics && ticket.mechanics.length > 0 
+    ? ticket.mechanics[0].mechanic_name 
+    : 'Unassigned';
+    
+  // FIX: Deduplicate mechanics array
+  const uniqueMechanics = ticket.mechanics ? 
+    ticket.mechanics.filter((mechanic, index, self) => 
+      index === self.findIndex(m => 
+        m.mechanic_name === mechanic.mechanic_name && 
+        m.assigned_at === mechanic.assigned_at
+      )
+    ) : [];
+
+  return {
+    id: ticket.id,
+    ticketNumber: ticket.ticket_number || `TKT-${ticket.id}`,
+    customerName,
+    licensePlate,
+    vehicle,
+    status: ticket.status || 'In Progress',
+    carStatus: issueSeverity,
+    startDate: ticket.created_at
+      ? new Date(ticket.created_at).toISOString().split('T')[0]
+      : null,
+    estimatedCompletion: ticket.estimated_completion_date
+      ? new Date(ticket.estimated_completion_date).toISOString().split('T')[0]
+      : null,
+    assignedMechanic,
+    assignedInspector: ticket.inspector_assign || null,
+    serviceType: formatServiceType(ticket.type),
+    contact: phone,
+    email,
+    location: 'Main Bay',
+    progress: 0,
+    notes: ticket.description || 'No additional notes provided for this repair.',
+    parts: ticket.ordered_parts || [],
+    tools: [],
+    mechanics: uniqueMechanics, // Use deduplicated mechanics
+    outsource_mechanic: ticket.outsource_mechanic || null,
   };
+};
   // Fetch single repair data
   const fetchRepairData = async (repairId) => {
     try {
-      const response = await fetch(`http://localhost:5001/api/active-progress/${repairId}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/${repairId}`);
       if (!response.ok) throw new Error('Failed to fetch repair');
       const data = await response.json();
       return mapTicketToRepair(data);
@@ -407,7 +428,7 @@ const handleMarkForInspection = async () => {
   useEffect(() => {
     const fetchRepairs = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/active-progress/in-progress');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/active-progress/in-progress');
         if (!response.ok) throw new Error('Failed to fetch repairs');
         const data = await response.json();
         const formattedRepairs = data.map(mapTicketToRepair);
@@ -425,7 +446,7 @@ const handleMarkForInspection = async () => {
   useEffect(() => {
     const fetchParts = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/active-progress/parts');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/active-progress/parts');
         if (response.ok) {
           const data = await response.json();
           // Convert price to number for each part
@@ -447,7 +468,7 @@ const handleMarkForInspection = async () => {
   const fetchProgressLogs = async (ticketNumber) => {
     setLoadingProgressLogs(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/active-progress/progress/${ticketNumber}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/progress/${ticketNumber}`);
       if (!response.ok) throw new Error('Failed to fetch progress logs');
       const data = await response.json();
       setProgressLogs(data);
@@ -460,7 +481,7 @@ const handleMarkForInspection = async () => {
   const fetchDisassembledParts = async (ticketNumber) => {
     setLoadingDisassembledParts(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/active-progress/diassmbled/${ticketNumber}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/diassmbled/${ticketNumber}`);
       if (!response.ok) throw new Error('Failed to fetch disassembled parts');
       const data = await response.json();
       setDisassembledParts(data);
@@ -473,7 +494,7 @@ const handleMarkForInspection = async () => {
   const fetchUsedTools = async (ticketNumber) => {
     setLoadingUsedTools(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/active-progress/used-tools/${ticketNumber}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/used-tools/${ticketNumber}`);
       if (!response.ok) throw new Error('Failed to fetch used tools');
       const data = await response.json();
       setUsedTools(data);
@@ -486,7 +507,7 @@ const handleMarkForInspection = async () => {
   const fetchInspectionRecords = async (ticketNumber) => {
     setLoadingInspectionRecords(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/active-progress/inspection/${ticketNumber}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/inspection/${ticketNumber}`);
       if (!response.ok) throw new Error('Failed to fetch inspection records');
       const data = await response.json();
       setInspectionRecords(data);
@@ -574,7 +595,7 @@ const handleMarkForInspection = async () => {
       return;
     }
     try {
-      const response = await fetch(`http://localhost:5001/api/active-progress/${selectedRepair.id}/completion`, {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-progress/${selectedRepair.id}/completion`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ completion_date: completionTime })
@@ -654,163 +675,103 @@ const handleMarkForInspection = async () => {
     });
   };
 
-
   // State for parts form and list
-const [partsForm, setPartsForm] = useState({ name: '', quantity: 1 });
-const [partsToOrder, setPartsToOrder] = useState([]);
+  const [partsForm, setPartsForm] = useState({ name: '', quantity: 1 });
+  const [partsToOrder, setPartsToOrder] = useState([]);
 
-// Handler for form changes
-const handlePartsFormChange = (field, value) => {
-  setPartsForm(prev => ({ ...prev, [field]: value }));
-};
-
-// Handler to add a part to the order list
-const handleAddPartToOrder = () => {
-  if (!partsForm.name.trim()) {
-    alert("Please enter a part name");
-    return;
-  }
-  const newPart = {
-    id: Date.now(), // Simple unique ID
-    name: partsForm.name,
-    quantity: partsForm.quantity
+  // Handler for form changes
+  const handlePartsFormChange = (field, value) => {
+    setPartsForm(prev => ({ ...prev, [field]: value }));
   };
-  setPartsToOrder(prev => [...prev, newPart]);
-  // Reset form but keep quantity defaults
-  setPartsForm(prev => ({
-    ...prev,
-    name: '',
-    quantity: 1
-  }));
-  // Focus back to the name input
-  setTimeout(() => {
-    const nameInput = document.getElementById('part-name-input');
-    if (nameInput) nameInput.focus();
-  }, 0);
-};
 
-// Handler to remove a part from the order list
-const removePartFromOrder = (id) => {
-  setPartsToOrder(prev => prev.filter(part => part.id !== id));
-};
+  // Handler to add a part to the order list
+  const handleAddPartToOrder = () => {
+    if (!partsForm.name.trim()) {
+      alert("Please enter a part name");
+      return;
+    }
+    const newPart = {
+      id: Date.now(), // Simple unique ID
+      name: partsForm.name,
+      quantity: partsForm.quantity
+    };
+    setPartsToOrder(prev => [...prev, newPart]);
+    // Reset form but keep quantity defaults
+    setPartsForm(prev => ({
+      ...prev,
+      name: '',
+      quantity: 1
+    }));
+    // Focus back to the name input
+    setTimeout(() => {
+      const nameInput = document.getElementById('part-name-input');
+      if (nameInput) nameInput.focus();
+    }, 0);
+  };
 
-// Updated handler for ordering parts
-const handleOrderParts = async () => {
-  if (partsToOrder.length === 0) {
-    alert('Please add at least one part to order.');
-    return;
-  }
+  // Handler to remove a part from the order list
+  const removePartFromOrder = (id) => {
+    setPartsToOrder(prev => prev.filter(part => part.id !== id));
+  };
 
-  try {
-    // Format parts as a string for the parts_needed field
-    const partsNeededText = partsToOrder
-      .map(part => `${part.name} (Quantity: ${part.quantity})`)
-      .join('\n');
-
-    const response = await fetch('http://localhost:5001/api/active-progress/parts-request', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        ticketNumber: selectedRepair.ticketNumber,
-        parts_needed: partsNeededText
-      })
-    });
-
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to order parts');
+  // Updated handler for ordering parts
+  const handleOrderParts = async () => {
+    if (partsToOrder.length === 0) {
+      alert('Please add at least one part to order.');
+      return;
     }
 
-    // Show success message
-    alert(`Successfully ordered parts for ${selectedRepair.ticketNumber}!`);
-    
-    // Reset and close modal
-    setShowPartsModal(false);
-    setPartsToOrder([]);
-    setPartsForm({ name: '', quantity: 1 });
-    
-    // Refresh repair data
-    if (selectedRepair) {
-      const updatedRepair = await fetchRepairData(selectedRepair.id);
-      setSelectedRepair(prev => ({
-        ...prev,
-        ...updatedRepair,
-        tools: prev.tools // Preserve tools state
-      }));
-      setRepairs(prev =>
-        prev.map(repair =>
-          repair.id === selectedRepair.id ? updatedRepair : repair
-        )
-      );
-    }
-  } catch (err) {
-    console.error('Error ordering parts:', err);
-    alert(`Error: ${err.message}`);
-  }
-};
+    try {
+      // Format parts as a string for the parts_needed field
+      const partsNeededText = partsToOrder
+        .map(part => `${part.name} (Quantity: ${part.quantity})`)
+        .join('\n');
 
-  // const handleOrderParts = async () => {
-  //   if (!selectedRepair || selectedParts.length === 0) {
-  //     alert('Please select at least one part to order.');
-  //     return;
-  //   }
-  //   // Prepare the items array for the API request
-  //   const itemsToOrder = selectedParts.map(partId => {
-  //     const part = stockroomParts.find(p => p.id === partId);
-  //     return {
-  //       item_id: part.item_id,
-  //       name: part.name,
-  //       category: part.category,
-  //       sku: part.sku,
-  //       price: parseFloat(part.price) || 0, // Ensure price is a number
-  //       quantity: quantities[partId] || 1
-  //     };
-  //   });
-  //   try {
-  //     const response = await fetch('http://localhost:5001/api/active-progress/ordered-parts', {
-  //       method: 'POST',
-  //       headers: {
-  //         'Content-Type': 'application/json'
-  //       },
-  //       body: JSON.stringify({
-  //         ticketNumber: selectedRepair.ticketNumber,
-  //         items: itemsToOrder
-  //       })
-  //     });
-  //     const data = await response.json();
-  //     if (!response.ok) {
-  //       throw new Error(data.error || 'Failed to order parts');
-  //     }
-  //     // Refresh repair data to get the updated parts list
-  //     try {
-  //       const updatedRepair = await fetchRepairData(selectedRepair.id);
-  //       setSelectedRepair(prev => ({
-  //         ...prev,
-  //         ...updatedRepair,
-  //         tools: prev.tools // Preserve tools state
-  //       }));
-  //       setRepairs(prev =>
-  //         prev.map(repair =>
-  //           repair.id === selectedRepair.id ? updatedRepair : repair
-  //         )
-  //       );
-  //       alert(`Successfully ordered ${itemsToOrder.length} part(s)!`);
-  //       setShowPartsModal(false);
-  //       // Reset selection
-  //       setSelectedParts([]);
-  //       setQuantities({});
-  //     } catch (refreshErr) {
-  //       console.error('Error refreshing repair after ordering parts:', refreshErr);
-  //       alert(`Parts were ordered successfully, but there was an error refreshing the data: ${refreshErr.message}`);
-  //     }
-  //   } catch (err) {
-  //     console.error('Error ordering parts:', err);
-  //     alert(`Error: ${err.message}`);
-  //   }
-  // };
+      const response = await fetch('https://ipasystem.bymsystem.com/api/active-progress/parts-request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ticketNumber: selectedRepair.ticketNumber,
+          parts_needed: partsNeededText
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to order parts');
+      }
+
+      // Show success message
+      alert(`Successfully ordered parts for ${selectedRepair.ticketNumber}!`);
+      
+      // Reset and close modal
+      setShowPartsModal(false);
+      setPartsToOrder([]);
+      setPartsForm({ name: '', quantity: 1 });
+      
+      // Refresh repair data
+      if (selectedRepair) {
+        const updatedRepair = await fetchRepairData(selectedRepair.id);
+        setSelectedRepair(prev => ({
+          ...prev,
+          ...updatedRepair,
+          tools: prev.tools // Preserve tools state
+        }));
+        setRepairs(prev =>
+          prev.map(repair =>
+            repair.id === selectedRepair.id ? updatedRepair : repair
+          )
+        );
+      }
+    } catch (err) {
+      console.error('Error ordering parts:', err);
+      alert(`Error: ${err.message}`);
+    }
+  };
+
   // Bill calculation
   const updatePart = (index, field, value) => {
     const updatedParts = [...parts];
@@ -844,25 +805,23 @@ const handleOrderParts = async () => {
     setShowBillModal(false);
   };
 
-const formatInspectionChecklist = (inspection) => {
-  return {
-    ...inspection,
-    checklist: {
-      oilLeaks: inspection.check_oil_leaks === 'Yes' ? true : inspection.check_oil_leaks === 'No' ? false : null,
-      engineAirFilterOilCoolant: inspection.check_engine_air_filter_oil_coolant_level === 'Yes' ? true : inspection.check_engine_air_filter_oil_coolant_level === 'No' ? false : null,
-      brakeFluidLevels: inspection.check_brake_fluid_levels === 'Yes' ? true : inspection.check_brake_fluid_levels === 'No' ? false : null,
-      glutenFluidLevels: inspection.check_gluten_fluid_levels === 'Yes' ? true : inspection.check_gluten_fluid_levels === 'No' ? false : null,
-      batteryTimingBelt: inspection.check_battery_timing_belt === 'Yes' ? true : inspection.check_battery_timing_belt === 'No' ? false : null,
-      tire: inspection.check_tire === 'Yes' ? true : inspection.check_tire === 'No' ? false : null,
-      tirePressureRotation: inspection.check_tire_pressure_rotation === 'Yes' ? true : inspection.check_tire_pressure_rotation === 'No' ? false : null,
-      lightsWiperHorn: inspection.check_lights_wiper_horn === 'Yes' ? true : inspection.check_lights_wiper_horn === 'No' ? false : null,
-      doorLocksCentralLocks: inspection.check_door_locks_central_locks === 'Yes' ? true : inspection.check_door_locks_central_locks === 'No' ? false : null,
-      customerWorkOrderReceptionBook: inspection.check_customer_work_order_reception_book === 'Yes' ? true : inspection.check_customer_work_order_reception_book === 'No' ? false : null
-    }
+  const formatInspectionChecklist = (inspection) => {
+    return {
+      ...inspection,
+      checklist: {
+        oilLeaks: inspection.check_oil_leaks === 'Yes' ? true : inspection.check_oil_leaks === 'No' ? false : null,
+        engineAirFilterOilCoolant: inspection.check_engine_air_filter_oil_coolant_level === 'Yes' ? true : inspection.check_engine_air_filter_oil_coolant_level === 'No' ? false : null,
+        brakeFluidLevels: inspection.check_brake_fluid_levels === 'Yes' ? true : inspection.check_brake_fluid_levels === 'No' ? false : null,
+        glutenFluidLevels: inspection.check_gluten_fluid_levels === 'Yes' ? true : inspection.check_gluten_fluid_levels === 'No' ? false : null,
+        batteryTimingBelt: inspection.check_battery_timing_belt === 'Yes' ? true : inspection.check_battery_timing_belt === 'No' ? false : null,
+        tire: inspection.check_tire === 'Yes' ? true : inspection.check_tire === 'No' ? false : null,
+        tirePressureRotation: inspection.check_tire_pressure_rotation === 'Yes' ? true : inspection.check_tire_pressure_rotation === 'No' ? false : null,
+        lightsWiperHorn: inspection.check_lights_wiper_horn === 'Yes' ? true : inspection.check_lights_wiper_horn === 'No' ? false : null,
+        doorLocksCentralLocks: inspection.check_door_locks_central_locks === 'Yes' ? true : inspection.check_door_locks_central_locks === 'No' ? false : null,
+        customerWorkOrderReceptionBook: inspection.check_customer_work_order_reception_book === 'Yes' ? true : inspection.check_customer_work_order_reception_book === 'No' ? false : null
+      }
+    };
   };
-};
-
-
 
   return (
     <div className="p-6 max-w-7xl mx-auto relative">
@@ -1413,164 +1372,162 @@ const formatInspectionChecklist = (inspection) => {
                 </div>
               )}
               {activeTab === 'inspection' && (
-  <div className="space-y-6">
-    <h3 className="text-xl font-bold text-black flex items-center gap-2">
-      <FileCheck size={24} className="text-indigo-600" />
-      Inspection Records
-    </h3>
-    {loadingInspectionRecords ? (
-      <div className="flex justify-center py-10">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500"></div>
-      </div>
-    ) : inspectionRecords.length > 0 ? (
-      <div className="space-y-4">
-        {inspectionRecords.map((record, index) => {
-          // Format the inspection data using the provided function
-          const formattedInspection = formatInspectionChecklist(record);
-          
-          return (
-            <div key={record.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm text-black">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    record.inspection_status === 'pass' ? 'bg-green-100 text-green-800' :
-                    record.inspection_status === 'fail' ? 'bg-red-100 text-red-800' :
-                    'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {record.inspection_status === 'pass' ? 'Successful' : 
-                     record.inspection_status === 'fail' ? 'Failed' : 'Pending'}
-                  </span>
-                  <div className="text-sm text-gray-500 mt-1">
-                    {new Date(record.inspection_date).toLocaleDateString()} at {new Date(record.inspection_date).toLocaleTimeString()}
-                  </div>
-                </div>
-                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-800">
-                  {new Date(record.created_at).toLocaleDateString()}
-                </span>
-              </div>
-              
-              {/* Inspection Checklist Section - Two Column Layout */}
-              <div className="mb-6">
-                <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-                  <FileCheck size={18} className="text-indigo-600" />
-                  Inspection Checklist
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {Object.entries(formattedInspection.checklist).map(([key, value]) => {
-                    // Get the display name for this checklist item
-                    const displayName = checklistDisplayNames[
-                      `check_${key.replace(/([A-Z])/g, '_$1').toLowerCase()}`
-                    ] || key;
-                    
-                    return (
-                      <div 
-                        key={key} 
-                        className={`p-3 rounded-lg border transition-all duration-200 ${
-                          value === true 
-                            ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' 
-                            : value === false 
-                              ? 'bg-red-50 border-red-200 hover:bg-red-100'
-                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            {/* Icon */}
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                              value === true 
-                                ? 'bg-emerald-100 text-emerald-600' 
-                                : value === false 
-                                  ? 'bg-red-100 text-red-600' 
-                                  : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {value === true && <CheckSquare size={14} />}
-                              {value === false && <X size={14} />}
-                              {value === null && (
-                                <span className="text-xs">?</span>
-                              )}
+                <div className="space-y-6">
+                  <h3 className="text-xl font-bold text-black flex items-center gap-2">
+                    <FileCheck size={24} className="text-indigo-600" />
+                    Inspection Records
+                  </h3>
+                  {loadingInspectionRecords ? (
+                    <div className="flex justify-center py-10">
+                      <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500"></div>
+                    </div>
+                  ) : inspectionRecords.length > 0 ? (
+                    <div className="space-y-4">
+                      {inspectionRecords.map((record, index) => {
+                        // Format the inspection data using the provided function
+                        const formattedInspection = formatInspectionChecklist(record);
+                        
+                        return (
+                          <div key={record.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm text-black">
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                  record.inspection_status === 'pass' ? 'bg-green-100 text-green-800' :
+                                  record.inspection_status === 'fail' ? 'bg-red-100 text-red-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {record.inspection_status === 'pass' ? 'Successful' : 
+                                   record.inspection_status === 'fail' ? 'Failed' : 'Pending'}
+                                </span>
+                                <div className="text-sm text-gray-500 mt-1">
+                                  {new Date(record.inspection_date).toLocaleDateString()} at {new Date(record.inspection_date).toLocaleTimeString()}
+                                </div>
+                              </div>
+                              <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-800">
+                                {new Date(record.created_at).toLocaleDateString()}
+                              </span>
                             </div>
-                            <span className="text-sm font-medium">{displayName}</span>
+                            
+                            {/* Inspection Checklist Section - Two Column Layout */}
+                            <div className="mb-6">
+                              <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                <FileCheck size={18} className="text-indigo-600" />
+                                Inspection Checklist
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {Object.entries(formattedInspection.checklist).map(([key, value]) => {
+                                  // Get the display name for this checklist item
+                                  const displayName = checklistDisplayNames[
+                                    `check_${key.replace(/([A-Z])/g, '_$1').toLowerCase()}`
+                                  ] || key;
+                                  
+                                  return (
+                                    <div 
+                                      key={key} 
+                                      className={`p-3 rounded-lg border transition-all duration-200 ${
+                                        value === true 
+                                          ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' 
+                                          : value === false 
+                                            ? 'bg-red-50 border-red-200 hover:bg-red-100'
+                                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          {/* Icon */}
+                                          <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                                            value === true 
+                                              ? 'bg-emerald-100 text-emerald-600' 
+                                              : value === false 
+                                                ? 'bg-red-100 text-red-600' 
+                                                : 'bg-gray-100 text-gray-600'
+                                          }`}>
+                                            {value === true && <CheckSquare size={14} />}
+                                            {value === false && <X size={14} />}
+                                            {value === null && (
+                                              <span className="text-xs">?</span>
+                                            )}
+                                          </div>
+                                          <span className="text-sm font-medium">{displayName}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          {value === true && (
+                                            <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-sm font-medium rounded-full flex items-center gap-1">
+                                              <CheckSquare size={12} className="text-emerald-600" />
+                                              Yes
+                                            </span>
+                                          )}
+                                          {value === false && (
+                                            <span className="px-2 py-1 bg-red-100 text-red-700 text-sm font-medium rounded-full flex items-center gap-1">
+                                              <X size={12} className="text-red-600" />
+                                              No
+                                            </span>
+                                          )}
+                                          {value === null && (
+                                            <span className="text-sm text-gray-500">Not Checked</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                              <div className="bg-gray-50 p-3 rounded-lg">
+                                <p className="text-sm font-medium text-gray-700">Main Issue Resolved</p>
+                                <p className="text-sm mt-1">
+                                  {record.main_issue_resolved === 'Resolved' ? (
+                                    <span className="text-green-600 flex items-center gap-1">
+                                      <CheckCircle2 size={14} /> Yes
+                                    </span>
+                                  ) : (
+                                    <span className="text-red-600 flex items-center gap-1">
+                                      <X size={14} /> No
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded-lg">
+                                <p className="text-sm font-medium text-gray-700">Reassembly Verified</p>
+                                <p className="text-sm mt-1">
+                                  {record.reassembly_verified === 'Yes' ? (
+                                    <span className="text-green-600 flex items-center gap-1">
+                                      <CheckCircle2 size={14} /> Yes
+                                    </span>
+                                  ) : (
+                                    <span className="text-red-600 flex items-center gap-1">
+                                      <X size={14} /> No
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mb-4">
+                              <p className="text-sm font-medium text-black mb-1">General Condition</p>
+                              <div className="text-sm bg-white p-3 rounded-lg border border-gray-200">
+                                {record.general_condition}
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-black mb-1">Notes</p>
+                              <div className="text-sm bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                {record.notes || 'No additional notes provided.'}
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            {value === true && (
-                              <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-sm font-medium rounded-full flex items-center gap-1">
-                                <CheckSquare size={12} className="text-emerald-600" />
-                                Yes
-                              </span>
-                            )}
-                            {value === false && (
-                              <span className="px-2 py-1 bg-red-100 text-red-700 text-sm font-medium rounded-full flex items-center gap-1">
-                                <X size={12} className="text-red-600" />
-                                No
-                              </span>
-                            )}
-                            {value === null && (
-                              <span className="text-sm text-gray-500">Not Checked</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-10 bg-gray-50 rounded-xl">
+                      <FileCheck size={48} className="mx-auto text-gray-300 mb-3" />
+                      <p className="text-gray-500">No inspection records available for this repair</p>
+                    </div>
+                  )}
                 </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <p className="text-sm font-medium text-gray-700">Main Issue Resolved</p>
-                  <p className="text-sm mt-1">
-                    {record.main_issue_resolved === 'Resolved' ? (
-                      <span className="text-green-600 flex items-center gap-1">
-                        <CheckCircle2 size={14} /> Yes
-                      </span>
-                    ) : (
-                      <span className="text-red-600 flex items-center gap-1">
-                        <X size={14} /> No
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <p className="text-sm font-medium text-gray-700">Reassembly Verified</p>
-                  <p className="text-sm mt-1">
-                    {record.reassembly_verified === 'Yes' ? (
-                      <span className="text-green-600 flex items-center gap-1">
-                        <CheckCircle2 size={14} /> Yes
-                      </span>
-                    ) : (
-                      <span className="text-red-600 flex items-center gap-1">
-                        <X size={14} /> No
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-              <div className="mb-4">
-                <p className="text-sm font-medium text-black mb-1">General Condition</p>
-                <div className="text-sm bg-white p-3 rounded-lg border border-gray-200">
-                  {record.general_condition}
-                </div>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-black mb-1">Notes</p>
-                <div className="text-sm bg-gray-50 p-3 rounded-lg border border-gray-200">
-                  {record.notes || 'No additional notes provided.'}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    ) : (
-      <div className="text-center py-10 bg-gray-50 rounded-xl">
-        <FileCheck size={48} className="mx-auto text-gray-300 mb-3" />
-        <p className="text-gray-500">No inspection records available for this repair</p>
-      </div>
-    )}
-  </div>
-)}
-
-
+              )}
 
               <div className="mt-8 flex flex-wrap gap-3 justify-end">
                
@@ -1603,77 +1560,77 @@ const formatInspectionChecklist = (inspection) => {
       )}
       {/* Inspection Modal */}
       {showInspectionModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all animate-scale-up">
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-5 text-white">
-        <div className="flex items-center justify-between">
-          <h3 className="text-2xl font-bold">Ready for Inspection?</h3>
-          <button
-            onClick={() => setShowInspectionModal(false)}
-            className="p-2 hover:bg-white/20 rounded-full transition-colors"
-          >
-            <X size={24} />
-          </button>
-        </div>
-      </div>
-      <div className="p-6">
-        <div className="text-center mb-6">
-          <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-            <FileCheck size={32} className="text-blue-600" />
-          </div>
-          <h4 className="text-xl font-bold text-gray-900 mb-2">Mark for Inspection</h4>
-          <p className="text-gray-600 max-w-md mx-auto">
-            This will change the status of <span className="font-semibold">{selectedRepair?.ticketNumber}</span> to "Inspection" 
-            and notify the inspection team that the vehicle is ready for quality assessment.
-          </p>
-        </div>
-        
-        <div className="bg-blue-50 rounded-xl p-4 mb-6 border border-blue-200">
-          <div className="flex items-start gap-3">
-            <div className="mt-1">
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <AlertCircle size={18} className="text-blue-600" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all animate-scale-up">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-5 text-white">
+              <div className="flex items-center justify-between">
+                <h3 className="text-2xl font-bold">Ready for Inspection?</h3>
+                <button
+                  onClick={() => setShowInspectionModal(false)}
+                  className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                >
+                  <X size={24} />
+                </button>
               </div>
             </div>
-            <div>
-              <h5 className="font-medium text-blue-800">What happens next?</h5>
-              <ul className="mt-2 text-sm text-blue-700 space-y-1">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
-                  <span>Inspection team will be notified immediately</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
-                  <span>Vehicle will be moved to inspection bay</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
-                  <span>Quality assessment will begin within 2 hours</span>
-                </li>
-              </ul>
+            <div className="p-6">
+              <div className="text-center mb-6">
+                <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                  <FileCheck size={32} className="text-blue-600" />
+                </div>
+                <h4 className="text-xl font-bold text-gray-900 mb-2">Mark for Inspection</h4>
+                <p className="text-gray-600 max-w-md mx-auto">
+                  This will change the status of <span className="font-semibold">{selectedRepair?.ticketNumber}</span> to "Inspection" 
+                  and notify the inspection team that the vehicle is ready for quality assessment.
+                </p>
+              </div>
+              
+              <div className="bg-blue-50 rounded-xl p-4 mb-6 border border-blue-200">
+                <div className="flex items-start gap-3">
+                  <div className="mt-1">
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <AlertCircle size={18} className="text-blue-600" />
+                    </div>
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-blue-800">What happens next?</h5>
+                    <ul className="mt-2 text-sm text-blue-700 space-y-1">
+                      <li className="flex items-start gap-2">
+                        <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
+                        <span>Inspection team will be notified immediately</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
+                        <span>Vehicle will be moved to inspection bay</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
+                        <span>Quality assessment will begin within 2 hours</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowInspectionModal(false)}
+                  className="flex-1 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleMarkForInspection}
+                  className="flex-1 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <FileCheck size={20} />
+                  Mark for Inspection
+                </button>
+              </div>
             </div>
           </div>
         </div>
-        
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowInspectionModal(false)}
-            className="flex-1 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleMarkForInspection}
-            className="flex-1 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-          >
-            <FileCheck size={20} />
-            Mark for Inspection
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
 
       {/* Completion Time Modal */}
       {showCompletionTimeModal && (
@@ -1709,153 +1666,153 @@ const formatInspectionChecklist = (inspection) => {
       )}
       {/* Parts Modal */}
       {showPartsModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center text-black bg-black/50 backdrop-blur-sm">
-    <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold">Request Parts</h3>
-        <button
-          onClick={() => {
-            setShowPartsModal(false);
-            setPartsToOrder([]);
-            setPartsForm({ name: '', quantity: 1 });
-          }}
-          className="p-1 hover:bg-gray-200 rounded-full"
-        >
-          <X size={20} />
-        </button>
-      </div>
-      <div className="flex-1 overflow-hidden flex flex-col">
-        {/* Auto-Display Ticket Number */}
-        <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-          <strong>Ticket Number:</strong> {selectedRepair?.ticketNumber || 'N/A'}
-        </div>
-        
-        {/* Add New Part Form */}
-        <div className="bg-gray-50 p-4 rounded-lg mb-4">
-          <h4 className="font-medium mb-3">Add Part to Request</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Part Name
-              </label>
-              <input
-                id="part-name-input"
-                type="text"
-                value={partsForm.name}
-                onChange={(e) =>
-                  handlePartsFormChange('name', e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddPartToOrder();
+        <div className="fixed inset-0 z-50 flex items-center justify-center text-black bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold">Request Parts</h3>
+              <button
+                onClick={() => {
+                  setShowPartsModal(false);
+                  setPartsToOrder([]);
+                  setPartsForm({ name: '', quantity: 1 });
                 }}
-                className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                placeholder="Enter part name"
-                autoFocus
-              />
+                className="p-1 hover:bg-gray-200 rounded-full"
+              >
+                <X size={20} />
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Quantity
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={partsForm.quantity}
-                onChange={(e) =>
-                  handlePartsFormChange(
-                    'quantity',
-                    parseInt(e.target.value) || 1
-                  )
-                }
-                className="w-full p-2 border border-gray-300 rounded-lg text-sm"
-              />
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {/* Auto-Display Ticket Number */}
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <strong>Ticket Number:</strong> {selectedRepair?.ticketNumber || 'N/A'}
+              </div>
+              
+              {/* Add New Part Form */}
+              <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                <h4 className="font-medium mb-3">Add Part to Request</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Part Name
+                    </label>
+                    <input
+                      id="part-name-input"
+                      type="text"
+                      value={partsForm.name}
+                      onChange={(e) =>
+                        handlePartsFormChange('name', e.target.value)
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddPartToOrder();
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      placeholder="Enter part name"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Quantity
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={partsForm.quantity}
+                      onChange={(e) =>
+                        handlePartsFormChange(
+                          'quantity',
+                          parseInt(e.target.value) || 1
+                        )
+                      }
+                      className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleAddPartToOrder}
+                  className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm flex items-center gap-2 hover:bg-indigo-700 transition-colors"
+                >
+                  <Plus size={16} /> Add to Request
+                </button>
+              </div>
+              
+              {/* Parts List */}
+              <div className="flex-1 overflow-hidden flex flex-col">
+                <h4 className="font-medium mb-3">
+                  Parts to Request ({partsToOrder.length})
+                </h4>
+                {partsToOrder.length > 0 ? (
+                  <div className="overflow-y-auto flex-1 border rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="text-left py-2 px-3 font-medium">Name</th>
+                          <th className="text-left py-2 px-3 font-medium">Quantity</th>
+                          <th className="text-center py-2 px-3 font-medium">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {partsToOrder.map((part) => (
+                          <tr key={part.id} className="border-b hover:bg-gray-50">
+                            <td className="py-2 px-3">{part.name}</td>
+                            <td className="py-2 px-3">{part.quantity}</td>
+                            <td className="py-2 px-3 text-center">
+                              <button
+                                onClick={() => removePartFromOrder(part.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                              >
+                                <X size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed">
+                    <p>No parts added yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Footer Buttons */}
+            <div className="mt-6 flex gap-3 justify-between items-center">
+              <button
+                onClick={() => setShowOutsourceModal(true)}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center gap-2 hover:bg-purple-700 transition-colors"
+              >
+                <Plus size={16} /> Outsource Part
+              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowPartsModal(false);
+                    setPartsToOrder([]);
+                    setPartsForm({ name: '', quantity: 1 });
+                  }}
+                  className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleOrderParts}
+                  disabled={partsToOrder.length === 0}
+                  className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 ${
+                    partsToOrder.length === 0
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-80'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow active:scale-95'
+                  }`}
+                >
+                  <Send size={16} /> Submit Request
+                </button>
+              </div>
             </div>
           </div>
-          <button
-            onClick={handleAddPartToOrder}
-            className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm flex items-center gap-2 hover:bg-indigo-700 transition-colors"
-          >
-            <Plus size={16} /> Add to Request
-          </button>
         </div>
-        
-        {/* Parts List */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <h4 className="font-medium mb-3">
-            Parts to Request ({partsToOrder.length})
-          </h4>
-          {partsToOrder.length > 0 ? (
-            <div className="overflow-y-auto flex-1 border rounded-lg">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="text-left py-2 px-3 font-medium">Name</th>
-                    <th className="text-left py-2 px-3 font-medium">Quantity</th>
-                    <th className="text-center py-2 px-3 font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {partsToOrder.map((part) => (
-                    <tr key={part.id} className="border-b hover:bg-gray-50">
-                      <td className="py-2 px-3">{part.name}</td>
-                      <td className="py-2 px-3">{part.quantity}</td>
-                      <td className="py-2 px-3 text-center">
-                        <button
-                          onClick={() => removePartFromOrder(part.id)}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                        >
-                          <X size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed">
-              <p>No parts added yet</p>
-            </div>
-          )}
-        </div>
-      </div>
-      
-      {/* Footer Buttons */}
-      <div className="mt-6 flex gap-3 justify-between items-center">
-        <button
-          onClick={() => setShowOutsourceModal(true)}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center gap-2 hover:bg-purple-700 transition-colors"
-        >
-          <Plus size={16} /> Outsource Part
-        </button>
-        <div className="flex gap-3">
-          <button
-            onClick={() => {
-              setShowPartsModal(false);
-              setPartsToOrder([]);
-              setPartsForm({ name: '', quantity: 1 });
-            }}
-            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleOrderParts}
-            disabled={partsToOrder.length === 0}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 ${
-              partsToOrder.length === 0
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-80'
-                : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow active:scale-95'
-            }`}
-          >
-            <Send size={16} /> Submit Request
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
       {/* Outsource Parts Modal */}
       {showOutsourceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center text-black bg-black/50 backdrop-blur-sm">

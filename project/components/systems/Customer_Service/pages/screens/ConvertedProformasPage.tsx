@@ -53,7 +53,7 @@ const ConvertedProformasPage: React.FC = () => {
   useEffect(() => {
     const fetchConvertedProformas = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/insurance/converted');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/insurance/converted');
         
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);

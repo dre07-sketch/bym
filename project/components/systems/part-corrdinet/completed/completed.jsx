@@ -43,7 +43,7 @@ const CompletedCars = () => {
   useEffect(() => {
     const fetchCompletedCars = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/active-tickets/completed-cars');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/active-tickets/completed-cars');
         if (!response.ok) throw new Error('Failed to fetch completed cars');
         const data = await response.json();
         const mappedData = data.map((car) => ({
@@ -76,7 +76,7 @@ const CompletedCars = () => {
     setActiveSubTab('Ordered Parts');
     
     try {
-      const response = await fetch(`http://localhost:5001/api/active-tickets/completed-cars/${car.ticketNumber}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/active-tickets/completed-cars/${car.ticketNumber}`);
       if (!response.ok) throw new Error('Ticket not found');
       const detailedCar = await response.json();
       const mappedCar = {

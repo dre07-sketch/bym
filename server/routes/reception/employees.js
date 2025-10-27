@@ -180,7 +180,7 @@ router.get('/getemployees', (req, res) => {
         employmentType: item.is_mechanic_permanent,
         salary: item.salary,
         workingHours: item.working_hours,
-        image: item.image_url ? `http://localhost:5001/uploads/${item.image_url}` : null,
+        image: item.image_url ? `https://ipasystem.bymsystem.com/uploads/${item.image_url}` : null,
         createdAt: item.created_at,
         status: item.status,                   // new
         mechanicStatus: item.mechanic_status,  // new

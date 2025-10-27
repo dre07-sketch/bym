@@ -114,7 +114,7 @@ router.get('/me', (req, res) => {
 
       // Map avatar URL
       user.avatar = user.image_url
-        ? `http://localhost:5001/uploads/${user.image_url}`
+        ? `https://ipasystem.bymsystem.com/uploads/${user.image_url}`
         : null;
 
       // Optional UI status
@@ -167,6 +167,32 @@ router.put('/:id/status', (req, res) => {
     }
 
     res.json({ message: 'Employee status updated successfully', employeeId: id, newStatus: status });
+  });
+});
+
+
+router.get('/system-status', (req, res) => {
+  const sql = 'SELECT * FROM system_status ORDER BY id DESC LIMIT 1';
+  db.query(sql, (err, rows) => {
+    if (err) {
+      console.error('Error fetching system status:', err);
+      return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'System status not found' });
+    }
+
+    // Get the is_active value and convert it to a boolean
+    const isActive = rows[0].is_active === 'activate';
+    
+    res.json({ 
+      success: true, 
+      data: {
+        ...rows[0],
+        isActive: isActive
+      } 
+    });
   });
 });
 

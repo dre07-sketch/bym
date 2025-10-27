@@ -51,12 +51,14 @@ const InventoryManagement: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [conditionFilter, setConditionFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
+  const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
+  const [editingTool, setEditingTool] = useState<Tool | null>(null);
   const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ Stats from backend API
+  // Stats from backend API
   const [stats, setStats] = useState({
     totalTools: 0,
     totalQuantity: 0,
@@ -80,8 +82,8 @@ const InventoryManagement: React.FC = () => {
     const fetchData = async () => {
       try {
         const [toolsRes, statsRes] = await Promise.all([
-          fetch('http://localhost:5001/api/tools/tools-get'),
-          fetch('http://localhost:5001/api/tools/stats')
+          fetch('https://ipasystem.bymsystem.com/api/tools/tools-get'),
+          fetch('https://ipasystem.bymsystem.com/api/tools/stats')
         ]);
 
         // Handle tools
@@ -90,7 +92,7 @@ const InventoryManagement: React.FC = () => {
         if (!toolsData.success) throw new Error(toolsData.message);
 
         const mappedTools = toolsData.data.map((tool: any): Tool => {
-          const condition = tool.toolCondition?.toLowerCase();
+          const condition = tool.tool_condition?.toLowerCase();
           const validConditions = ['excellent', 'good', 'fair', 'poor', 'damaged'];
           const normalizedCondition = validConditions.includes(condition)
             ? condition
@@ -98,32 +100,32 @@ const InventoryManagement: React.FC = () => {
 
           return {
             id: tool.id.toString(),
-            toolId: tool.toolId || `TOL-${tool.id}`,
-            name: tool.name || tool.tool_name || tool.toolName || 'Unnamed Tool',
+            toolId: tool.tool_id || `TOL-${tool.id}`,
+            name: tool.tool_name || 'Unnamed Tool',
             brand: tool.brand || 'Unknown',
             category: tool.category,
             quantity: tool.quantity,
-            minStock: tool.minStock || 0,
+            minStock: tool.min_stock || 0,
             status: tool.status,
-            toolCondition: tool.toolCondition,
+            toolCondition: tool.tool_condition,
             cost: typeof tool.cost === 'number'
               ? tool.cost
-              : Number(tool.cost || tool.tool_cost) || 0,
-            purchaseDate: tool.purchaseDate,
+              : Number(tool.cost) || 0,
+            purchaseDate: tool.purchase_date,
             supplier: tool.supplier || 'Unknown',
             warranty: tool.warranty || 'N/A',
             notes: tool.notes,
-            imageUrl: tool.imageUrl,
-            documentPaths: Array.isArray(tool.documentPaths)
-              ? tool.documentPaths
-              : (tool.documentPaths ? JSON.parse(tool.documentPaths) : []),
-            createdAt: tool.createdAt,
-            updatedAt: tool.updatedAt,
+            imageUrl: tool.image_url,
+            documentPaths: Array.isArray(tool.document_paths)
+              ? tool.document_paths
+              : (tool.document_paths ? JSON.parse(tool.document_paths) : []),
+            createdAt: tool.created_at,
+            updatedAt: tool.updated_at,
 
             // Computed fields
             available: tool.quantity - (tool.in_use || 0),
             inUse: tool.in_use || 0,
-            damaged: tool.toolCondition === 'Damaged' ? 1 : 0,
+            damaged: tool.tool_condition === 'Damaged' ? 1 : 0,
             condition: normalizedCondition
           };
         });
@@ -190,7 +192,7 @@ const InventoryManagement: React.FC = () => {
     if (!confirm) return;
 
     try {
-      const res = await fetch(`http://localhost:5001/api/tools/${id}`, {
+      const res = await fetch(`https://ipasystem.bymsystem.com/api/tools/${id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -207,6 +209,53 @@ const InventoryManagement: React.FC = () => {
       alert(data.message);
     } catch (err: any) {
       console.error('Delete error:', err);
+      alert(`❌ Error: ${err.message}`);
+    }
+  };
+
+  const handleEditTool = (tool: Tool) => {
+    setEditingTool(tool);
+    setShowEditModal(true);
+  };
+
+  const updateTool = async (updatedData: { quantity: number; purchaseDate: string }) => {
+    if (!editingTool) return;
+
+    try {
+      const res = await fetch(`https://ipasystem.bymsystem.com/api/tools/update-quantity/${editingTool.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quantity: updatedData.quantity,
+          purchaseDate: updatedData.purchaseDate,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Failed to update tool');
+      }
+
+      // Update the tool in the local state
+      setTools(prev => prev.map(tool => 
+        tool.id === editingTool.id 
+          ? { 
+              ...tool, 
+              quantity: updatedData.quantity,
+              purchaseDate: updatedData.purchaseDate,
+              available: updatedData.quantity - tool.inUse
+            }
+          : tool
+      ));
+
+      alert('Tool updated successfully!');
+      setShowEditModal(false);
+      setEditingTool(null);
+    } catch (err: any) {
+      console.error('Update error:', err);
       alert(`❌ Error: ${err.message}`);
     }
   };
@@ -456,11 +505,11 @@ const InventoryManagement: React.FC = () => {
                     >
                       <Eye className="w-4 h-4" />
                     </button>
-                    <button className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
+                    <button
+                      onClick={() => handleEditTool(tool)}
+                      className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                    >
                       <Edit className="w-4 h-4" />
-                    </button>
-                    <button className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors">
-                      <QrCode className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => deleteTool(tool.id)}
@@ -482,6 +531,107 @@ const InventoryManagement: React.FC = () => {
         onClose={() => setShowAddModal(false)}
         categories={categories}
       />
+
+      {/* Edit Tool Modal */}
+      {showEditModal && editingTool && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Update Tool</h2>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingTool(null);
+                }}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tool Name
+                </label>
+                <input
+                  type="text"
+                  value={editingTool.name}
+                  disabled
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  id="editQuantity"
+                  defaultValue={editingTool.quantity}
+                  min="0"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Purchase Date
+                </label>
+                <input
+                  type="date"
+                  id="editPurchaseDate"
+                  defaultValue={editingTool.purchaseDate || ''}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  <span className="font-medium">Note:</span> Currently in use: {editingTool.inUse} units
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingTool(null);
+                }}
+                className="px-6 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const quantityInput = document.getElementById('editQuantity') as HTMLInputElement;
+                  const dateInput = document.getElementById('editPurchaseDate') as HTMLInputElement;
+                  
+                  const newQuantity = parseInt(quantityInput.value);
+                  const newDate = dateInput.value;
+
+                  if (isNaN(newQuantity) || newQuantity < 0) {
+                    alert('Please enter a valid quantity');
+                    return;
+                  }
+
+                  if (newQuantity < editingTool.inUse) {
+                    alert(`Quantity cannot be less than the number of tools currently in use (${editingTool.inUse})`);
+                    return;
+                  }
+
+                  updateTool({ quantity: newQuantity, purchaseDate: newDate });
+                }}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Update Tool
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tool Details Modal */}
       {selectedTool && (
@@ -557,7 +707,7 @@ const InventoryManagement: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Cost</label>
                   <p className="text-lg font-semibold text-blue-600">
-                    ${typeof selectedTool.cost === 'number' ? selectedTool.cost.toFixed(2) : '0.00'}
+                    ETB {typeof selectedTool.cost === 'number' ? selectedTool.cost.toFixed(2) : '0.00'}
                   </p>
                 </div>
               </div>
@@ -595,7 +745,14 @@ const InventoryManagement: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex justify-end pt-6 border-t mt-6">
+            <div className="flex justify-end pt-6 border-t mt-6 space-x-3">
+              <button
+                onClick={() => handleEditTool(selectedTool)}
+                className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors flex items-center space-x-2"
+              >
+                <Edit className="w-4 h-4" />
+                <span>Edit Tool</span>
+              </button>
               <button
                 onClick={() => setSelectedTool(null)}
                 className="px-6 py-3 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"

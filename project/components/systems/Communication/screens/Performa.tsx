@@ -141,7 +141,7 @@ const Performa: React.FC = () => {
   const fetchStatusCounts = async () => {
     setCountsLoading(true);
     try {
-      const response = await fetch('http://localhost:5001/api/communication-center/status-counts');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/status-counts');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
@@ -167,7 +167,7 @@ const Performa: React.FC = () => {
         ...(dateRange.start && { date: dateRange.start })
       });
       
-      const response = await fetch(`http://localhost:5001/api/communication-center/proformas?${params}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/proformas?${params}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
@@ -202,7 +202,7 @@ const Performa: React.FC = () => {
           limit: '10'
         });
         
-        const proformasResponse = await fetch(`http://localhost:5001/api/communication-center/proformas?${params}`);
+        const proformasResponse = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/proformas?${params}`);
         if (!proformasResponse.ok) throw new Error(`HTTP ${proformasResponse.status}`);
         const proformasResult = await proformasResponse.json();
         if (!proformasResult.success) throw new Error(proformasResult.message);
@@ -247,7 +247,7 @@ const Performa: React.FC = () => {
           ...(dateRange.start && { date: dateRange.start })
         });
         
-        const response = await fetch(`http://localhost:5001/api/communication-center/proformas?${params}`);
+        const response = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/proformas?${params}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const result = await response.json();
         if (!result.success) throw new Error(result.message);
@@ -294,7 +294,7 @@ const Performa: React.FC = () => {
     // Don't set selectedProforma to null here to preserve existing data
     
     try {
-      const response = await fetch(`http://localhost:5001/api/communication-center/proformas/${id}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/proformas/${id}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
@@ -351,7 +351,7 @@ const Performa: React.FC = () => {
       
       console.log('Updating proforma status:', { id, newStatus, backendStatus });
       
-      const response = await fetch(`http://localhost:5001/api/communication-center/proformas/${id}/status`, {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/communication-center/proformas/${id}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

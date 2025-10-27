@@ -29,7 +29,7 @@ interface PurchaseOrder {
 }
 
 // API base URL - adjust as needed
-const API_BASE_URL = 'http://localhost:5001/api';
+const API_BASE_URL = 'https://ipasystem.bymsystem.com/api';
 
 // Runtime validation helpers
 const VALID_STATUSES = ['pending', 'approved', 'rejected', 'ordered', 'delivered', 'cancelled'] as const;

@@ -110,7 +110,7 @@ const AssignmentReturn: React.FC = () => {
   // === FETCH DATA ===
   const fetchTickets = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/tickets/service_tickets');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tickets/service_tickets');
       if (!res.ok) throw new Error('Failed to fetch tickets');
       const data: ServiceTicket[] = await res.json();
       const inProgress = data.filter((t) =>
@@ -127,7 +127,7 @@ const AssignmentReturn: React.FC = () => {
 
   const fetchTools = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/tools');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools');
       if (!res.ok) throw new Error('Failed to fetch tools');
       const data = await res.json();
       setTools(data.data || []);
@@ -138,7 +138,7 @@ const AssignmentReturn: React.FC = () => {
 
   const fetchAssignments = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/tools/assigned');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assigned');
       if (!res.ok) throw new Error('Failed to fetch assignments');
       const data = await res.json();
       const assignments: AssignedTool[] =
@@ -156,7 +156,7 @@ const AssignmentReturn: React.FC = () => {
 
   const fetchToolStats = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/tools/stats');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/stats');
       if (!res.ok) throw new Error('Failed to fetch tool stats');
       const data = await res.json();
       setToolStats(data.data);
@@ -223,7 +223,7 @@ const AssignmentReturn: React.FC = () => {
     setAssigning(true);
     try {
       for (const { tool, qty } of assignedTools) {
-        const res = await fetch('http://localhost:5001/api/tools/assign', {
+        const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assign', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -257,7 +257,7 @@ const AssignmentReturn: React.FC = () => {
   const returnTool = async (assignmentId: number, quantity: number) => {
     if (!window.confirm(`Are you sure you want to return this tool?`)) return;
     try {
-      const res = await fetch('http://localhost:5001/api/tools/return', {
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/return', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignmentId, quantity }),
@@ -285,7 +285,7 @@ const AssignmentReturn: React.FC = () => {
     setDebugInfo(`Fetching return history for ticket: ${ticketNumber}`);
     try {
       const trimmedTicketNumber = ticketNumber.trim();
-      const url = `http://localhost:5001/api/tools/returned/${encodeURIComponent(trimmedTicketNumber)}`;
+      const url = `https://ipasystem.bymsystem.com/api/tools/returned/${encodeURIComponent(trimmedTicketNumber)}`;
       setDebugInfo((prev) => prev + `\n➡️ Request URL: ${url}`);
       
       const res = await fetch(url);

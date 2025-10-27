@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../db/connection'); // your MySQL connection
+const events = require('../../utils/events');
 
 // POST /api/employee-payment
 // POST /employee-payment
@@ -26,7 +27,13 @@ router.post('/employee-payment', (req, res) => {
       console.error('❌ Error inserting payment:', err);
       return res.status(500).json({ success: false, message: 'Failed to process payment' });
     }
-
+events.emit('salary_processed', {
+    paymentId: result.insertId,
+    employeeName: employeeName,
+    amount: salary,
+    paymentDate: date,
+    paymentMethod: paymentMethod
+  });
     res.json({
       success: true,
       message: `Payment of $${salary} recorded for ${employeeName}`,
@@ -102,10 +109,16 @@ router.get('/upcoming-salaries', (req, res) => {
         employmentType: item.is_mechanic_permanent,
         salary: item.salary,
         workingHours: item.working_hours,
-        image: item.image_url ? `http://localhost:5001/uploads/${item.image_url}` : null,
+        image: item.image_url ? `https://ipasystem.bymsystem.com/uploads/${item.image_url}` : null,
         salaryDay: item.salary_day
       };
     });
+    upcomingEmployees.forEach(emp => {
+    events.emit('salary_due', {
+      paymentId: null, // No payment ID yet, just a notification that salary is due
+      employeeName: emp.full_name
+    });
+  });
 
     res.json(formattedResults);
   });

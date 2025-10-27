@@ -15,6 +15,7 @@ import {
   Clock,
   CheckCircle,
   XCircle,
+  AlertCircle,
 } from 'lucide-react';
 
 interface Contact {
@@ -28,51 +29,133 @@ interface Contact {
   lastContacted?: string;
 }
 
+interface UserInfo {
+  id: number;
+  full_name: string;
+  email: string;
+  role: string;
+}
+
 const ContactsPage = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [authError, setAuthError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchUserInfo = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch('https://ipasystem.bymsystem.com/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      setUserInfo(data.user);
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+      setAuthError(true);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchContacts = async () => {
-      try {
-        const res = await fetch('http://localhost:5001/api/marketing-activities');
-        const data = await res.json();
-
-        const contactMap = new Map<string, Contact>();
-
-        data.data.forEach((act: any) => {
-          act.contacts.forEach((c: any) => {
-            if (!contactMap.has(c.id)) {
-              contactMap.set(c.id, {
-                ...c,
-                activityCount: 1,
-                lastContacted: act.date,
-              });
-            } else {
-              const existing = contactMap.get(c.id)!;
-              existing.activityCount! += 1;
-              if (act.date > existing.lastContacted!) {
-                existing.lastContacted = act.date;
-              }
-            }
-          });
-        });
-
-        // Sort by last contacted
-        const sorted = Array.from(contactMap.values()).sort(
-          (a, b) => new Date(b.lastContacted!).getTime() - new Date(a.lastContacted!).getTime()
-        );
-
-        setContacts(sorted);
-      } catch (err) {
-        console.error('Failed to load contacts', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchContacts();
+    fetchUserInfo();
   }, []);
+
+  useEffect(() => {
+    if (userInfo) {
+      fetchContacts();
+    }
+  }, [userInfo]);
+
+  const fetchContacts = async () => {
+    if (!userInfo) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      // Use the employee's full name as a query parameter
+      const res = await fetch(
+        `https://ipasystem.bymsystem.com/api/marketing-activities/get-activities?employeeName=${encodeURIComponent(userInfo.full_name)}`, 
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+      
+      if (!res.ok) {
+        if (res.status === 401) {
+          setAuthError(true);
+        } else {
+          throw new Error(`Failed to fetch activities: ${res.status}`);
+        }
+        return;
+      }
+      
+      const data = await res.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to fetch activities');
+      }
+      
+      const contactMap = new Map<string, Contact>();
+
+      data.data.forEach((act: any) => {
+        act.contacts.forEach((c: any) => {
+          if (!contactMap.has(c.id)) {
+            contactMap.set(c.id, {
+              ...c,
+              activityCount: 1,
+              lastContacted: act.date,
+            });
+          } else {
+            const existing = contactMap.get(c.id)!;
+            existing.activityCount! += 1;
+            if (act.date > existing.lastContacted!) {
+              existing.lastContacted = act.date;
+            }
+          }
+        });
+      });
+
+      // Sort by last contacted
+      const sorted = Array.from(contactMap.values()).sort(
+        (a, b) => new Date(b.lastContacted!).getTime() - new Date(a.lastContacted!).getTime()
+      );
+
+      setContacts(sorted);
+    } catch (err: any) {
+      console.error('Failed to load contacts', err);
+      setError(err.message || 'Failed to load contacts');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filtered = contacts.filter(
     (c) =>
@@ -80,6 +163,26 @@ const ContactsPage = () => {
       (c.company && c.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
       c.phone.includes(searchTerm)
   );
+
+  if (authError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen py-16">
+        <div className="text-center max-w-md bg-white rounded-3xl shadow-lg p-8 border border-red-200">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h3 className="text-2xl font-bold text-red-700 mb-2">Authentication Required</h3>
+          <p className="text-red-600 mb-6">
+            You need to be logged in to view your contacts. Please log in to continue.
+          </p>
+          <button
+            onClick={() => window.location.href = '/login'}
+            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -92,6 +195,22 @@ const ContactsPage = () => {
     );
   }
 
+  if (error) {
+    return (
+      <div className="text-center py-16 bg-red-50 rounded-3xl border-2 border-red-200">
+        <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+        <h3 className="text-2xl font-semibold text-red-700 mb-2">Error Loading Contacts</h3>
+        <p className="text-red-600 mb-6">{error}</p>
+        <button
+          onClick={fetchContacts}
+          className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -99,7 +218,19 @@ const ContactsPage = () => {
         <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-800 via-blue-700 to-purple-700 bg-clip-text text-transparent">
           Contact Directory
         </h1>
-        <p className="text-slate-600 text-lg">All people you've connected with — sorted by recent activity</p>
+        <p className="text-slate-600 text-lg">
+          All people you've connected with — sorted by recent activity
+        </p>
+        
+        {/* Current user indicator */}
+        {userInfo && (
+          <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-full">
+            <User className="w-5 h-5 text-blue-600" />
+            <span className="text-blue-800 font-medium">
+              Viewing contacts for: {userInfo.full_name}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Search Bar */}
@@ -126,8 +257,15 @@ const ContactsPage = () => {
       {filtered.length === 0 ? (
         <div className="text-center py-16 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-300">
           <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-2xl font-semibold text-slate-500 mb-2">No contacts found</h3>
-          <p className="text-slate-400">Try adjusting your search term.</p>
+          <h3 className="text-2xl font-semibold text-slate-500 mb-2">
+            {contacts.length === 0 ? "No contacts found" : "No contacts match your search"}
+          </h3>
+          <p className="text-slate-400">
+            {contacts.length === 0 
+              ? "You haven't logged any activities with contacts yet." 
+              : "Try adjusting your search term."
+            }
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

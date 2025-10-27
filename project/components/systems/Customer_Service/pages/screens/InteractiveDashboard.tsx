@@ -145,7 +145,7 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
 
         // Active Tickets
         try {
-          const activeRes = await fetch('http://localhost:5001/api/ticket-stats/active-tickets');
+          const activeRes = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/active-tickets');
           if (activeRes.ok) {
             const data = await activeRes.json();
             setActiveTickets(typeof data.activeTickets === 'number' ? data.activeTickets : 0);
@@ -156,7 +156,7 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
 
         // SOS Pending
         try {
-          const sosRes = await fetch('http://localhost:5001/api/ticket-stats/sos');
+          const sosRes = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/sos');
           if (sosRes.ok) {
             const data = await sosRes.json();
             setSosPending(typeof data.pending === 'number' ? data.pending : 0);
@@ -167,7 +167,7 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
 
         // Status Distribution
         try {
-          const statusRes = await fetch('http://localhost:5001/api/ticket-stats/status-distribution');
+          const statusRes = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/status-distribution');
           if (statusRes.ok) {
             const data = await statusRes.json();
 
@@ -218,7 +218,7 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
 
         // Ticket Trends
         try {
-          const trendsRes = await fetch('http://localhost:5001/api/ticket-stats/weekly-ticket-counts');
+          const trendsRes = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/weekly-ticket-counts');
           if (trendsRes.ok) {
             const rawData: RawTicketTrend[] = await trendsRes.json();
 
@@ -254,7 +254,7 @@ const InteractiveDashboard = ({ userRole = 'manager' }) => {
 
         // Upcoming Appointments
         try {
-          const apptRes = await fetch('http://localhost:5001/api/ticket-stats/upcoming-appointments');
+          const apptRes = await fetch('https://ipasystem.bymsystem.com/api/ticket-stats/upcoming-appointments');
           if (apptRes.ok) {
             const rawData: RawAppointment[] = await apptRes.json();
             const formatted = rawData.map(appt => ({

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../db/connection');
+const events = require('../../utils/events');
 
 function generateTicketNumber() {
   const prefix = 'TICK';
@@ -120,76 +121,95 @@ async function ensureCustomerAndGetId(customer_type, customerData) {
   }
 }
 
-// Upsert vehicle (promisified)
+
 async function ensureVehicle(vehicleData) {
-  // 1. Fetch service interval for the vehicle
+  const parseMileage = (val) => {
+    if (val === undefined || val === null || val === '') return null;
+    const n = Number(val);
+    return isNaN(n) ? null : n;
+  };
+
+  // 1. Check if vehicle exists
+  const [existing] = await dbQuery(
+    'SELECT * FROM vehicles WHERE license_plate = ? OR vin = ? LIMIT 1',
+    [vehicleData.license_plate || null, vehicleData.vin || null]
+  );
+
+  // 2. Find service interval
   const [serviceRow] = await dbQuery(
     'SELECT service_interval_km FROM car_models WHERE make = ? AND model = ? LIMIT 1',
     [vehicleData.make, vehicleData.model]
   );
-  const serviceInterval = serviceRow ? serviceRow.service_interval_km : null;
+  const serviceInterval = serviceRow ? parseMileage(serviceRow.service_interval_km) : null;
 
-  // 2. Calculate next_service_mileage if possible
-  let nextServiceMileage = null;
-  if (vehicleData.current_mileage && serviceInterval) {
-    nextServiceMileage = vehicleData.current_mileage + serviceInterval;
-  }
+  // 3. Update existing vehicle
+  if (existing) {
+    const newMileage = parseMileage(vehicleData.current_mileage);
+    const lastMileage = parseMileage(vehicleData.last_service_mileage);
 
-  // 3. Find vehicle by license_plate OR vin
-  const rows = await dbQuery(
-    'SELECT id FROM vehicles WHERE license_plate = ? OR vin = ?',
-    [vehicleData.license_plate || null, vehicleData.vin || null]
-  );
+    // only recalc next_service_mileage if current_mileage changed
+    const currentMileageToUse = newMileage ?? existing.current_mileage;
+    const lastServiceToUse = lastMileage ?? existing.last_service_mileage;
 
-  if (rows.length > 0) {
-    // Update existing vehicle
-    const vehicleId = rows[0].id;
+    const nextMileage = serviceInterval
+      ? currentMileageToUse + serviceInterval
+      : (existing.next_service_mileage ?? currentMileageToUse);
+
     await dbQuery(
       `UPDATE vehicles SET
          customer_id = ?, make = ?, model = ?, year = ?, license_plate = ?,
-         vin = ?, color = ?, current_mileage = ?, 
-         last_service_mileage = ?, next_service_mileage = ?, image = ?
+         vin = ?, color = ?, current_mileage = ?, last_service_mileage = ?, 
+         next_service_mileage = ?, image = ?
        WHERE id = ?`,
       [
-        vehicleData.customer_id,
-        vehicleData.make || null,
-        vehicleData.model || null,
-        vehicleData.year || null,
-        vehicleData.license_plate || null,
-        vehicleData.vin || null,
-        vehicleData.color || null,
-        vehicleData.current_mileage || null,
-        vehicleData.last_service_mileage || 0,
-        nextServiceMileage,
-        vehicleData.image || null,
-        vehicleId
+        vehicleData.customer_id || existing.customer_id,
+        vehicleData.make || existing.make,
+        vehicleData.model || existing.model,
+        vehicleData.year ?? existing.year,
+        vehicleData.license_plate || existing.license_plate,
+        vehicleData.vin || existing.vin,
+        vehicleData.color || existing.color,
+        currentMileageToUse,
+        lastServiceToUse,
+        nextMileage,
+        vehicleData.image || existing.image,
+        existing.id,
       ]
     );
-    return vehicleId;
-  } else {
-    // Insert new vehicle
-    const result = await dbQuery(
-      `INSERT INTO vehicles (
-         customer_id, make, model, year, license_plate,
-         vin, color, current_mileage, last_service_mileage, next_service_mileage, image
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        vehicleData.customer_id,
-        vehicleData.make || null,
-        vehicleData.model || null,
-        vehicleData.year || null,
-        vehicleData.license_plate || null,
-        vehicleData.vin || null,
-        vehicleData.color || null,
-        vehicleData.current_mileage || null,
-        vehicleData.last_service_mileage || 0,
-        nextServiceMileage,
-        vehicleData.image || null
-      ]
-    );
-    return result.insertId;
+
+    return existing.id;
   }
+
+  // 4. Insert new vehicle
+  const currentMileage = parseMileage(vehicleData.current_mileage);
+  const lastServiceMileage = parseMileage(vehicleData.last_service_mileage);
+  const nextMileage = serviceInterval
+    ? (currentMileage || 0) + serviceInterval
+    : (currentMileage || 0);
+
+  const result = await dbQuery(
+    `INSERT INTO vehicles (
+       customer_id, make, model, year, license_plate, vin, color,
+       current_mileage, last_service_mileage, next_service_mileage, image
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      vehicleData.customer_id,
+      vehicleData.make || null,
+      vehicleData.model || null,
+      vehicleData.year || null,
+      vehicleData.license_plate || null,
+      vehicleData.vin || null,
+      vehicleData.color || null,
+      currentMileage ?? 0,
+      lastServiceMileage ?? 0,
+      nextMileage,
+      vehicleData.image || null,
+    ]
+  );
+
+  return result.insertId;
 }
+
 
 
 // Generate a unique ticket number (TICK-YYYYMMDD-XXXX)
@@ -364,6 +384,15 @@ router.post('/', async (req, res) => {
 
       await dbQuery('UPDATE proformas SET status = "Converted", updated_at = NOW() WHERE id = ?', [proforma_id]);
     }
+console.log('🧨 Emitting ticket_created for:', ticket_number);
+
+    // Emit event for new ticket creation
+    events.emit('ticket_created', {
+      ticketId: ticketResult.insertId,
+      ticketNumber: ticket_number,
+      creatorRole: 'manager',
+      customerName: customerName
+    });
 
     // Return created ticket
     const createdRows = await dbQuery('SELECT * FROM service_tickets WHERE id = ?', [ticketResult.insertId]);
@@ -500,7 +529,7 @@ router.get('/service_tickets', (req, res) => {
     WHERE st.status IN (
       'pending','assigned','in progress','ready for inspection','inspection',
       'successful inspection','inspection failed','awaiting survey','awaiting salvage form',
-      'awaiting bill','Payment Requested','Request Payment','completed'
+      'awaiting bill','Payment Requested','Request Payment','completed','Billed'
     )
     ORDER BY st.created_at DESC
   `;
@@ -510,6 +539,15 @@ router.get('/service_tickets', (req, res) => {
     if (tickets.length === 0) return res.json([]);
 
     const ticketNumbers = tickets.map(t => t.ticket_number);
+    // Emit event for each ticket that is in progress
+tickets.forEach(ticket => {
+  if (ticket.status === 'in progress') {
+    events.emit('ticket_in_progress', {
+      ticketId: ticket.id,
+      ticketNumber: ticket.ticket_number
+    });
+  }
+});
 
     // Queries object
     const queries = {
@@ -524,6 +562,7 @@ router.get('/service_tickets', (req, res) => {
       insurance: `SELECT id, ticket_number, insurance_company, insurance_phone, accident_date, owner_name, owner_phone, owner_email, description AS insurance_description, created_at, updated_at FROM insurance WHERE ticket_number IN (?) ORDER BY created_at DESC`
     };
 
+    
     // Execute all queries
     db.query(queries.disassembled, [ticketNumbers], (err, disassembledRows) => {
       if (err) return res.status(500).json({ error: 'Failed to fetch disassembled parts' });
@@ -533,6 +572,14 @@ router.get('/service_tickets', (req, res) => {
 
         db.query(queries.inspections, [ticketNumbers], (err, inspectionRows) => {
           if (err) return res.status(500).json({ error: 'Failed to fetch inspections' });
+          // Emit event for each inspection result
+            inspectionRows.forEach(inspection => {
+              events.emit('inspection_result', {
+                inspectionId: inspection.id,
+                ticketNumber: inspection.ticket_number,
+                result: inspection.inspection_status
+              });
+            });
 
           db.query(queries.outsourceMechanics, [ticketNumbers], (err, mechanicsRows) => {
             if (err) return res.status(500).json({ error: 'Failed to fetch outsource mechanics' });
@@ -772,6 +819,7 @@ router.get('/summary', (req, res) => {
       'Payment Requested',
       'Request Payment',  
       'awaiting bill',
+      'Billed',
       'completed'
     )
     ORDER BY st.created_at DESC

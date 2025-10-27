@@ -11,7 +11,7 @@ interface Employee {
   phone: string;
   salary: number;
   salaryDay: number; // Derived from createdAt
-  avatar: string;
+  imageUrls: string[]; // Changed from avatar to imageUrls array
   createdAt: string; // Added from API
 }
 
@@ -31,7 +31,7 @@ interface PaymentHistory {
   status: 'Completed' | 'Pending' | 'Failed';
 }
 
-const API_BASE_URL = 'http://localhost:5001/api';
+const API_BASE_URL = 'https://ipasystem.bymsystem.com/api';
 
 const FinancePage = () => {
   // State
@@ -88,7 +88,7 @@ const FinancePage = () => {
             phone: item.phone,
             salary: item.salary,
             salaryDay: paymentDay, // Use the day from createdAt
-            avatar: item.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=random`,
+            imageUrls: item.imageUrls || [], // Use imageUrls array from API
             createdAt: item.createdAt // Store the original createdAt value
           };
         });
@@ -196,7 +196,7 @@ const FinancePage = () => {
           phone: item.phone,
           salary: item.salary,
           salaryDay: paymentDay, // Use the day from createdAt
-          avatar: item.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=random`,
+          imageUrls: item.imageUrls || [], // Use imageUrls array from API
           createdAt: item.createdAt // Store the original createdAt value
         };
       });
@@ -270,6 +270,45 @@ const FinancePage = () => {
     }
   };
 
+  // EmployeeImage component to handle multiple image URLs with fallback
+  const EmployeeImage = ({ imageUrls, name, className }: { 
+    imageUrls: string[], 
+    name: string, 
+    className: string 
+  }) => {
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const [imageError, setImageError] = useState(false);
+    
+    const handleImageError = () => {
+      if (currentImageIndex < imageUrls.length - 1) {
+        // Try the next URL in the array
+        setCurrentImageIndex(currentImageIndex + 1);
+      } else {
+        // All URLs failed, use fallback
+        setImageError(true);
+      }
+    };
+    
+    if (imageError || imageUrls.length === 0) {
+      return (
+        <img 
+          src={`https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`}
+          alt={name}
+          className={className}
+        />
+      );
+    }
+    
+    return (
+      <img 
+        src={imageUrls[currentImageIndex]} 
+        alt={name}
+        className={className}
+        onError={handleImageError}
+      />
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
@@ -303,12 +342,7 @@ const FinancePage = () => {
           >
             All Employees
           </button>
-          <button 
-            className={`px-4 py-2 rounded-lg transition ${filter === 'upcoming' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
-            onClick={() => setFilter('upcoming')}
-          >
-            Upcoming Payments
-          </button>
+          
         </div>
         
         {/* Loading and Error States */}
@@ -345,14 +379,10 @@ const FinancePage = () => {
                 >
                   <div className="p-5">
                     <div className="flex items-center">
-                      <img 
-                        src={employee.avatar} 
-                        alt={employee.name} 
+                      <EmployeeImage 
+                        imageUrls={employee.imageUrls}
+                        name={employee.name}
                         className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(employee.name)}&background=random`;
-                        }}
                       />
                       <div className="ml-4">
                         <h2 className="font-bold text-lg text-gray-800">{employee.name}</h2>
@@ -413,14 +443,10 @@ const FinancePage = () => {
                 </div>
                 
                 <div className="mt-6 flex flex-col items-center">
-                  <img 
-                    src={selectedEmployee.avatar} 
-                    alt={selectedEmployee.name} 
+                  <EmployeeImage 
+                    imageUrls={selectedEmployee.imageUrls}
+                    name={selectedEmployee.name}
                     className="w-24 h-24 rounded-full object-cover border-4 border-blue-100"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedEmployee.name)}&background=random`;
-                    }}
                   />
                   <h3 className="mt-4 text-xl font-bold text-gray-800">{selectedEmployee.name}</h3>
                   <p className="text-gray-600">{selectedEmployee.position}</p>
@@ -498,14 +524,10 @@ const FinancePage = () => {
                 </div>
                 
                 <div className="mt-4 flex items-center">
-                  <img 
-                    src={selectedEmployee.avatar} 
-                    alt={selectedEmployee.name} 
+                  <EmployeeImage 
+                    imageUrls={selectedEmployee.imageUrls}
+                    name={selectedEmployee.name}
                     className="w-12 h-12 rounded-full object-cover"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedEmployee.name)}&background=random`;
-                    }}
                   />
                   <div className="ml-3">
                     <h3 className="font-bold text-gray-800">{selectedEmployee.name}</h3>
@@ -550,7 +572,6 @@ const FinancePage = () => {
                       <option value="bank">Bank Transfer</option>
                       <option value="cash">Cash</option>
                       <option value="check">Check</option>
-                      
                       <option value="other">Other</option>
                     </select>
                   </div>
@@ -599,14 +620,10 @@ const FinancePage = () => {
                 </div>
                 
                 <div className="mt-4 flex items-center">
-                  <img 
-                    src={selectedEmployee.avatar} 
-                    alt={selectedEmployee.name} 
+                  <EmployeeImage 
+                    imageUrls={selectedEmployee.imageUrls}
+                    name={selectedEmployee.name}
                     className="w-12 h-12 rounded-full object-cover"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedEmployee.name)}&background=random`;
-                    }}
                   />
                   <div className="ml-3">
                     <h3 className="font-bold text-gray-800">{selectedEmployee.name}</h3>

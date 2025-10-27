@@ -98,7 +98,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/appointments/customers?type=${customerType}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/appointments/customers?type=${customerType}`);
       const data = await response.json();
       setCustomers(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -112,7 +112,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
   const fetchVehicles = useCallback(async (customerId: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/app/vehicles/${customerId}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/app/vehicles/${customerId}`);
       const data = await response.json();
       setVehicles(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -188,7 +188,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
     e.preventDefault();
     setSubmitStatus('submitting');
     try {
-      const response = await fetch('http://localhost:5001/api/appointments', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/appointments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

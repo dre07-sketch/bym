@@ -12,9 +12,12 @@ import {
   Clock,
   Wrench,
   Loader,
+  FileText,
+  Package,
+  AlertOctagon,
 } from 'lucide-react';
 
-// Types
+// Types remain the same
 interface Tool {
   id: number;
   toolId: string;
@@ -27,13 +30,17 @@ interface Tool {
   imageUrl: string | null;
   createdAt: string;
   updatedAt: string;
-  notes: string | null; // ← This is critical
+  notes: string | null;
 }
+
 interface DamageReport extends Tool {
   reportedBy: string;
   damageNotes: string | null;
   reportedAt: string | null;
   damagedQuantity: number;
+  activityUser: string | null;
+  activityMessage: string | null;
+  activityLoggedAt: string | null;
 }
 
 interface Mechanic {
@@ -46,6 +53,7 @@ interface Mechanic {
 const DamageReportPage = () => {
   const [reports, setReports] = useState<DamageReport[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
+  const [allTools, setAllTools] = useState<Tool[]>([]);
   const [mechanics, setMechanics] = useState<Mechanic[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,75 +61,81 @@ const DamageReportPage = () => {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<DamageReport | null>(null);
   const [reporting, setReporting] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
 
   // Form state
   const [form, setForm] = useState<{
     toolId: number | '';
     mechanicId: number | '';
-    notes: string;
-    quantity: number;
+    damageNotes: string;
+    damagedQuantity: number;
   }>({
     toolId: '',
     mechanicId: '',
-    notes: '',
-    quantity: 1,
+    damageNotes: '',
+    damagedQuantity: 1,
   });
 
-  // --- Fetch Data ---
+  // --- Fetch Data (unchanged) ---
 
-const fetchDamageReports = async () => {
-  setLoading(true);
-  try {
-    const res = await fetch('http://localhost:5001/api/damage-reports');
-    const data = await res.json();
-    if (data.success && Array.isArray(data.data)) {
-      const reports: DamageReport[] = data.data.map((r: any) => ({
-        id: r.id,
-        toolId: r.toolId,
-        name: r.name,
-        brand: r.brand,
-        quantity: r.quantity,
-        minStock: r.minStock || 0,
-        status: r.status,
-        toolCondition: r.toolCondition,
-        imageUrl: r.imageUrl,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt,
-        notes: r.notes ?? null,
-        reportedBy: r.reportedBy || 'Unknown',
-        damageNotes: r.damageNotes ?? null,
-        reportedAt: r.reportedAt,
-        damagedQuantity: 1,
-      }));
-      setReports(reports);
-    } else {
+  const fetchDamageReports = async () => {
+    try {
+      const res = await fetch('https://ipasystem.bymsystem.com/api/damage-reports');
+      const data = await res.json();
+      
+      if (data.success && Array.isArray(data.data)) {
+        const reports: DamageReport[] = data.data.map((r: any) => ({
+          id: r.id,
+          toolId: r.tool_id || '',
+          name: r.tool_name || '',
+          brand: r.brand || '',
+          quantity: r.quantity || 0,
+          minStock: r.min_stock || 0,
+          status: r.status || '',
+          toolCondition: r.tool_condition || '',
+          imageUrl: r.image_url || null,
+          createdAt: r.created_at || '',
+          updatedAt: r.updated_at || '',
+          notes: r.notes ?? null,
+          reportedBy: r.reportedBy || 'Unknown',
+          damageNotes: r.damageNotes ?? null,
+          reportedAt: r.reportedAt || null,
+          damagedQuantity: r.damagedQuantity || 1,
+          activityUser: r.activityUser ?? null,
+          activityMessage: r.activityMessage ?? null,
+          activityLoggedAt: r.activityLoggedAt ?? null,
+        }));
+        setReports(reports);
+      } else {
+        setReports([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch damage reports:', err);
       setReports([]);
     }
-  } catch (err) {
-    console.error('Failed to fetch damage reports:', err);
-    setReports([]);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const fetchAvailableTools = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/tools');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/tools-get');
       const data = await res.json();
+      
       if (data.success) {
         const available = data.data
           .filter((t: any) => t.status !== 'Damaged')
           .map((t: any) => ({
             id: t.id,
-            toolId: t.toolId,
-            name: t.name,
-            brand: t.brand,
-            quantity: t.quantity,
-            minStock: t.minStock,
-            status: t.status,
-            toolCondition: t.toolCondition,
-            imageUrl: t.imageUrl,
+            toolId: t.tool_id || '',
+            name: t.tool_name || '',
+            brand: t.brand || '',
+            quantity: t.quantity || 0,
+            minStock: t.min_stock || 0,
+            status: t.status || '',
+            toolCondition: t.tool_condition || '',
+            imageUrl: t.image_url || null,
+            createdAt: t.created_at || '',
+            updatedAt: t.updated_at || '',
+            notes: t.notes ?? null,
           }));
         setTools(available);
       }
@@ -130,38 +144,102 @@ const fetchDamageReports = async () => {
     }
   };
 
-  const fetchMechanics = async () => {
-  try {
-    // ✅ Correct URL based on your server.js mount path
-    const res = await fetch('http://localhost:5001/api/mechanic/mechanics-fetch');
-    
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-
-    const data: Mechanic[] = await res.json();
-
-    if (Array.isArray(data)) {
-      setMechanics(data);
-      if (data.length > 0 && form.mechanicId === '') {
-        setForm((prev) => ({ ...prev, mechanicId: data[0].id }));
+  const fetchAllTools = async () => {
+    try {
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/tools-get');
+      const data = await res.json();
+      
+      if (data.success) {
+        const all = data.data.map((t: any) => ({
+          id: t.id,
+          toolId: t.tool_id || '',
+          name: t.tool_name || '',
+          brand: t.brand || '',
+          quantity: t.quantity || 0,
+          minStock: t.min_stock || 0,
+          status: t.status || '',
+          toolCondition: t.tool_condition || '',
+          imageUrl: t.image_url || null,
+          createdAt: t.created_at || '',
+          updatedAt: t.updated_at || '',
+          notes: t.notes ?? null,
+        }));
+        setAllTools(all);
       }
-    } else {
-      console.warn('Mechanics data is not an array:', data);
+    } catch (err) {
+      console.error('Failed to fetch all tools:', err);
+    }
+  };
+
+  const fetchMechanics = async () => {
+    try {
+      const res = await fetch('https://ipasystem.bymsystem.com/api/mechanic/mechanics-fetch');
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Response was not JSON');
+      }
+
+      const data = await res.json();
+
+      let mechanicsData: Mechanic[] = [];
+      
+      if (Array.isArray(data)) {
+        mechanicsData = data;
+      } else if (data && data.success && Array.isArray(data.data)) {
+        mechanicsData = data.data;
+      } else if (data && Array.isArray(data.mechanics)) {
+        mechanicsData = data.mechanics;
+      } else {
+        console.warn('Unexpected mechanics data format:', data);
+        mechanicsData = [];
+      }
+
+      setMechanics(mechanicsData);
+      
+      if (mechanicsData.length > 0 && form.mechanicId === '') {
+        setForm((prev) => ({ ...prev, mechanicId: mechanicsData[0].id }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch mechanics:', err);
+      alert('Failed to load mechanics. Check console.');
       setMechanics([]);
     }
-  } catch (err) {
-    console.error('Failed to fetch mechanics:', err);
-    alert('Failed to load mechanics. Check console.');
-    setMechanics([]);
-  }
-};
+  };
+
+  const refreshData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchDamageReports(), 
+        fetchAvailableTools(),
+        fetchMechanics()
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openReportModal = async () => {
+    setModalLoading(true);
+    try {
+      await Promise.all([fetchAllTools(), fetchMechanics()]);
+      setIsModalOpen(true);
+    } catch (error) {
+      console.error('Error refreshing data for modal:', error);
+      alert('Failed to load tools and mechanics. Please try again.');
+    } finally {
+      setModalLoading(false);
+    }
+  };
 
   useEffect(() => {
-    fetchDamageReports();
-    fetchAvailableTools();
-    fetchMechanics();
-    const interval = setInterval(fetchDamageReports, 30000);
+    refreshData();
+    const interval = setInterval(refreshData, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -170,7 +248,7 @@ const fetchDamageReports = async () => {
   const getAvailableQuantity = (tool: Tool) => {
     const damagedCount = reports
       .filter((r) => r.id === tool.id)
-      .reduce((sum) => sum + 1, 0); // 1 per report
+      .reduce((sum, r) => sum + r.damagedQuantity, 0);
     return Math.max(0, tool.quantity - damagedCount);
   };
 
@@ -180,84 +258,96 @@ const fetchDamageReports = async () => {
     const { name, value } = e.target;
     setForm((prev) => ({
       ...prev,
-      [name]: name === 'toolId' || name === 'mechanicId' || name === 'quantity'
+      [name]: name === 'toolId' || name === 'mechanicId' || name === 'damagedQuantity'
         ? value === '' ? '' : Number(value)
         : value,
     }));
   };
 
-  // --- Submit Damage Report ---
+  // --- Submit Damage Report (unchanged) ---
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (form.toolId === '') return alert('Please select a tool');
     if (form.mechanicId === '') return alert('Please select a mechanic');
-    if (form.quantity < 1) return alert('Quantity must be at least 1');
+    if (form.damagedQuantity < 1) return alert('Quantity must be at least 1');
 
-    const tool = tools.find((t) => t.id === form.toolId);
+    const tool = allTools.find((t) => t.id === form.toolId);
     if (!tool) return alert('Tool not found');
-    if (form.quantity > tool.quantity) return alert(`Only ${tool.quantity} available`);
+    
+    const availableQuantity = getAvailableQuantity(tool);
+    if (form.damagedQuantity > availableQuantity) {
+      return alert(`Only ${availableQuantity} units available for this tool`);
+    }
 
     const mechanic = mechanics.find((m) => m.id === form.mechanicId);
     if (!mechanic) return alert('Mechanic not found');
 
     setReporting(true);
     try {
-      const res = await fetch('http://localhost:5001/api/tools/damage', {
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/damage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           toolID: form.toolId,
+          damagedQuantity: form.damagedQuantity,
+          damageNotes: form.damageNotes,
           reportedBy: mechanic.full_name,
-          notes: form.notes,
         }),
       });
 
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
       const result = await res.json();
       if (result.success) {
-        alert('✅ Tool marked as damaged!');
-        setForm({ toolId: '', mechanicId: '', notes: '', quantity: 1 });
+        alert('✅ Tool damage reported successfully!');
+        setForm({ 
+          toolId: '', 
+          mechanicId: '', 
+          damageNotes: '', 
+          damagedQuantity: 1 
+        });
         setIsModalOpen(false);
-        fetchDamageReports();
-        fetchAvailableTools();
+        await refreshData();
       } else {
-        alert(`❌ ${result.message}`);
+        alert(`❌ ${result.message || 'Failed to report damage'}`);
       }
     } catch (err) {
-      alert('⚠️ Network error. Check console.');
-      console.error(err);
+      console.error('Error reporting damage:', err);
+      alert('⚠️ Network error. Please try again.');
     } finally {
       setReporting(false);
     }
   };
 
-  // --- Mark as Repaired: Set Status to "Available" ---
+  // --- Mark as Repaired (unchanged) ---
 
   const handleResolve = async (report: DamageReport) => {
     if (!window.confirm(`Mark "${report.name}" as repaired and set to Available?`)) return;
 
     try {
-      const res = await fetch(`http://localhost:5001/api/tools/${report.id}`, {
+      const res = await fetch(`https://ipasystem.bymsystem.com/api/tools/${report.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-        toolName: report.name,
-        brand: report.brand,
-        category: 'General',
-        quantity: report.quantity,
-        minStock: report.minStock,
-        condition: 'Poor',
-        cost: 0,
-        status: 'Available',
+          toolName: report.name,
+          brand: report.brand,
+          category: 'General',
+          quantity: report.quantity,
+          minStock: report.minStock,
+          condition: 'Poor',
+          cost: 0,
+          status: 'Available',
           notes: `${report.notes || ''}\n[Repaired] Restored on ${new Date().toISOString().split('T')[0]} by Admin`,
-          }),
-        });
+        }),
+      });
 
       const result = await res.json();
       if (result.success) {
         alert('✅ Tool status updated to Available');
-        fetchDamageReports();
-        fetchAvailableTools();
+        await refreshData();
       } else {
         alert(`❌ Update failed: ${result.message}`);
       }
@@ -267,16 +357,19 @@ const fetchDamageReports = async () => {
     }
   };
 
-  const filteredReports = reports.filter((r) =>
-    r.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.toolId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.reportedBy.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredReports = reports.filter((r) => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      (r.name?.toLowerCase() || '').includes(searchLower) ||
+      (r.brand?.toLowerCase() || '').includes(searchLower) ||
+      (r.toolId?.toLowerCase() || '').includes(searchLower) ||
+      (r.reportedBy?.toLowerCase() || '').includes(searchLower)
+    );
+  });
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto bg-gray-50 min-h-screen">
-      {/* Header */}
+    <div className="space-y-6 p-6 max-w-7xl mx-auto bg-gray-50 min-h-screen text-black">
+      {/* Header remains the same */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex items-center space-x-3">
           <AlertTriangle className="w-10 h-10 text-red-600" />
@@ -286,7 +379,7 @@ const fetchDamageReports = async () => {
           </div>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={openReportModal}
           className="flex items-center space-x-2 px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition"
         >
           <Plus className="w-5 h-5" />
@@ -294,7 +387,7 @@ const fetchDamageReports = async () => {
         </button>
       </div>
 
-      {/* Stats */}
+      {/* Stats remain the same */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-2xl shadow text-center">
           <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -309,7 +402,7 @@ const fetchDamageReports = async () => {
             <Wrench className="w-6 h-6 text-yellow-600" />
           </div>
           <h3 className="text-2xl font-bold text-yellow-600">
-            {reports.length}
+            {reports.reduce((sum, r) => sum + r.damagedQuantity, 0)}
           </h3>
           <p className="text-gray-600">Units Damaged</p>
         </div>
@@ -333,7 +426,7 @@ const fetchDamageReports = async () => {
         </div>
       </div>
 
-      {/* Search */}
+      {/* Search remains the same */}
       <div className="bg-white rounded-2xl p-6 shadow">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -342,12 +435,12 @@ const fetchDamageReports = async () => {
             placeholder="Search by tool name, ID, brand, or reporter..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none"
+            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-gray-800"
           />
         </div>
       </div>
 
-      {/* List */}
+      {/* List remains the same */}
       <div className="space-y-4">
         {loading ? (
           <div className="text-center py-10">
@@ -377,9 +470,9 @@ const fetchDamageReports = async () => {
                   <p className="text-sm text-gray-600">
                     <strong>Reported:</strong> {new Date(report.reportedAt!).toLocaleString()}
                   </p>
-                  <p className="text-sm text-gray-600"><strong>By:</strong> {report.reportedBy}</p>
+                  
                   {report.damageNotes && (
-                    <p className="text-sm italic text-gray-700 mt-1">“{report.damageNotes}”</p>
+                    <p className="text-sm italic text-gray-700 mt-1"><strong>Damage Notes:</strong>"{report.damageNotes}"</p>
                   )}
                 </div>
                 <div className="flex space-x-2 mt-2 lg:mt-0">
@@ -407,10 +500,10 @@ const fetchDamageReports = async () => {
         )}
       </div>
 
-      {/* Report Modal */}
+      {/* Report Modal remains the same */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-2xl font-bold flex items-center text-red-600">
                 <AlertTriangle className="w-6 h-6 mr-2" />
@@ -420,142 +513,215 @@ const fetchDamageReports = async () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tool</label>
-                  <select
-                    name="toolId"
-                    value={form.toolId === '' ? '' : form.toolId}
-                    onChange={handleChange}
-                    className="w-full p-3 border border-gray-200 rounded-lg"
-                    required
-                  >
-                    <option value="">Select a tool</option>
-                    {tools.map((tool) => (
-                      <option key={tool.id} value={tool.id}>
-                        {tool.name} ({tool.toolId}) - {getAvailableQuantity(tool)}/{tool.quantity} available
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reported By (Mechanic)</label>
-                  <select
-                    name="mechanicId"
-                    value={form.mechanicId === '' ? '' : form.mechanicId}
-                    onChange={handleChange}
-                    className="w-full p-3 border border-gray-200 rounded-lg"
-                    required
-                  >
-                    <option value="">Select a mechanic</option>
-                    {mechanics.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.full_name} ({m.mechanic_status})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity Damaged</label>
-                  <input
-                    type="number"
-                    name="quantity"
-                    value={form.quantity}
-                    onChange={handleChange}
-                    min="1"
-                    max={tools.find(t => t.id === form.toolId)?.quantity || 1}
-                    className="w-full p-3 border border-gray-200 rounded-lg"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                  <textarea
-                    name="notes"
-                    value={form.notes}
-                    onChange={handleChange}
-                    rows={3}
-                    className="w-full p-3 border border-gray-200 rounded-lg"
-                    placeholder="Describe the damage..."
-                  />
-                </div>
+            
+            {modalLoading ? (
+              <div className="flex justify-center items-center py-8">
+                <Loader className="w-8 h-8 animate-spin text-red-500" />
+                <span className="ml-2 text-gray-600">Loading tools and mechanics...</span>
               </div>
-              <div className="flex space-x-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={reporting}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-70"
-                >
-                  {reporting ? 'Reporting...' : 'Submit Report'}
-                </button>
-              </div>
-            </form>
+            ) : (
+              <form onSubmit={handleSubmit}>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tool</label>
+                    {allTools.length > 0 ? (
+                      <select
+                        name="toolId"
+                        value={form.toolId === '' ? '' : form.toolId}
+                        onChange={handleChange}
+                        className="w-full p-3 border border-gray-200 rounded-lg text-gray-800 bg-white"
+                        required
+                      >
+                        <option value="" className="text-gray-800">Select a tool</option>
+                        {allTools.map((tool) => {
+                          const available = getAvailableQuantity(tool);
+                          return (
+                            <option 
+                              key={tool.id} 
+                              value={tool.id} 
+                              className="text-gray-800"
+                              disabled={available <= 0}
+                            >
+                              {tool.name} (ID: {tool.toolId}) 
+                              {tool.status === 'Damaged' ? ' [Damaged]' : ''}
+                              {available > 0 ? ` (${available} available)` : ' (None available)'}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    ) : (
+                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+                        No tools available. Please check your connection or try again later.
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Reported By (Mechanic)</label>
+                    {mechanics.length > 0 ? (
+                      <select
+                        name="mechanicId"
+                        value={form.mechanicId === '' ? '' : form.mechanicId}
+                        onChange={handleChange}
+                        className="w-full p-3 border border-gray-200 rounded-lg text-gray-800 bg-white"
+                        required
+                      >
+                        <option value="" className="text-gray-800">Select a mechanic</option>
+                        {mechanics.map((m) => (
+                          <option key={m.id} value={m.id} className="text-gray-800">
+                            {m.full_name} ({m.mechanic_status})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+                        No mechanics available. Please check your connection or try again later.
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantity Damaged</label>
+                    <input
+                      type="number"
+                      name="damagedQuantity"
+                      value={form.damagedQuantity}
+                      onChange={handleChange}
+                      min="1"
+                      max={form.toolId ? getAvailableQuantity(allTools.find(t => t.id === form.toolId)!) : 1}
+                      className="w-full p-3 border border-gray-200 rounded-lg text-gray-800 bg-white"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Damage Notes</label>
+                    <textarea
+                      name="damageNotes"
+                      value={form.damageNotes}
+                      onChange={handleChange}
+                      rows={3}
+                      className="w-full p-3 border border-gray-200 rounded-lg text-gray-800 bg-white"
+                      placeholder="Describe the damage..."
+                    />
+                  </div>
+                </div>
+                <div className="flex space-x-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={reporting}
+                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-70"
+                  >
+                    {reporting ? 'Reporting...' : 'Submit Report'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
 
-      {/* Details Modal */}
+      {/* Details Modal - Updated to highlight damagedQuantity */}
       {isDetailsOpen && selectedReport && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div className="bg-white rounded-2xl p-6 w-full max-w-xl">
-      <h3 className="text-2xl font-bold text-red-600 mb-4 flex items-center">
-        <AlertTriangle className="w-6 h-6 mr-2" />
-        Damage Details
-      </h3>
-      <div className="space-y-3 text-gray-800">
-        <p><strong>Tool:</strong> {selectedReport.name}</p>
-        <p><strong>ID:</strong> {selectedReport.toolId}</p>
-        <p><strong>Brand:</strong> {selectedReport.brand}</p>
-        <p><strong>Total Quantity:</strong> {selectedReport.quantity}</p>
-        <p><strong>Available:</strong> {getAvailableQuantity(selectedReport)}</p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-2xl font-bold text-red-600 mb-4 flex items-center">
+              <AlertTriangle className="w-6 h-6 mr-2" />
+              Damage Details
+            </h3>
+            
+            {/* Tool Information */}
+            <div className="space-y-3 text-gray-800 mb-6">
+              <p><strong>Tool:</strong> {selectedReport.name}</p>
+              <p><strong>ID:</strong> {selectedReport.toolId}</p>
+              <p><strong>Brand:</strong> {selectedReport.brand}</p>
+              
+              {/* Quantity Information with Visual Indicators */}
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-center mb-2">
+                    <Package className="w-5 h-5 text-gray-600 mr-2" />
+                    <span className="font-medium">Total Quantity</span>
+                  </div>
+                  <p className="text-2xl font-bold">{selectedReport.quantity}</p>
+                </div>
+                
+                <div className="bg-red-50 p-4 rounded-lg">
+                  <div className="flex items-center mb-2">
+                    <AlertOctagon className="w-5 h-5 text-red-600 mr-2" />
+                    <span className="font-medium">Damaged Quantity</span>
+                  </div>
+                  <p className="text-2xl font-bold text-red-600">{selectedReport.damagedQuantity}</p>
+                </div>
+              </div>
+              
+              <p><strong>Available:</strong> {getAvailableQuantity(selectedReport)}</p>
+              <p><strong>Reported By:</strong> {selectedReport.reportedBy}</p>
+              <p><strong>Date:</strong> {new Date(selectedReport.reportedAt!).toLocaleString()}</p>
+              
+              {selectedReport.damageNotes && (
+                <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                  <strong>Damage Notes:</strong>
+                  <p className="mt-1 italic">{selectedReport.damageNotes}</p>
+                </div>
+              )}
 
-        {/* ✅ Added: Reported By Mechanic */}
-        <p><strong>Reported By:</strong> {selectedReport.reportedBy}</p>
-
-        <p><strong>Date:</strong> {new Date(selectedReport.reportedAt!).toLocaleString()}</p>
-
-        {selectedReport.damageNotes && (
-          <div className="p-3 bg-red-50 rounded-lg border border-red-200">
-            <strong>Damage Notes:</strong>
-            <p className="mt-1 italic">{selectedReport.damageNotes}</p>
+              {selectedReport.notes && (
+                <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <strong>Tool Notes:</strong>
+                  <p className="mt-1 text-sm">{selectedReport.notes}</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Activity Log Section */}
+            {(selectedReport.activityUser || selectedReport.activityMessage) && (
+              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 mb-6">
+                <div className="flex items-center mb-2">
+                  <FileText className="w-5 h-5 text-blue-600 mr-2" />
+                  <strong className="text-blue-800">Activity Log</strong>
+                </div>
+                
+                {selectedReport.activityUser && (
+                  <p className="text-sm"><strong>Used by:</strong> {selectedReport.activityUser}</p>
+                )}
+                
+                {selectedReport.activityMessage && (
+                  <p className="text-sm mt-1"><strong>Message:</strong> {selectedReport.activityMessage}</p>
+                )}
+                
+                {selectedReport.activityLoggedAt && (
+                  <p className="text-sm mt-1 text-gray-600">
+                    <strong>Logged at:</strong> {new Date(selectedReport.activityLoggedAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            )}
+            
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => handleResolve(selectedReport)}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                Mark as Repaired (Available)
+              </button>
+              <button
+                onClick={() => setIsDetailsOpen(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
           </div>
-        )}
-
-        {selectedReport.notes && (
-          <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-            <strong>Tool Notes:</strong>
-            <p className="mt-1 text-sm">{selectedReport.notes}</p>
-          </div>
-        )}
-      </div>
-      <div className="flex space-x-3 mt-6">
-        <button
-          onClick={() => handleResolve(selectedReport)}
-          className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-        >
-          Mark as Repaired (Available)
-        </button>
-        <button
-          onClick={() => setIsDetailsOpen(false)}
-          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+        </div>
+      )}
     </div>
   );
 };

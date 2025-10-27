@@ -155,7 +155,7 @@ const barChartInstance = useRef<any>(null);
   const fetchInventoryData = async () => {
     setLoadingStats(true);
     try {
-      const response = await fetch('http://localhost:5001/api/inventory/items');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/items');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message || 'API error');
@@ -171,7 +171,7 @@ const barChartInstance = useRef<any>(null);
       setStats([
         { ...stats[0], value: totalItems.toLocaleString() },
         { ...stats[1], value: lowStockItems, changeType: lowStockItems > 0 ? 'negative' : 'positive', change: `+${lowStockItems}` },
-        { ...stats[2], value: `$${totalValue.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}` },
+        { ...stats[2], value: `ETB ${totalValue.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}` },
         { ...stats[3], value: activeSuppliers }
       ]);
 
@@ -187,7 +187,7 @@ const barChartInstance = useRef<any>(null);
   // Fetch top moving items
   const fetchTopMovingItems = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/inventory/top-moving');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/top-moving');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
@@ -209,7 +209,7 @@ const barChartInstance = useRef<any>(null);
   // Fetch category-wise stock from backend
   const fetchCategoryStock = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/inventory/categories/stock');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/categories/stock');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
@@ -584,19 +584,7 @@ ctx.restore();
             </h1>
             <p className="text-gray-600 mt-2">Monitor and manage your inventory in real-time</p>
           </div>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={handleRefresh}
-              className={`p-3 bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 ${isRefreshing ? 'animate-spin' : ''}`}
-              disabled={isRefreshing}
-            >
-              <RefreshCw className="w-5 h-5 text-gray-600" />
-            </button>
-            <button className="flex items-center space-x-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl">
-              <Download className="w-4 h-4" />
-              <span className="font-medium">Export</span>
-            </button>
-          </div>
+          
         </div>
 
         {/* Stats Grid */}
@@ -614,10 +602,8 @@ ctx.restore();
                     {loadingStats ? <span className="animate-pulse">Loading...</span> : stat.value}
                   </p>
                   <div className="flex items-center">
-                    <span className={`text-sm font-semibold px-2 py-1 rounded-full ${stat.changeType === 'positive' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {stat.change}
-                    </span>
-                    <span className="text-xs text-gray-500 ml-2">vs last month</span>
+                    
+                    
                   </div>
                 </div>
                 <div className={`${stat.color} p-4 rounded-2xl shadow-lg`}>
@@ -710,9 +696,9 @@ ctx.restore();
 
         
  {/* Quick Actions */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow duration-300">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow duration-300 ml-100">
           <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 ml-100">
             <button onClick={() => openModal('addItem')} className="flex flex-col items-center p-6 rounded-2xl border-2 border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all duration-300 group transform hover:scale-105">
               <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors mb-3">
                 <Package className="w-8 h-8 text-blue-600" />
@@ -725,12 +711,7 @@ ctx.restore();
               </div>
               <span className="font-semibold text-gray-700 group-hover:text-green-600 transition-colors">Stock In</span>
             </button>
-            <button onClick={() => openModal('purchaseOrder')} className="flex flex-col items-center p-6 rounded-2xl border-2 border-dashed border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-all duration-300 group transform hover:scale-105">
-              <div className="p-3 bg-purple-100 rounded-xl group-hover:bg-purple-200 transition-colors mb-3">
-                <ShoppingCart className="w-8 h-8 text-purple-600" />
-              </div>
-              <span className="font-semibold text-gray-700 group-hover:text-purple-600 transition-colors">New PO</span>
-            </button>
+            
             <button onClick={() => openModal('reports')} className="flex flex-col items-center p-6 rounded-2xl border-2 border-dashed border-gray-200 hover:border-orange-300 hover:bg-orange-50 transition-all duration-300 group transform hover:scale-105">
               <div className="p-3 bg-orange-100 rounded-xl group-hover:bg-orange-200 transition-colors mb-3">
                 <BarChart3 className="w-8 h-8 text-orange-600" />
@@ -836,7 +817,7 @@ ctx.restore();
       {/* Modals */}
       {activeModal === 'addItem' && <AddItemModal onClose={closeModal} isOpen={true} onItemAdded={handleRefresh} />}
       {activeModal === 'stockIn' && <StockInModal onClose={closeModal} />}
-      {activeModal === 'purchaseOrder' && <PurchaseOrderModal onClose={closeModal} />}
+      
       {activeModal === 'reports' && <ReportsModal onClose={closeModal} />}
       {/* {activeModal === 'itemDetails' && selectedItem && <ItemDetailsModal item={selectedItem} onClose={closeModal} />} */}
     </div>

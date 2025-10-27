@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../db/connection');
+const events = require('../../utils/events');
 
 // GET inspections with disassembled parts
 router.get('/fetch-inspection', (req, res) => {
@@ -226,47 +227,73 @@ router.post('/update-inspection-status', (req, res) => {
 
     console.log(`✅ Updated inspections for ${ticketNumber} → ${inspectionStatus}`);
 
-    // Step 2: Fetch ticket type to determine new status
-    const getTicketType = `SELECT type FROM service_tickets WHERE ticket_number = ? LIMIT 1`;
-    db.query(getTicketType, [ticketNumber], (err2, rows) => {
+    // ✅ INSERT EVENT EMISSION HERE
+    // Get the inspection ID for the event
+    const getInspectionId = `
+      SELECT id FROM inspections 
+      WHERE ticket_number = ? 
+      ORDER BY id DESC 
+      LIMIT 1
+    `;
+    
+    db.query(getInspectionId, [ticketNumber], (err2, inspectionRows) => {
       if (err2) {
-        console.error('❌ Error fetching ticket type:', err2);
-        return res.status(500).json({ message: 'Failed to fetch ticket type' });
+        console.error('Error getting inspection ID:', err2);
+      } else if (inspectionRows.length > 0) {
+        const inspectionId = inspectionRows[0].id;
+        
+        // Emit the inspection result event
+        events.emit('inspection_result', {
+          inspectionId: inspectionId,
+          ticketNumber: ticketNumber,
+          result: inspectionStatus
+        });
+        
+        console.log(`🔔 Emitted inspection_result event for ${ticketNumber} with status ${inspectionStatus}`);
       }
-      if (rows.length === 0) {
-        return res.status(404).json({ message: 'Ticket not found' });
-      }
-
-      const ticketType = rows[0].type; // e.g., 'insurance' or 'regular'
-      let newStatus = '';
-
-      if (ticketType === 'insurance') {
-        newStatus = 'awaiting survey';
-      } else {
-        newStatus = inspectionStatus === 'pass' ? 'awaiting bill' : 'inspection failed';
-      }
-
-      const updateTicket = `
-        UPDATE service_tickets 
-        SET status = ? 
-        WHERE ticket_number = ?
-      `;
-
-      db.query(updateTicket, [newStatus, ticketNumber], (err3, result3) => {
+      
+      // Step 2: Fetch ticket type to determine new status
+      const getTicketType = `SELECT type FROM service_tickets WHERE ticket_number = ? LIMIT 1`;
+      db.query(getTicketType, [ticketNumber], (err3, rows) => {
         if (err3) {
-          console.error('❌ Error updating service_tickets:', err3);
-          return res.status(500).json({ message: 'Failed to update ticket' });
+          console.error('❌ Error fetching ticket type:', err3);
+          return res.status(500).json({ message: 'Failed to fetch ticket type' });
         }
-        if (result3.affectedRows === 0) {
-          return res.status(404).json({ message: 'Ticket not found in service_tickets' });
+        if (rows.length === 0) {
+          return res.status(404).json({ message: 'Ticket not found' });
         }
 
-        console.log(`✅ Updated service_tickets for ${ticketNumber} → ${newStatus}`);
+        const ticketType = rows[0].type; // e.g., 'insurance' or 'regular'
+        let newStatus = '';
 
-        res.status(200).json({
-          message: 'Success',
-          inspectionStatus,
-          newTicketStatus: newStatus
+        if (ticketType === 'insurance') {
+          newStatus = 'awaiting survey';
+        } else {
+          newStatus = inspectionStatus === 'pass' ? 'awaiting bill' : 'inspection failed';
+        }
+
+        const updateTicket = `
+          UPDATE service_tickets 
+          SET status = ? 
+          WHERE ticket_number = ?
+        `;
+
+        db.query(updateTicket, [newStatus, ticketNumber], (err4, result4) => {
+          if (err4) {
+            console.error('❌ Error updating service_tickets:', err4);
+            return res.status(500).json({ message: 'Failed to update ticket' });
+          }
+          if (result4.affectedRows === 0) {
+            return res.status(404).json({ message: 'Ticket not found in service_tickets' });
+          }
+
+          console.log(`✅ Updated service_tickets for ${ticketNumber} → ${newStatus}`);
+
+          res.status(200).json({
+            message: 'Success',
+            inspectionStatus,
+            newTicketStatus: newStatus
+          });
         });
       });
     });
@@ -316,7 +343,7 @@ router.get('/completed-with-parts', (req, res) => {
       ON st.ticket_number = dp.ticket_number
     LEFT JOIN inspections i 
       ON i.ticket_number = st.ticket_number
-    WHERE st.status IN ('completed', 'awaiting bill','awaiting survey','awaiting salvage form','Payment Requested','Request Payment')
+    WHERE st.status IN ('completed','Billed', 'awaiting bill','awaiting survey','awaiting salvage form','Payment Requested','Request Payment')
       AND i.id = (
         SELECT id 
         FROM inspections 

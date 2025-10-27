@@ -100,7 +100,7 @@ const ToolRequests = () => {
   const fetchStats = async () => {
     setStatsLoading(true);
     try {
-      const res = await fetch('http://localhost:5001/api/tools/stats');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/stats');
       if (!res.ok) throw new Error('Failed to fetch dashboard stats');
       const result = await res.json();
       if (!result.success) {
@@ -124,7 +124,7 @@ const ToolRequests = () => {
   const fetchTickets = async () => {
     setLoadingTickets(true);
     try {
-      const res = await fetch('http://localhost:5001/api/tickets/service_tickets');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tickets/service_tickets');
       if (!res.ok) throw new Error('Failed to fetch tickets');
       const data: ServiceTicket[] = await res.json();
       const inProgress = data.filter(t =>
@@ -141,7 +141,7 @@ const ToolRequests = () => {
   const fetchTools = async () => {
     setLoadingTools(true);
     try {
-      const res = await fetch('http://localhost:5001/api/tools/tools-get');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/tools-get');
       if (!res.ok) throw new Error('Failed to fetch tools');
       const data = await res.json();
       setTools((data.data || []).map((tool: any) => ({
@@ -158,7 +158,7 @@ const ToolRequests = () => {
 
   const fetchAssignedTools = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/tools/assigned');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assigned');
       const data = await res.json();
       setAssignedList(data.data || []);
     } catch (err) {
@@ -168,7 +168,7 @@ const ToolRequests = () => {
 
   const fetchActiveAssignments = async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/tools/assigned');
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assigned');
       const data = await res.json();
       setActiveAssignments(data.data || []);
     } catch (err) {
@@ -185,7 +185,7 @@ const ToolRequests = () => {
     const confirm = window.confirm(`Return ${quantity} of this tool?`);
     if (!confirm) return;
     try {
-      const res = await fetch('http://localhost:5001/api/tools/return', {
+      const res = await fetch('https://ipasystem.bymsystem.com/api/tools/return', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignmentId, toolID: toolId, quantity }),
@@ -248,7 +248,7 @@ const ToolRequests = () => {
     setAssigning(true);
     try {
       for (const { tool, qty } of assignedTools) {
-        const res = await fetch('http://localhost:5001/api/tools/assign', {
+        const res = await fetch('https://ipasystem.bymsystem.com/api/tools/assign', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -336,7 +336,7 @@ const ToolRequests = () => {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in text-black">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -566,13 +566,13 @@ const ToolRequests = () => {
 
       {/* Tool Assignment Modal */}
       {isModalOpen && selectedTicket && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 text-black">
           <div className="bg-white rounded-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-800">
                 Assign Tools - {selectedTicket.ticket_number}
               </h2>
-              <button onClick={closeModal} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
+              <button onClick={closeModal} className="p-2 text-black hover:text-gray-600 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>

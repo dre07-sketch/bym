@@ -1045,5 +1045,218 @@ router.post('/update-price/:id', (req, res) => {
   });
 });
 
+
+router.get('/payment-requested', (req, res) => {
+  const ticketsQuery = `
+    SELECT 
+      id,
+      ticket_number,
+      customer_type,
+      customer_id,
+      customer_name,
+      vehicle_id,
+      vehicle_info,
+      license_plate,
+      title,
+      outsource_mechanic,
+      inspector_assign,
+      description,
+      priority,
+      type,
+      urgency_level,
+      status,
+      appointment_id,
+      created_at,
+      updated_at,
+      completion_date,
+      estimated_completion_date
+    FROM service_tickets
+    WHERE status = 'Payment Requested'
+    ORDER BY created_at DESC
+  `;
+
+  db.query(ticketsQuery, (err, tickets) => {
+    if (err)
+      return res
+        .status(500)
+        .json({ success: false, message: 'Error fetching tickets', error: err });
+
+    const ticketNumbers = tickets.map((t) => t.ticket_number);
+    if (ticketNumbers.length === 0) {
+      return res.json({
+        success: true,
+        tickets: [],
+        disassembledParts: [],
+        logs: [],
+        inspections: [],
+        mechanics: [],
+        tools: [],
+        orderedParts: [],
+        outsourceStock: [],
+        insurance: [],
+      });
+    }
+
+    const disassembledQuery = `
+      SELECT id, ticket_number, part_name, \`condition\` AS part_condition, status, notes, logged_at, reassembly_verified
+      FROM disassembled_parts WHERE ticket_number IN (?) ORDER BY logged_at DESC
+    `;
+    const logsQuery = `
+      SELECT id, ticket_number, date, time, status, description, created_at
+      FROM progress_logs WHERE ticket_number IN (?) ORDER BY created_at DESC
+    `;
+    const inspectionsQuery = `
+      SELECT 
+        id,
+        ticket_number,
+        main_issue_resolved,
+        reassembly_verified,
+        general_condition,
+        notes,
+        inspection_date,
+        inspection_status,
+        created_at,
+        updated_at,
+        check_oil_leaks,
+        check_engine_air_filter_oil_coolant_level,
+        check_brake_fluid_levels,
+        check_gluten_fluid_levels,
+        check_battery_timing_belt,
+        check_tire,
+        check_tire_pressure_rotation,
+        check_lights_wiper_horn,
+        check_door_locks_central_locks,
+        check_customer_work_order_reception_book
+      FROM inspections
+      WHERE ticket_number IN (?)
+      ORDER BY created_at DESC
+    `;
+    const mechanicsQuery = `
+      SELECT id, ticket_number, mechanic_name, phone, payment, payment_method, work_done, notes, created_at
+      FROM outsource_mechanics WHERE ticket_number IN (?) ORDER BY created_at DESC
+    `;
+    const toolsQuery = `
+      SELECT id, tool_id, tool_name, ticket_id, ticket_number, assigned_quantity, assigned_by, status, assigned_at, returned_at, updated_at
+      FROM tool_assignments WHERE ticket_number IN (?) ORDER BY assigned_at DESC
+    `;
+    const orderedPartsQuery = `
+      SELECT item_id, ticket_number, name, category, sku, price, quantity, status, ordered_at
+      FROM ordered_parts WHERE ticket_number IN (?) ORDER BY ordered_at DESC
+    `;
+    const outsourceStockQuery = `
+      SELECT 
+        id,
+        ticket_number,
+        name,
+        category,
+        sku,
+        price,
+        quantity,
+        source_shop,
+        status,
+        requested_at,
+        received_at,
+        notes,
+        updated_at,
+        (quantity * price) AS total_cost
+      FROM outsource_stock 
+      WHERE ticket_number IN (?) 
+      ORDER BY requested_at DESC
+    `;
+
+    // ✅ New insurance query
+    const insuranceQuery = `
+      SELECT 
+        id,
+        ticket_number,
+        insurance_company,
+        insurance_phone,
+        accident_date,
+        owner_name,
+        owner_phone,
+        owner_email,
+        description,
+        created_at,
+        updated_at
+      FROM insurance
+      WHERE ticket_number IN (?)
+      ORDER BY created_at DESC
+    `;
+
+    // Execute all related queries
+    db.query(disassembledQuery, [ticketNumbers], (err, disassembledParts) => {
+      if (err)
+        return res
+          .status(500)
+          .json({ success: false, message: 'Error fetching disassembled parts', error: err });
+
+      db.query(logsQuery, [ticketNumbers], (err, logs) => {
+        if (err)
+          return res
+            .status(500)
+            .json({ success: false, message: 'Error fetching logs', error: err });
+
+        db.query(inspectionsQuery, [ticketNumbers], (err, inspections) => {
+          if (err)
+            return res
+              .status(500)
+              .json({ success: false, message: 'Error fetching inspections', error: err });
+
+          db.query(mechanicsQuery, [ticketNumbers], (err, mechanics) => {
+            if (err)
+              return res
+                .status(500)
+                .json({ success: false, message: 'Error fetching mechanics', error: err });
+
+            db.query(toolsQuery, [ticketNumbers], (err, tools) => {
+              if (err)
+                return res
+                  .status(500)
+                  .json({ success: false, message: 'Error fetching tools', error: err });
+
+              db.query(orderedPartsQuery, [ticketNumbers], (err, orderedParts) => {
+                if (err)
+                  return res
+                    .status(500)
+                    .json({ success: false, message: 'Error fetching ordered parts', error: err });
+
+                db.query(outsourceStockQuery, [ticketNumbers], (err, outsourceStock) => {
+                  if (err)
+                    return res
+                      .status(500)
+                      .json({ success: false, message: 'Error fetching outsource stock', error: err });
+
+                  // 🔹 Finally fetch insurance
+                  db.query(insuranceQuery, [ticketNumbers], (err, insurance) => {
+                    if (err)
+                      return res
+                        .status(500)
+                        .json({ success: false, message: 'Error fetching insurance', error: err });
+
+                    // ✅ Final response with insurance added
+                    res.json({
+                      success: true,
+                      tickets,
+                      disassembledParts,
+                      logs,
+                      inspections,
+                      mechanics,
+                      tools,
+                      orderedParts,
+                      outsourceStock,
+                      insurance,
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
+
   // ====== EXPORT ======
   module.exports = router;

@@ -74,6 +74,7 @@ router.get('/in-progress', (req, res) => {
        'awaiting survey',
       'awaiting salvage form',
       'awaiting bill',
+      'Billed',
       'completed'
     )
     ORDER BY st.updated_at DESC

@@ -170,6 +170,29 @@ router.get("/converted-proformas/count", (req, res) => {
   });
 });
 
+router.get('/total-revenue', (req, res) => {
+  const query = `
+    SELECT 
+      IFNULL(SUM(total), 0) AS total_revenue
+    FROM proformas
+    WHERE status = 'Converted'
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error fetching total revenue:', err);
+      return res.status(500).json({
+        success: false,
+        message: 'Database query error',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      totalRevenue: results[0].total_revenue,
+    });
+  });
+});
 
 
 module.exports = router;

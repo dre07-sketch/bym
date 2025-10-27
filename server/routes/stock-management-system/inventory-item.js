@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const JWT_SECRET = 'f9b3d8c2a1e74f0d9b6c5a8e3f7d1c0b'; 
+const events = require('../../utils/events');
 
 // Ensure upload directory exists
 const uploadDir = path.join(__dirname, '../../uploads/inventory');
@@ -394,6 +395,19 @@ router.post('/items', upload.single('image'), (req, res) => {
         return res.status(500).json({ success: false, message: 'Server error' });
       }
 
+      events.emit('stock_added', {
+    itemId: item_id,
+    itemName: name,
+    quantity: qty
+  });
+
+if (qty <= min) {
+    events.emit('stock_low', {
+      itemId: item_id,
+      itemName: name,
+      quantity: qty
+    });
+  }
       // Success response
       let status = 'In Stock';
       if (qty === 0) status = 'Out of Stock';
@@ -453,9 +467,9 @@ router.post('/stock-in', async (req, res) => {
   }
 
   try {
-    // Check if item exists and get current stock
+    // Check if item exists and get current stock and min_stock_level
     const [[item]] = await db.promise().execute(
-      'SELECT id, quantity FROM inventory_items WHERE item_id = ?', [itemId]
+      'SELECT id, quantity, min_stock_level FROM inventory_items WHERE item_id = ?', [itemId]
     );
 
     if (!item) {
@@ -471,6 +485,21 @@ router.post('/stock-in', async (req, res) => {
       'UPDATE inventory_items SET quantity = ?, updated_at = ? WHERE item_id = ?',
       [newQuantity, date, itemId]
     );
+
+    events.emit('stock_added', {
+      itemId: itemId,
+      itemName: '', // We don't have the name here, but we can fetch it if needed
+      quantity: qty
+    });
+
+    // Check if stock is low after update
+    if (item.min_stock_level && newQuantity <= item.min_stock_level) {
+      events.emit('stock_low', {
+        itemId: itemId,
+        itemName: '', // We don't have the name here
+        quantity: newQuantity
+      });
+    }
 
     // Optional: Insert into stock history log
     await db.promise().execute(
@@ -871,40 +900,57 @@ router.post('/purchase-orders', async (req, res) => {
     console.log('Received request to create purchase order');
     console.log('Request body:', req.body);
     
-    // Log the createdBy object specifically
-    console.log('Received createdBy:', createdBy);
-    console.log('Type of createdBy.full_name:', typeof createdBy.full_name);
-    console.log('Value of createdBy.full_name:', createdBy.full_name);
-
-    // Validate creator info
-    if (!createdBy || !createdBy.full_name) {
+    // Handle different formats of createdBy
+    let creatorFullName;
+    if (typeof createdBy === 'string') {
+      creatorFullName = createdBy; // Use string directly
+    } else if (createdBy && createdBy.full_name) {
+      creatorFullName = createdBy.full_name; // Use object property
+    } else {
       console.error('Missing creator info');
       return res.status(400).json({ 
         success: false, 
-        message: 'Missing creator info. createdBy must include full_name.' 
+        message: 'Missing creator info. createdBy must be a string or an object with full_name.' 
       });
     }
 
-    // Validate required fields
-    if (!supplier || !orderDate || !totalAmount || !itemCount || !items?.length) {
+    console.log('Processed creator full name:', creatorFullName);
+
+    // Validate required fields (excluding totalAmount and itemCount as we'll calculate them)
+    if (!supplier || !orderDate || !items || !Array.isArray(items) || items.length === 0) {
       console.error('Missing required fields');
       return res.status(400).json({ 
         success: false, 
-        message: 'Missing required fields: supplier, orderDate, totalAmount, itemCount, items' 
+        message: 'Missing required fields: supplier, orderDate, items' 
       });
     }
+
+    // Calculate itemCount and totalAmount if not provided
+    const calculatedItemCount = items.length;
+    const calculatedTotalAmount = items.reduce((sum, item) => {
+      return sum + (item.quantity * item.price);
+    }, 0);
+
+    // Use provided values if available, otherwise use calculated values
+    const finalItemCount = itemCount || calculatedItemCount;
+    const finalTotalAmount = totalAmount || calculatedTotalAmount;
+
+    console.log('Calculated values:', {
+      itemCount: finalItemCount,
+      totalAmount: finalTotalAmount
+    });
 
     // Generate unique PO number
     const poNumber = `PO-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     console.log('Generated PO number:', poNumber);
 
-    // Insert purchase order - now using createdBy.full_name instead of ID
-    console.log('Inserting purchase order with createdBy.full_name:', createdBy.full_name);
+    // Insert purchase order using processed creator name
+    console.log('Inserting purchase order with creator:', creatorFullName);
     const [result] = await db.promise().execute(
       `INSERT INTO purchase_orders 
         (po_number, supplier, status, order_date, expected_date, total_amount, item_count, created_by, notes, priority) 
        VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
-      [poNumber, supplier, orderDate, expectedDate, totalAmount, itemCount, createdBy.full_name, notes || '', priority || 'medium']
+      [poNumber, supplier, orderDate, expectedDate, finalTotalAmount, finalItemCount, creatorFullName, notes || '', priority || 'medium']
     );
 
     console.log('Purchase order inserted with ID:', result.insertId);
@@ -919,6 +965,12 @@ router.post('/purchase-orders', async (req, res) => {
     );
 
     console.log('Items inserted successfully');
+    events.emit('purchase_order_step', {
+      orderId: result.insertId,
+      orderNumber: poNumber,
+      stage: 'pending',
+      triggeredBy: creatorFullName
+    });
 
     // Respond with success
     res.json({
@@ -926,7 +978,11 @@ router.post('/purchase-orders', async (req, res) => {
       message: 'Purchase order created successfully',
       poNumber,
       createdBy,
-      items
+      items,
+      calculatedValues: {  // Include calculated values in response for transparency
+        itemCount: finalItemCount,
+        totalAmount: finalTotalAmount
+      }
     });
 
   } catch (error) {
@@ -993,6 +1049,7 @@ router.get('/purchase-orders', async (req, res) => {
         };
       })
     );
+    
 
     res.json({ success: true, data: formattedRows });
   } catch (error) {
@@ -1064,6 +1121,21 @@ await db.promise().execute(
       'UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE po_number = ?',
       [status, poNumber]
     );
+    events.emit('purchase_order_step', {
+  orderId: existing.id,
+  orderNumber: poNumber,
+  stage: status,
+  triggeredBy: 'manager' // This could be dynamic based on the user making the update
+});
+
+// If status is "received", also emit ordered_parts_delivered event
+if (status === 'received') {
+  events.emit('ordered_parts_delivered', {
+    orderId: existing.id,
+    orderNumber: poNumber,
+    ticketNumber: null // This would be the associated ticket number if available
+  });
+}
 
     res.status(200).json({
       success: true,

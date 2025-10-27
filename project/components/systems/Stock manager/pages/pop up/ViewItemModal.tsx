@@ -139,7 +139,7 @@ const ViewItemModal = ({ isOpen, onClose, item }: ViewItemModalProps) => {
               <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl overflow-hidden">
                 {item.imageUrl && !imageError ? (
                   <img
-                    src={`http://localhost:5001${item.imageUrl}`}
+                    src={`https://ipasystem.bymsystem.com${item.imageUrl}`}
                     alt={item.name}
                     className="w-full h-full object-cover"
                     onError={() => setImageError(true)}

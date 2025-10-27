@@ -47,75 +47,93 @@ const upload = multer({
 
 // GET /api/marketing-activities
 // Fetch all marketing activities with contacts
-router.get('/', async (req, res) => {
+router.get('/get-activities', async (req, res) => {
   try {
+    const { employeeName } = req.query; // 👈 read employee name from query
+
+    if (!employeeName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Employee name is required in query parameters.'
+      });
+    }
+
     const query = `
       SELECT 
-    ma.id,
-    ma.date,
-    ma.activities,
-    ma.location,
-    ma.follow_up_required,
-    ma.follow_up_date,
-    ma.follow_up_notes,
-    ma.status,                -- ✅ Add this line
-    ma.created_at,
-    ma.updated_at,
-    mac.id AS contact_id,
-    mac.name,
-    mac.phone,
-    mac.address,
-    mac.company,
-    mac.email
-  FROM marketing_activities ma
-  LEFT JOIN marketing_activity_contacts mac ON ma.id = mac.marketing_activity_id
-  ORDER BY ma.date DESC, mac.id
+        ma.id,
+        ma.employee_name,
+        ma.date,
+        ma.activities,
+        ma.location,
+        ma.follow_up_required,
+        ma.follow_up_date,
+        ma.follow_up_notes,
+        ma.status,
+        ma.created_at,
+        ma.updated_at,
+        mac.id AS contact_id,
+        mac.name AS contact_name,
+        mac.phone AS contact_phone,
+        mac.address AS contact_address,
+        mac.company AS contact_company,
+        mac.email AS contact_email
+      FROM marketing_activities ma
+      LEFT JOIN marketing_activity_contacts mac 
+        ON ma.id = mac.marketing_activity_id
+      WHERE ma.employee_name = ?    -- 👈 filter by employeeName
+      ORDER BY ma.date DESC, mac.id
     `;
 
-    const [rows] = await db.promise().execute(query);
+    const [rows] = await db.promise().execute(query, [employeeName]);
 
-    // Group contacts by activity
-    const activities = {};
+    const activitiesMap = {};
+
     rows.forEach(row => {
-      if (!activities[row.id]) {
-  activities[row.id] = {
-    id: row.id,
-    date: row.date.toISOString().split('T')[0],
-    activities: row.activities,
-    location: row.location,
-    followUpRequired: Boolean(row.follow_up_required),
-    followUpDate: row.follow_up_date ? row.follow_up_date.toISOString().split('T')[0] : null,
-    followUpNotes: row.follow_up_notes,
-    status: row.status || 'completed', // ✅ Add this line
-    contacts: [],
-    createdAt: row.created_at.toISOString(),
-    updatedAt: row.updated_at.toISOString()
-  };
-}
+      if (!activitiesMap[row.id]) {
+        activitiesMap[row.id] = {
+          id: row.id,
+          employeeName: row.employee_name,
+          date: row.date ? row.date.toISOString().split('T')[0] : null,
+          activities: row.activities,
+          location: row.location,
+          followUpRequired: Boolean(row.follow_up_required),
+          followUpDate: row.follow_up_date
+            ? row.follow_up_date.toISOString().split('T')[0]
+            : null,
+          followUpNotes: row.follow_up_notes,
+          status: row.status || 'completed',
+          contacts: [],
+          createdAt: row.created_at ? row.created_at.toISOString() : null,
+          updatedAt: row.updated_at ? row.updated_at.toISOString() : null
+        };
+      }
+
       if (row.contact_id) {
-        activities[row.id].contacts.push({
+        activitiesMap[row.id].contacts.push({
           id: row.contact_id,
-          name: row.name,
-          phone: row.phone,
-          address: row.address,
-          company: row.company,
-          email: row.email
+          name: row.contact_name,
+          phone: row.contact_phone,
+          address: row.contact_address,
+          company: row.contact_company,
+          email: row.contact_email
         });
       }
     });
 
     return res.status(200).json({
       success: true,
-      data: Object.values(activities)
+      data: Object.values(activitiesMap)
     });
   } catch (error) {
-    console.error('Error fetching marketing activities:', error);
+    console.error('❌ Error fetching marketing activities:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch marketing activities'
     });
   }
 });
+
+
 
 // GET /api/marketing-activities/:id
 // Get single marketing activity by ID
@@ -182,8 +200,9 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/marketing-activities
 // Log a new marketing activity (with contacts)
-router.post('/', upload, async (req, res) => {
+router.post('/activity-post', upload, async (req, res) => {
   const {
+    employeeName, // 👈 added field
     date,
     activities,
     location,
@@ -195,10 +214,10 @@ router.post('/', upload, async (req, res) => {
   } = req.body;
 
   // Validation
-  if (!date || !activities || !location) {
+  if (!employeeName || !date || !activities || !location) {
     return res.status(400).json({
       success: false,
-      message: 'Date, activities, and location are required.'
+      message: 'Employee name, date, activities, and location are required.'
     });
   }
 
@@ -224,12 +243,13 @@ router.post('/', upload, async (req, res) => {
     connection = await db.promise().getConnection();
     await connection.beginTransaction();
 
-    // Insert main activity
+    // 🧱 Insert main activity (with employee name)
     const [result] = await connection.execute(
       `INSERT INTO marketing_activities 
-  (date, activities, location, follow_up_required, follow_up_date, follow_up_notes, status)
-VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (employee_name, date, activities, location, follow_up_required, follow_up_date, follow_up_notes, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        employeeName,
         date,
         activities,
         location,
@@ -242,11 +262,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?)`,
 
     const activityId = result.insertId;
 
-    // Insert contacts
+    // 🧩 Insert contacts
     const contactPromises = contacts.map(contact => {
       return connection.execute(
         `INSERT INTO marketing_activity_contacts 
-         (marketing_activity_id, name, phone, address, company, email)
+          (marketing_activity_id, name, phone, address, company, email)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [
           activityId,
@@ -280,6 +300,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)`,
     if (connection) connection.release();
   }
 });
+
 
 // PUT /api/marketing-activities/:id
 // Update existing marketing activity

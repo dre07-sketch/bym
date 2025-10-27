@@ -86,7 +86,7 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/communication-center/stats');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/stats');
         if (!response.ok) throw new Error(`Failed to fetch stats: ${response.status}`);
         const result = await response.json();
         if (!result.success) throw new Error(result.message || 'Failed to load stats');
@@ -103,7 +103,7 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
   useEffect(() => {
     const fetchProformas = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/communication-center/proformas');
+        const response = await fetch('https://ipasystem.bymsystem.com/api/communication-center/proformas');
         if (!response.ok) throw new Error(`Failed to fetch proformas: ${response.status}`);
         const result = await response.json();
         if (!result.success) throw new Error(result.message || 'Failed to load proformas');
@@ -153,12 +153,12 @@ const CommunicationDashboard: React.FC<CommunicationDashboardProps> = ({ onLogou
     setLoading(true);
     try {
       // Fetch stats
-      const statsResponse = await fetch('http://localhost:5001/api/communication-center/stats');
+      const statsResponse = await fetch('https://ipasystem.bymsystem.com/api/communication-center/stats');
       const statsResult = await statsResponse.json();
       if (statsResult.success) setStats(statsResult.data);
       
       // Fetch proformas
-      const proformasResponse = await fetch('http://localhost:5001/api/communication-center/proformas');
+      const proformasResponse = await fetch('https://ipasystem.bymsystem.com/api/communication-center/proformas');
       const proformasResult = await proformasResponse.json();
       if (proformasResult.success) {
         const mappedRequests = proformasResult.data.map((item: ApiResponseItem): Request => {

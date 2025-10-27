@@ -15,6 +15,7 @@ import {
   ChevronUp,
   CheckCircle,
   XCircle,
+  AlertCircle,
 } from 'lucide-react';
 import LogActivityModal from '../popup/LogActivityModal';
 
@@ -29,13 +30,24 @@ interface Contact {
 
 interface MarketingActivity {
   id: number;
+  employeeName: string;
   date: string;
   activities: string;
   location: string;
   followUpRequired: boolean;
   followUpDate: string | null;
+  followUpNotes?: string;
   contacts: Contact[];
   status: 'completed' | 'awaiting-follow-up' | 'in-progress' | 'converted' | 'lost';
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface UserInfo {
+  id: number;
+  full_name: string;
+  email: string;
+  role: string;
 }
 
 const DailyActivityPage = () => {
@@ -43,29 +55,103 @@ const DailyActivityPage = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [authError, setAuthError] = useState(false);
+
+  const fetchUserInfo = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch('https://ipasystem.bymsystem.com/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      setUserInfo(data.user);
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+      setAuthError(true);
+      setLoading(false);
+    }
+  };
 
   const fetchActivities = async () => {
+    if (!userInfo) return;
+    
+    setLoading(true);
+    setError(null);
+    
     try {
-      const res = await fetch('http://localhost:5001/api/marketing-activities');
-      const data = await res.json();
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
 
-      // Ensure status fallback
+      // Use the employee's full name as a query parameter
+      const res = await fetch(
+        `https://ipasystem.bymsystem.com/api/marketing-activities/get-activities?employeeName=${encodeURIComponent(userInfo.full_name)}`, 
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+      
+      if (!res.ok) {
+        if (res.status === 401) {
+          setAuthError(true);
+        } else {
+          throw new Error(`Failed to fetch activities: ${res.status}`);
+        }
+        return;
+      }
+      
+      const data = await res.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to fetch activities');
+      }
+      
       const safeData = (data.data || []).map((act: any) => ({
         ...act,
         status: act.status || 'completed',
+        followUpRequired: Boolean(act.followUpRequired),
       }));
-
+      
       setActivities(safeData);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load activities', err);
+      setError(err.message || 'Failed to load activities');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchActivities();
+    fetchUserInfo();
   }, []);
+
+  useEffect(() => {
+    if (userInfo) {
+      fetchActivities();
+    }
+  }, [userInfo]);
 
   const handleSuccess = () => {
     fetchActivities();
@@ -93,6 +179,43 @@ const DailyActivityPage = () => {
     }
   };
 
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return <CheckCircle className="w-4 h-4" />;
+      case 'awaiting-follow-up':
+        return <Clock className="w-4 h-4" />;
+      case 'in-progress':
+        return <Loader2 className="w-4 h-4 animate-spin" />;
+      case 'converted':
+        return <CheckCircle className="w-4 h-4" />;
+      case 'lost':
+        return <XCircle className="w-4 h-4" />;
+      default:
+        return null;
+    }
+  };
+
+  if (authError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen py-16">
+        <div className="text-center max-w-md bg-white rounded-3xl shadow-lg p-8 border border-red-200">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h3 className="text-2xl font-bold text-red-700 mb-2">Authentication Required</h3>
+          <p className="text-red-600 mb-6">
+            You need to be logged in to view your activities. Please log in to continue.
+          </p>
+          <button
+            onClick={() => window.location.href = '/login'}
+            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -100,6 +223,22 @@ const DailyActivityPage = () => {
           <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
           <p className="text-slate-600">Loading activities...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-16 bg-red-50 rounded-3xl border-2 border-red-200">
+        <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+        <h3 className="text-2xl font-semibold text-red-700 mb-2">Error Loading Activities</h3>
+        <p className="text-red-600 mb-6">{error}</p>
+        <button
+          onClick={fetchActivities}
+          className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition"
+        >
+          Try Again
+        </button>
       </div>
     );
   }
@@ -112,6 +251,16 @@ const DailyActivityPage = () => {
           Daily Activity Log
         </h1>
         <p className="text-slate-600 text-lg">Track and manage your marketing interactions</p>
+        
+        {/* Current user indicator */}
+        {userInfo && (
+          <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-full">
+            <User className="w-5 h-5 text-blue-600" />
+            <span className="text-blue-800 font-medium">
+              Viewing activities for: {userInfo.full_name}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* CTA Button */}
@@ -130,7 +279,9 @@ const DailyActivityPage = () => {
         <div className="text-center py-16 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-300">
           <Calendar className="w-16 h-16 text-slate-300 mx-auto mb-4" />
           <h3 className="text-2xl font-semibold text-slate-500 mb-2">No activities logged yet</h3>
-          <p className="text-slate-400 mb-6">Start tracking your marketing efforts today.</p>
+          <p className="text-slate-400 mb-6">
+            You haven't logged any activities yet. Start tracking your marketing efforts.
+          </p>
           <button
             onClick={() => setShowModal(true)}
             className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition"
@@ -153,6 +304,10 @@ const DailyActivityPage = () => {
                       {act.activities}
                     </h3>
                     <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-slate-600">
+                      <span className="flex items-center gap-1 font-medium text-blue-700">
+                        <User className="w-4 h-4" />
+                        {act.employeeName}
+                      </span>
                       <span className="flex items-center gap-1">
                         <MapPin className="w-4 h-4" />
                         {act.location}
@@ -169,11 +324,14 @@ const DailyActivityPage = () => {
                   </div>
 
                   {/* Status Badge */}
-                  <span
-                    className={`ml-4 px-3 py-1.5 rounded-full text-xs font-semibold ${getStatusColor(act.status)} whitespace-nowrap`}
-                  >
-                    {act.status.replace('-', ' ')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold ${getStatusColor(act.status)} whitespace-nowrap`}
+                    >
+                      {getStatusIcon(act.status)}
+                      {act.status.replace('-', ' ')}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Follow-up Info */}
@@ -182,6 +340,7 @@ const DailyActivityPage = () => {
                     <Clock className="w-4 h-4 flex-shrink-0" />
                     <span>
                       <strong>Follow-up:</strong> {new Date(act.followUpDate).toLocaleDateString()}
+                      {act.followUpNotes && ` - ${act.followUpNotes}`}
                     </span>
                   </div>
                 )}

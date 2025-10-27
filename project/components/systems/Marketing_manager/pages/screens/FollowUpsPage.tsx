@@ -17,6 +17,7 @@ import {
   Tag,
   AlertTriangle,
   X,
+  AlertCircle,
 } from 'lucide-react';
 
 import { format, parseISO } from 'date-fns';
@@ -42,53 +43,148 @@ interface MarketingActivity {
   status: 'awaiting-follow-up' | 'in-progress' | 'completed' | 'lost';
 }
 
+interface UserInfo {
+  id: number;
+  full_name: string;
+  email: string;
+  role: string;
+}
+
 const FollowUpPage = () => {
   const [activities, setActivities] = useState<MarketingActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'calendar'>('list'); // Toggle view
   const [marked, setMarked] = useState<Record<number, 'completed' | 'lost' | 'in-progress'>>({});
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [authError, setAuthError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchUserInfo = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch('https://ipasystem.bymsystem.com/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      setUserInfo(data.user);
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+      setAuthError(true);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchFollowUps = async () => {
-      try {
-        const res = await fetch('http://localhost:5001/api/marketing-activities');
-        const data = await res.json();
-
-        // Filter: follow-up required + follow-up date set + status is awaiting/in-progress
-        const followUps = data.data
-          .filter(
-            (a: MarketingActivity) =>
-              a.followUpRequired &&
-              a.followUpDate &&
-              (a.status === 'awaiting-follow-up' || a.status === 'in-progress')
-          )
-          .map((a: MarketingActivity) => ({
-            ...a,
-            status: a.status || 'awaiting-follow-up', // fallback
-          }));
-
-        setActivities(followUps);
-      } catch (err) {
-        console.error('Failed to load follow-ups', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchFollowUps();
+    fetchUserInfo();
   }, []);
+
+  useEffect(() => {
+    if (userInfo) {
+      fetchFollowUps();
+    }
+  }, [userInfo]);
+
+  const fetchFollowUps = async () => {
+    if (!userInfo) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+
+      // Use the employee's full name as a query parameter
+      const res = await fetch(
+        `https://ipasystem.bymsystem.com/api/marketing-activities/get-activities?employeeName=${encodeURIComponent(userInfo.full_name)}`, 
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+      
+      if (!res.ok) {
+        if (res.status === 401) {
+          setAuthError(true);
+        } else {
+          throw new Error(`Failed to fetch activities: ${res.status}`);
+        }
+        return;
+      }
+      
+      const data = await res.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to fetch activities');
+      }
+      
+      // Filter: follow-up required + follow-up date set + status is awaiting/in-progress
+      const followUps = data.data
+        .filter(
+          (a: MarketingActivity) =>
+            a.followUpRequired &&
+            a.followUpDate &&
+            (a.status === 'awaiting-follow-up' || a.status === 'in-progress')
+        )
+        .map((a: MarketingActivity) => ({
+          ...a,
+          status: a.status || 'awaiting-follow-up', // fallback
+        }));
+
+      setActivities(followUps);
+    } catch (err: any) {
+      console.error('Failed to load follow-ups', err);
+      setError(err.message || 'Failed to load follow-ups');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleUpdateStatus = async (id: number, newStatus: 'completed' | 'lost' | 'in-progress') => {
     try {
-      await fetch(`http://localhost:5001/api/marketing-activities/${id}`, {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setAuthError(true);
+        return;
+      }
+
+      const activity = activities.find(a => a.id === id);
+      if (!activity) return;
+
+      await fetch(`https://ipasystem.bymsystem.com/api/marketing-activities/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...activities.find(a => a.id === id), status: newStatus }),
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ...activity, status: newStatus }),
       });
 
       setMarked((prev) => ({ ...prev, [id]: newStatus }));
       setActivities((prev) => prev.filter((a) => a.id !== id));
     } catch (err) {
       console.error('Failed to update status', err);
+      setError('Failed to update status. Please try again.');
     }
   };
 
@@ -103,10 +199,49 @@ const FollowUpPage = () => {
     (a, b) => new Date(a).getTime() - new Date(b).getTime()
   );
 
+  if (authError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen py-16">
+        <div className="text-center max-w-md bg-white rounded-3xl shadow-lg p-8 border border-red-200">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h3 className="text-2xl font-bold text-red-700 mb-2">Authentication Required</h3>
+          <p className="text-red-600 mb-6">
+            You need to be logged in to view your follow-ups. Please log in to continue.
+          </p>
+          <button
+            onClick={() => window.location.href = '/login'}
+            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+        <div className="flex flex-col items-center space-y-4">
+          <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+          <p className="text-slate-600">Loading follow-ups...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-16 bg-red-50 rounded-3xl border-2 border-red-200">
+        <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+        <h3 className="text-2xl font-semibold text-red-700 mb-2">Error Loading Follow-ups</h3>
+        <p className="text-red-600 mb-6">{error}</p>
+        <button
+          onClick={fetchFollowUps}
+          className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition"
+        >
+          Try Again
+        </button>
       </div>
     );
   }
@@ -118,6 +253,16 @@ const FollowUpPage = () => {
         <div>
           <h1 className="text-4xl font-bold text-slate-800">Follow-up Tasks</h1>
           <p className="text-slate-600">Track and manage your pending follow-ups</p>
+          
+          {/* Current user indicator */}
+          {userInfo && (
+            <div className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-full">
+              <User className="w-5 h-5 text-blue-600" />
+              <span className="text-blue-800 font-medium">
+                Viewing follow-ups for: {userInfo.full_name}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* View Toggle */}

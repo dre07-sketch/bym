@@ -19,7 +19,7 @@ interface EmployeeCheckInModalProps {
 // Image URL helper function
 const getImageUrl = (imagePath: string | null | undefined) => {
   if (!imagePath) {
-    return 'http://localhost:5001/uploads/default-profile.png';
+    return 'https://ipasystem.bymsystem.com/uploads/default-profile.png';
   }
   // Assuming imagePath from backend is just the filename now due to .split(/[\\/]/).pop()
   // If it's still a full path, keep the original logic.
@@ -27,7 +27,7 @@ const getImageUrl = (imagePath: string | null | undefined) => {
   // It seems 'image' in the frontend response will just be the filename.
   // Let's adjust the logic accordingly.
   const filename = imagePath; // Since backend already extracted the filename
-  return `http://localhost:5001/uploads/${filename}`;
+  return `https://ipasystem.bymsystem.com/uploads/${filename}`;
 };
 
 const EmployeeSelectionPopup: React.FC<{
@@ -103,7 +103,7 @@ const EmployeeSelectionPopup: React.FC<{
                         className="w-full h-full object-cover"
                         onError={(e) => {
                           const target = e.currentTarget;
-                          target.src = 'http://localhost:5001/uploads/default-profile.png';
+                          target.src = 'https://ipasystem.bymsystem.com/uploads/default-profile.png';
                         }}
                       />
                     </div>
@@ -170,7 +170,7 @@ const EmployeeCheckInModal: React.FC<EmployeeCheckInModalProps> = ({ isOpen, onC
     setError('');
     try {
       // --- FIX: Changed URL to the correct endpoint for fetching all employees ---
-      const response = await fetch('http://localhost:5001/api/employees/getemployees'); // Use /api/employees
+      const response = await fetch('https://ipasystem.bymsystem.com/api/employees/getemployees'); // Use /api/employees
       // --- END FIX ---
       if (!response.ok) throw new Error(`Failed: ${response.statusText}`);
       const data = await response.json();
@@ -200,7 +200,7 @@ const EmployeeCheckInModal: React.FC<EmployeeCheckInModalProps> = ({ isOpen, onC
     setMessage('');
     setError('');
     try {
-      const response = await fetch('http://localhost:5001/api/employeeattendance', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/employeeattendance', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -317,7 +317,7 @@ const EmployeeCheckInModal: React.FC<EmployeeCheckInModalProps> = ({ isOpen, onC
                             className="w-full h-full object-cover"
                             onError={(e) => {
                               const target = e.currentTarget;
-                              target.src = 'http://localhost:5001/uploads/default-profile.png';
+                              target.src = 'https://ipasystem.bymsystem.com/uploads/default-profile.png';
                             }}
                           />
                         </div>

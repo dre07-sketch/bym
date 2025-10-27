@@ -55,7 +55,7 @@ const EditItemModal = ({ isOpen, onClose, item, onItemUpdated }: EditItemModalPr
         location: item.location || '',
         description: item.description || '',
       });
-      setImagePreview(item.imageUrl ? `http://localhost:5001${item.imageUrl}` : null);
+      setImagePreview(item.imageUrl ? `https://ipasystem.bymsystem.com${item.imageUrl}` : null);
     }
   }, [item]);
 
@@ -100,7 +100,7 @@ const EditItemModal = ({ isOpen, onClose, item, onItemUpdated }: EditItemModalPr
       payload.append('image', image);
     }
     try {
-      const response = await fetch(`http://localhost:5001/api/inventory/items/${item?.id}`, {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/inventory/items/${item?.id}`, {
         method: 'PUT',
         body: payload,
       });

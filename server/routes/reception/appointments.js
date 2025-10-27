@@ -72,7 +72,6 @@ router.post('/', (req, res) => {
   });
 });
 
-
 router.get('/vehicles/:customerId', (req, res) => {
   const customerId = req.params.customerId;
   console.log('🔎 Fetching vehicles for customerId:', customerId);
@@ -102,7 +101,6 @@ router.get('/vehicles/:customerId', (req, res) => {
     res.json(results);
   });
 });
-
 // GET /api/customers
 router.get('/customers', (req, res) => {
   const type = req.query.type;
@@ -198,9 +196,6 @@ router.get('/getappointment', (req, res) => {
   });
 });
 
-
-
-
 router.patch('/appointments/:id/status', (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -242,4 +237,6 @@ router.get('/converted/count', (req, res) => {
     res.json({ convertedCount: results[0].convertedCount });
   });
 });
+
+
 module.exports = router;

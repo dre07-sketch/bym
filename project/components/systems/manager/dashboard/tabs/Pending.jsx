@@ -17,7 +17,7 @@ const Pending = () => {
   useEffect(() => {
     const fetchPendingTickets = async () => {
       try {
-        const response = await fetch("http://localhost:5001/api/process/pending");
+        const response = await fetch("https://ipasystem.bymsystem.com/api/process/pending");
         if (!response.ok) throw new Error("Failed to fetch pending tickets");
         const data = await response.json();
         const formatted = data.map((ticket) => {
@@ -53,7 +53,7 @@ const Pending = () => {
   useEffect(() => {
     const fetchMechanics = async () => {
       try {
-        const response = await fetch("http://localhost:5001/api/mechanic/mechanics-fetch");
+        const response = await fetch("https://ipasystem.bymsystem.com/api/mechanic/mechanics-fetch");
         if (!response.ok) throw new Error("Failed to fetch mechanics");
         const data = await response.json();
         console.log("Mechanics API response:", data); // Debug log
@@ -67,7 +67,7 @@ const Pending = () => {
           activeTickets: parseInt(m.active_tickets) || 0, // Ensure it's a number
           availability: m.mechanic_status,
           avatar: m.image_url
-            ? `http://localhost:5001/uploads/${m.image_url}`
+            ? `https://ipasystem.bymsystem.com/uploads/${m.image_url}`
             : 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=150',
           status: m.mechanic_status,
         }));
@@ -87,7 +87,7 @@ const Pending = () => {
   // ✅ Fetch full ticket details
   const fetchTicketDetails = async (ticketNumber) => {
     try {
-      const response = await fetch(`http://localhost:5001/api/process/details/${ticketNumber}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/process/details/${ticketNumber}`);
       if (!response.ok) throw new Error("Ticket not found");
       const ticket = await response.json();
       const vehicle = (ticket.make && ticket.model && ticket.year)
@@ -124,7 +124,7 @@ const Pending = () => {
   const handleAssignMechanic = async (requestId, mechanicId) => {
     if (!mechanicId) return;
     try {
-      const response = await fetch("http://localhost:5001/api/mechanic/mechanics-status", {
+      const response = await fetch("https://ipasystem.bymsystem.com/api/mechanic/mechanics-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticketId: requestId, mechanicId }),

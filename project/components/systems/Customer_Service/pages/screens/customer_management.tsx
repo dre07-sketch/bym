@@ -1,16 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Search, Plus, Edit, Archive, Eye, Download, 
-  Phone, Mail, MapPin, Car, ImageIcon, Trash2, CheckCircle, Award 
+  Phone, Mail, MapPin, Car, ImageIcon, Trash2, CheckCircle, Award, UserCheck, UserX, Clock, Shield, RefreshCw
 } from 'lucide-react';
 import Modal from '../../../../ui/Modal';
 import { Badge } from '../../../../ui/badge';
 import AddCustomerModal from '../pop up/AddCustomerModal';
 
-// === Interfaces ===
-const BASE_URL = 'http://localhost:5001';
-const IMAGE_BASE_URL = `${BASE_URL}/uploads`;
+// === Constants ===
+const BASE_URLS = [
+  'https://ipasystem.bymsystem.com',
+  'https://ipamanager.bymsystem.com',
+];
 
+// Function to safely encode path
+const encode = (path: string) => encodeURIComponent(path).replace(/%2F/g, '/');
+
+// Return all possible URLs for the image
+const getImageUrls = (path: string | null | undefined) => {
+  if (!path) return [];
+  // If path already includes a full URL, just return it
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return [path];
+  }
+  // Otherwise, construct URLs from all base URLs
+  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+  return BASE_URLS.map(base => `${base}/${cleanPath}`);
+};
+
+// === Interfaces ===
 interface Vehicle {
   id: string;
   make: string;
@@ -20,7 +38,7 @@ interface Vehicle {
   vin: string;
   color: string;
   current_mileage: number;
-  imageUrl: string | null;
+  vehicleImages: string[]; // Changed from imageUrl to vehicleImages array
 }
 
 interface Customer {
@@ -38,9 +56,9 @@ interface Customer {
   totalServices: number;
   gstNumber?: string;
   vehicles: Vehicle[];
-  isArchived?: boolean;
-  customerImage?: string | null;
-  loyaltyPoints?: number; // Added loyalty points
+  status?: 'pending' | 'active' | 'blocked' | 'deactivated';
+  customerImages: string[]; // Changed from customerImage to customerImages array
+  loyaltyPoints?: number;
 }
 
 interface VehicleForm {
@@ -56,8 +74,382 @@ interface VehicleForm {
   serviceInterval?: number;
 }
 
+// Define interface for API response
+interface AddVehicleResponse {
+  success?: boolean;
+  message?: string;
+  newVehicles?: Vehicle[];
+  imageUrls?: string[];
+}
+
 type CustomerTypeFilter = 'all' | 'individual' | 'company';
-type StatusFilter = 'all' | 'active' | 'archived';
+type StatusFilter = 'all' | 'pending' | 'active' | 'blocked' | 'deactivated';
+
+// FIXED CustomerListImage component - now properly handles multiple URLs like other components
+const CustomerListImage = ({ 
+  srcs, 
+  alt, 
+  className 
+}: { 
+  srcs?: string[]; 
+  alt: string; 
+  className?: string;
+}) => {
+  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+  const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  
+  // Process the srcs array to get full URLs
+  const urls = React.useMemo(() => {
+    if (!srcs || srcs.length === 0) return [];
+    // For each path in srcs, get all possible URLs
+    const allUrls: string[] = [];
+    srcs.forEach(path => {
+      if (path) {
+        const urlsForPath = getImageUrls(path);
+        allUrls.push(...urlsForPath);
+      }
+    });
+    return allUrls;
+  }, [srcs]);
+  
+  useEffect(() => {
+    // Clear any existing timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    if (!urls || urls.length === 0) {
+      setImgSrc(null);
+      setHasError(true);
+      setIsLoading(false);
+      return;
+    }
+    // Try the first URL first
+    setCurrentUrlIndex(0);
+    setImgSrc(urls[0]);
+    setHasError(false);
+    setIsLoading(true);
+    // Set a timeout to prevent infinite loading
+    const id = setTimeout(() => {
+      setIsLoading(false);
+      setHasError(true);
+    }, 5000); // Reduced timeout to 5 seconds
+    setTimeoutId(id);
+    return () => {
+      if (id) clearTimeout(id);
+    };
+  }, [urls]);
+  
+  const handleError = () => {
+    // Clear the timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      setTimeoutId(null);
+    }
+    // Try the next URL in the array
+    if (currentUrlIndex < urls.length - 1) {
+      setCurrentUrlIndex(currentUrlIndex + 1);
+      setImgSrc(urls[currentUrlIndex + 1]);
+      // Set a new timeout for the next URL
+      const id = setTimeout(() => {
+        setIsLoading(false);
+        setHasError(true);
+      }, 5000); // Reduced timeout to 5 seconds
+      setTimeoutId(id);
+    } else {
+      // No more URLs to try
+      setHasError(true);
+      setIsLoading(false);
+    }
+  };
+  
+  const handleLoad = () => {
+    // Clear the timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      setTimeoutId(null);
+    }
+    setIsLoading(false);
+  };
+  
+  if (hasError || !imgSrc) {
+    return (
+      <div className={`${className} bg-gray-200 rounded-full flex items-center justify-center border`}>
+        <span className="text-xl">👤</span>
+      </div>
+    );
+  }
+  return (
+    <div className="relative">
+      {isLoading && (
+        <div className={`${className} bg-gray-200 rounded-full flex items-center justify-center border absolute`}>
+          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      )}
+      <img
+        src={imgSrc}
+        alt={alt}
+        className={`${className} ${isLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
+        onError={handleError}
+        onLoad={handleLoad}
+      />
+    </div>
+  );
+};
+
+// Keep your existing SafeImage and SafeVehicleImage components as they are
+const SafeImage = ({ 
+  srcs, // Array of URLs
+  alt, 
+  className, 
+  fallbackIcon = '👤',
+  size = 'medium' 
+}: { 
+  srcs?: string[]; // Array of URLs
+  alt: string; 
+  className?: string;
+  fallbackIcon?: string;
+  size?: 'small' | 'medium' | 'large';
+}) => {
+  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+  const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  
+  // Process the srcs array to get full URLs
+  const urls = React.useMemo(() => {
+    if (!srcs || srcs.length === 0) return [];
+    // For each path in srcs, get all possible URLs
+    const allUrls: string[] = [];
+    srcs.forEach(path => {
+      if (path) {
+        const urlsForPath = getImageUrls(path);
+        allUrls.push(...urlsForPath);
+      }
+    });
+    return allUrls;
+  }, [srcs]);
+  
+  useEffect(() => {
+    // Clear any existing timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    if (!urls || urls.length === 0) {
+      setImgSrc(null);
+      setHasError(false);
+      setIsLoading(false);
+      return;
+    }
+    // Try the first URL first
+    setCurrentUrlIndex(0);
+    setImgSrc(urls[0]);
+    setHasError(false);
+    setIsLoading(true);
+    // Set a timeout to prevent infinite loading
+    const id = setTimeout(() => {
+      setIsLoading(false);
+      setHasError(true);
+    }, 5000); // Reduced timeout to 5 seconds
+    setTimeoutId(id);
+    return () => {
+      if (id) clearTimeout(id);
+    };
+  }, [urls]);
+  
+  const handleError = () => {
+    // Clear the timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      setTimeoutId(null);
+    }
+    // Try the next URL in the array
+    if (currentUrlIndex < urls.length - 1) {
+      setCurrentUrlIndex(currentUrlIndex + 1);
+      setImgSrc(urls[currentUrlIndex + 1]);
+      // Set a new timeout for the next URL
+      const id = setTimeout(() => {
+        setIsLoading(false);
+        setHasError(true);
+      }, 5000); // Reduced timeout to 5 seconds
+      setTimeoutId(id);
+    } else {
+      // No more URLs to try
+      setHasError(true);
+      setIsLoading(false);
+    }
+  };
+  
+  const handleLoad = () => {
+    // Clear the timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      setTimeoutId(null);
+    }
+    setIsLoading(false);
+  };
+  
+  // Determine placeholder size based on size prop
+  const getPlaceholderSize = () => {
+    switch (size) {
+      case 'small': return 'w-10 h-10';
+      case 'large': return 'w-32 h-32';
+      default: return 'w-24 h-24';
+    }
+  };
+  
+  // Determine placeholder text size based on size prop
+  const getPlaceholderTextSize = () => {
+    switch (size) {
+      case 'small': return 'text-xl';
+      case 'large': return 'text-4xl';
+      default: return 'text-2xl';
+    }
+  };
+  
+  if (hasError || !imgSrc) {
+    return (
+      <div className={`${className} ${getPlaceholderSize()} bg-gray-200 rounded-full flex items-center justify-center border`}>
+        <span className={getPlaceholderTextSize()}>{fallbackIcon}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="relative">
+      {isLoading && (
+        <div className={`${className} ${getPlaceholderSize()} bg-gray-200 rounded-full flex items-center justify-center border absolute`}>
+          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      )}
+      <img
+        src={imgSrc}
+        alt={alt}
+        className={`${className} ${isLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
+        onError={handleError}
+        onLoad={handleLoad}
+      />
+    </div>
+  );
+};
+
+const SafeVehicleImage = ({ 
+  srcs, // Array of URLs
+  alt, 
+  className 
+}: { 
+  srcs?: string[]; // Array of URLs
+  alt: string; 
+  className?: string;
+}) => {
+  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+  const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  
+  // Process the srcs array to get full URLs
+  const urls = React.useMemo(() => {
+    if (!srcs || srcs.length === 0) return [];
+    // For each path in srcs, get all possible URLs
+    const allUrls: string[] = [];
+    srcs.forEach(path => {
+      if (path) {
+        const urlsForPath = getImageUrls(path);
+        allUrls.push(...urlsForPath);
+      }
+    });
+    return allUrls;
+  }, [srcs]);
+  
+  useEffect(() => {
+    // Clear any existing timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    if (!urls || urls.length === 0) {
+      setImgSrc(null);
+      setHasError(false);
+      setIsLoading(false);
+      return;
+    }
+    // Try the first URL first
+    setCurrentUrlIndex(0);
+    setImgSrc(urls[0]);
+    setHasError(false);
+    setIsLoading(true);
+    // Set a timeout to prevent infinite loading
+    const id = setTimeout(() => {
+      setIsLoading(false);
+      setHasError(true);
+    }, 5000); // Reduced timeout to 5 seconds
+    setTimeoutId(id);
+    return () => {
+      if (id) clearTimeout(id);
+    };
+  }, [urls]);
+  
+  const handleError = () => {
+    // Clear the timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      setTimeoutId(null);
+    }
+    // Try the next URL in the array
+    if (currentUrlIndex < urls.length - 1) {
+      setCurrentUrlIndex(currentUrlIndex + 1);
+      setImgSrc(urls[currentUrlIndex + 1]);
+      // Set a new timeout for the next URL
+      const id = setTimeout(() => {
+        setIsLoading(false);
+        setHasError(true);
+      }, 5000); // Reduced timeout to 5 seconds
+      setTimeoutId(id);
+    } else {
+      // No more URLs to try
+      setHasError(true);
+      setIsLoading(false);
+    }
+  };
+  
+  const handleLoad = () => {
+    // Clear the timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      setTimeoutId(null);
+    }
+    setIsLoading(false);
+  };
+  
+  if (hasError || !imgSrc) {
+    return (
+      <div className={`${className} bg-gray-200 rounded-lg flex items-center justify-center border-dashed border-2 border-gray-400`}>
+        <div className="text-center">
+          <ImageIcon className="w-8 h-8 text-gray-400 mx-auto" />
+          <span className="text-gray-500 text-sm">No Image</span>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="relative">
+      {isLoading && (
+        <div className={`${className} bg-gray-200 rounded-lg flex items-center justify-center border-dashed border-2 border-gray-400 absolute`}>
+          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      )}
+      <img
+        src={imgSrc}
+        alt={alt}
+        className={`${className} ${isLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
+        onError={handleError}
+        onLoad={handleLoad}
+      />
+    </div>
+  );
+};
 
 const CustomerManagement = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -70,6 +462,7 @@ const CustomerManagement = () => {
   const [isAddVehicleModalOpen, setIsAddVehicleModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null); // Added success state
   const [vehicles, setVehicles] = useState<VehicleForm[]>([
     {
       make: '',
@@ -89,19 +482,137 @@ const CustomerManagement = () => {
   const [carMakes, setCarMakes] = useState<string[]>([]);
   const [carModelsByMake, setCarModelsByMake] = useState<Record<string, { model: string; serviceInterval: number }[]>>({});
   const [loadingModels, setLoadingModels] = useState(false);
-
+  
+  // Helper function to check if vehicles were added
+  const checkIfVehiclesAdded = async (selectedCustomer: Customer): Promise<boolean> => {
+    try {
+      const customerResponse = await fetch(`${BASE_URLS[0]}/api/customers/fetch`);
+      if (customerResponse.ok) {
+        const updatedCustomers = await customerResponse.json();
+        const updatedCustomer = updatedCustomers.find((c: Customer) => c.customerId === selectedCustomer.customerId);
+        
+        if (updatedCustomer) {
+          // Check if the number of vehicles has increased
+          return updatedCustomer.vehicles.length > selectedCustomer.vehicles.length;
+        }
+      }
+    } catch (fetchError) {
+      console.error('Error checking if vehicles were added:', fetchError);
+    }
+    return false;
+  };
+  
+  // Helper function to refresh customer data
+  const refreshCustomerData = async (selectedCustomer: Customer, setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>, setSelectedCustomer: React.Dispatch<React.SetStateAction<Customer | null>>) => {
+    try {
+      const customerResponse = await fetch(`${BASE_URLS[0]}/api/customers/fetch`);
+      if (customerResponse.ok) {
+        const updatedCustomers = await customerResponse.json();
+        const updatedCustomer = updatedCustomers.find((c: Customer) => c.customerId === selectedCustomer.customerId);
+        
+        if (updatedCustomer) {
+          // Update the state with the new customer data
+          setCustomers((prev) =>
+            prev.map((c) =>
+              c.customerId === selectedCustomer.customerId ? updatedCustomer : c
+            )
+          );
+          
+          setSelectedCustomer(updatedCustomer);
+        }
+      }
+    } catch (fetchError) {
+      console.error('Error refreshing customer data:', fetchError);
+    }
+  };
+  
+  // Helper function to update vehicles state
+  const updateVehiclesState = async (
+    result: AddVehicleResponse,
+    selectedCustomer: Customer,
+    vehicles: VehicleForm[],
+    setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>,
+    setSelectedCustomer: React.Dispatch<React.SetStateAction<Customer | null>>
+  ) => {
+    const newVehiclesFromServer: Vehicle[] = [];
+    if (result.newVehicles && Array.isArray(result.newVehicles)) {
+      result.newVehicles.forEach((v: any) => {
+        // Handle vehicle images from server response
+        let vehicleImages: string[] = [];
+        if (Array.isArray(v.vehicleImages) && v.vehicleImages.length > 0) {
+          vehicleImages = v.vehicleImages.filter((img: any) => img !== null && img !== undefined);
+        } else if (typeof v.vehicleImages === 'string' && v.vehicleImages.trim() !== '') {
+          vehicleImages = [v.vehicleImages];
+        }
+        
+        newVehiclesFromServer.push({
+          id: v.id,
+          make: v.make,
+          model: v.model,
+          year: v.year || 0,
+          licensePlate: v.licensePlate || '',
+          vin: v.vin || '',
+          color: v.color || '',
+          current_mileage: v.current_mileage || 0,
+          vehicleImages: vehicleImages,
+        });
+      });
+    } else {
+      // If no response data, create vehicles from form data
+      const imageUrls = result.imageUrls || [];
+      vehicles.forEach((formVehicle, index) => {
+        const imagePath = imageUrls[index] || null;
+        newVehiclesFromServer.push({
+          id: `temp-${Date.now()}-${index}`,
+          make: formVehicle.make,
+          model: formVehicle.model,
+          year: parseInt(formVehicle.year) || 0,
+          licensePlate: formVehicle.licensePlate,
+          vin: formVehicle.vin,
+          color: formVehicle.color,
+          current_mileage: parseInt(formVehicle.current_mileage) || 0,
+          vehicleImages: imagePath ? [imagePath] : [],
+        });
+      });
+    }
+    
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.customerId === selectedCustomer.customerId
+          ? {
+              ...c,
+              vehicles: [...c.vehicles, ...newVehiclesFromServer],
+            }
+          : c
+      )
+    );
+    
+    setSelectedCustomer((prev) =>
+      prev && prev.customerId === selectedCustomer.customerId
+        ? {
+            ...prev,
+            vehicles: [...prev.vehicles, ...newVehiclesFromServer],
+          }
+        : prev
+    );
+  };
+  
   // Fetch car models when modal opens
   useEffect(() => {
     const fetchCarModels = async () => {
       if (!isAddVehicleModalOpen) return;
-      
       setLoadingModels(true);
       try {
-        const response = await fetch(`${BASE_URL}/api/customers/car-models`);
-        if (!response.ok) throw new Error('Failed to load car models');
-        const data: Record<string, { model: string; serviceInterval: number }[]> = await response.json();
-        setCarModelsByMake(data);
-        setCarMakes(Object.keys(data).sort());
+        console.log(`Fetching car models from: ${BASE_URLS[0]}/api/customers/car-models`);
+        const response = await fetch(`${BASE_URLS[0]}/api/customers/car-models`);
+        if (response.ok) {
+          const data: Record<string, { model: string; serviceInterval: number }[]> = await response.json();
+          setCarModelsByMake(data);
+          setCarMakes(Object.keys(data).sort());
+          console.log(`Successfully loaded car models`);
+        } else {
+          throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+        }
       } catch (err) {
         console.error('Error loading car models:', err);
         setError('Could not load car models. Please try again.');
@@ -109,100 +620,86 @@ const CustomerManagement = () => {
         setLoadingModels(false);
       }
     };
-
     fetchCarModels();
   }, [isAddVehicleModalOpen]);
-
-  // Build image URL
-  const buildImageUrl = (path: string | null | undefined): string | null => {
-    if (!path) return null;
-    if (path.startsWith('http')) return path;
-    if (path.startsWith('uploads/')) {
-      return `${IMAGE_BASE_URL}/${path.substring(8)}`;
-    }
-    return `${IMAGE_BASE_URL}/${path}`;
-  };
-
-  // Handle image upload
-  const handleImageUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      if (file.size > 5 * 1024 * 1024) {
-        setError('Image size must be less than 5MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setVehicles((prev) =>
-          prev.map((vehicle, i) =>
-            i === index
-              ? {
-                  ...vehicle,
-                  image: file,
-                  imagePreview: reader.result as string,
-                }
-              : vehicle
-          )
-        );
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const removeImage = (index: number) => {
-    setVehicles((prev) =>
-      prev.map((vehicle, i) =>
-        i === index
-          ? {
-              ...vehicle,
-              image: null,
-              imagePreview: null,
-            }
-          : vehicle
-      )
-    );
-  };
-
+  
   // Fetch customers
   useEffect(() => {
     const fetchCustomers = async () => {
+      setIsLoading(true);
+      setError(null);
       try {
-        const response = await fetch(`${BASE_URL}/api/customers/fetch`);
-        if (!response.ok) throw new Error('Failed to fetch customers');
+        console.log(`Fetching customers from: ${BASE_URLS[0]}/api/customers/fetch`);
+        const response = await fetch(`${BASE_URLS[0]}/api/customers/fetch`);
+        if (!response.ok) {
+          throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+        }
         const data = await response.json();
-
-        const transformedCustomers = data.map((customer: any) => ({
-          ...customer,
-          readableCustomerId: customer.readableCustomerId || customer.customerId,
-          isArchived: customer.isArchived || false,
-          customerImage: customer.customerImage ? buildImageUrl(customer.customerImage) : null,
-          loyaltyPoints: customer.loyaltyPoints || 0, // Added loyalty points
-          vehicles: Array.isArray(customer.vehicles)
-            ? customer.vehicles.map((v: any) => ({
-                id: v.id,
-                make: v.make,
-                model: v.model,
-                year: v.year || 0,
-                licensePlate: v.licensePlate || '',
-                vin: v.vin || '',
-                color: v.color || '',
-                current_mileage: v.current_mileage || 0,
-                imageUrl: v.imageUrl || (v.vehicle_image ? buildImageUrl(v.vehicle_image) : null),
-              }))
-            : [],
-        }));
-
+        console.log(`Successfully fetched ${data.length} customers`);
+        
+        // Transform the data - FIXED: properly handle image arrays
+        const transformedCustomers = data.map((customer: any) => {
+          // Handle customer images - ensure it's always an array of strings
+          let customerImages: string[] = [];
+          if (Array.isArray(customer.customerImages) && customer.customerImages.length > 0) {
+            customerImages = customer.customerImages.filter((img: any) => img !== null && img !== undefined);
+          } else if (typeof customer.customerImages === 'string' && customer.customerImages.trim() !== '') {
+            customerImages = [customer.customerImages];
+          } else if (typeof customer.customerImage === 'string' && customer.customerImage.trim() !== '') {
+            // Handle legacy single image field
+            customerImages = [customer.customerImage];
+          }
+          
+          console.log('Processed customer images for', customer.name, ':', customerImages);
+          
+          return {
+            ...customer,
+            readableCustomerId: customer.readableCustomerId || customer.customerId,
+            status: customer.status || 'pending',
+            customerImages: customerImages,
+            loyaltyPoints: customer.loyaltyPoints || 0,
+            vehicles: Array.isArray(customer.vehicles)
+              ? customer.vehicles.map((v: any) => {
+                  // Handle vehicle images - ensure it's always an array of strings
+                  let vehicleImages: string[] = [];
+                  if (Array.isArray(v.vehicleImages) && v.vehicleImages.length > 0) {
+                    vehicleImages = v.vehicleImages.filter((img: any) => img !== null && img !== undefined);
+                  } else if (typeof v.vehicleImages === 'string' && v.vehicleImages.trim() !== '') {
+                    vehicleImages = [v.vehicleImages];
+                  } else if (typeof v.vehicleImage === 'string' && v.vehicleImage.trim() !== '') {
+                    // Handle legacy single image field
+                    vehicleImages = [v.vehicleImage];
+                  }
+                  
+                  console.log('Processed vehicle images for', v.make, v.model, ':', vehicleImages);
+                  
+                  return {
+                    id: v.id,
+                    make: v.make,
+                    model: v.model,
+                    year: v.year || 0,
+                    licensePlate: v.licensePlate || '',
+                    vin: v.vin || '',
+                    color: v.color || '',
+                    current_mileage: v.currentMileage || v.current_mileage || 0,
+                    vehicleImages: vehicleImages,
+                  };
+                })
+              : [],
+          };
+        });
+        
         setCustomers(transformedCustomers);
       } catch (err) {
+        console.error('Error fetching customers:', err);
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchCustomers();
   }, []);
-
+  
   // Filter customers
   const filteredCustomers = customers.filter((customer) => {
     const matchesSearch =
@@ -210,42 +707,57 @@ const CustomerManagement = () => {
       customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.phone.includes(searchTerm) ||
       (customer.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
-
     const matchesType =
       customerTypeFilter === 'all' || customer.customerType === customerTypeFilter;
-
     const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'active' && !customer.isArchived) ||
-      (statusFilter === 'archived' && customer.isArchived);
-
+      statusFilter === 'all' || customer.status === statusFilter;
     return matchesSearch && matchesType && matchesStatus;
   });
-
+  
   // Handlers
   const handleAddCustomer = () => setIsAddModalOpen(true);
+  
   const handleViewCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     setIsViewModalOpen(true);
   };
-
-  const handleArchiveCustomer = async (customerId: string) => {
+  
+  const handleToggleCustomerStatus = async (customer: Customer) => {
     try {
-      const response = await fetch(`${BASE_URL}/api/customers/${customerId}/archive`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      const newStatus = customer.status === 'active' ? 'deactivated' : 'active';
+      const response = await fetch(`${BASE_URLS[0]}/api/customers/update-status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          customerId: customer.customerId,
+          customerType: customer.customerType,
+          status: newStatus,
+        }),
       });
-      if (!response.ok) throw new Error('Failed to update customer status');
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.customerId === customerId ? { ...c, isArchived: !c.isArchived } : c
-        )
-      );
+      
+      if (response.ok) {
+        setCustomers((prev) =>
+          prev.map((c) =>
+            c.customerId === customer.customerId ? { ...c, status: newStatus } : c
+          )
+        );
+        
+        if (selectedCustomer && selectedCustomer.customerId === customer.customerId) {
+          setSelectedCustomer({ ...selectedCustomer, status: newStatus });
+        }
+        
+        console.log(`Successfully updated customer status`);
+      } else {
+        throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+      }
     } catch (error) {
-      console.error('Error archiving customer:', error);
+      console.error('Error updating customer status:', error);
+      setError(error instanceof Error ? error.message : 'Failed to update customer status');
     }
   };
-
+  
   const handleAddVehicleToCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     setIsAddVehicleModalOpen(true);
@@ -263,8 +775,9 @@ const CustomerManagement = () => {
       },
     ]);
     setError(null);
+    setSuccess(null); // Clear success message when opening modal
   };
-
+  
   const addVehicle = () => {
     setVehicles([
       ...vehicles,
@@ -281,17 +794,16 @@ const CustomerManagement = () => {
       },
     ]);
   };
-
+  
   const removeVehicle = (index: number) => {
     if (vehicles.length > 1) {
       setVehicles(vehicles.filter((_, i) => i !== index));
     }
   };
-
+  
   const handleVehicleChange = (index: number, field: keyof VehicleForm, value: string) => {
     setVehicles((prev) => {
       const newVehicles = [...prev];
-      
       if (field === 'make') {
         newVehicles[index] = { 
           ...newVehicles[index], 
@@ -303,7 +815,6 @@ const CustomerManagement = () => {
         const selectedMake = newVehicles[index].make;
         const modelsForMake = carModelsByMake[selectedMake] || [];
         const selectedModelData = modelsForMake.find(m => m.model === value);
-        
         newVehicles[index] = { 
           ...newVehicles[index], 
           model: value, 
@@ -312,128 +823,329 @@ const CustomerManagement = () => {
       } else {
         newVehicles[index] = { ...newVehicles[index], [field]: value };
       }
-      
       return newVehicles;
     });
   };
-
+  
+  const handleImageUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Image size must be less than 5MB');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setVehicles((prev) =>
+          prev.map((vehicle, i) =>
+            i === index
+              ? {
+                  ...vehicle,
+                  image: file,
+                  imagePreview: reader.result as string,
+                }
+              : vehicle
+          )
+        );
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  
+  const removeImage = (index: number) => {
+    setVehicles((prev) =>
+      prev.map((vehicle, i) =>
+        i === index
+          ? {
+              ...vehicle,
+              image: null,
+              imagePreview: null,
+            }
+          : vehicle
+      )
+    );
+  };
+  
   const handleSubmitVehicles = async () => {
     if (!selectedCustomer) return;
     setIsSubmitting(true);
     setError(null);
-
+    setSuccess(null); // Clear any previous success message
+    
     try {
-      for (const vehicle of vehicles) {
-        if (!vehicle.make || !vehicle.model) {
-          throw new Error('Make and Model are required for all vehicles');
+      // Enhanced validation
+      const validationErrors: string[] = [];
+      vehicles.forEach((vehicle, index) => {
+        if (!vehicle.make) {
+          validationErrors.push(`Vehicle ${index + 1}: Make is required`);
         }
+        if (!vehicle.model) {
+          validationErrors.push(`Vehicle ${index + 1}: Model is required`);
+        }
+      });
+      
+      if (validationErrors.length > 0) {
+        throw new Error(validationErrors.join('\n'));
       }
-
-      const formData = new FormData();
+      
+      // Check if we have any images to upload
+      const hasImages = vehicles.some(vehicle => vehicle.image);
+      
+      // Prepare vehicle data
       const vehiclesDataForJson = vehicles.map((vehicle) => ({
         make: vehicle.make,
         model: vehicle.model,
-        year: vehicle.year || null,
+        year: vehicle.year ? parseInt(vehicle.year) : null,
         licensePlate: vehicle.licensePlate || null,
         color: vehicle.color || null,
-        current_mileage: vehicle.current_mileage || null,
+        current_mileage: vehicle.current_mileage ? parseInt(vehicle.current_mileage) : null,
         vin: vehicle.vin || null,
         serviceInterval: vehicle.serviceInterval || null,
       }));
-
-      formData.append('vehicles', JSON.stringify(vehiclesDataForJson));
-      formData.append('customerId', selectedCustomer.customerId);
-      vehicles.forEach((vehicle) => {
-        if (vehicle.image) {
-          formData.append('images', vehicle.image);
+      
+      // Try to submit with images first if we have any
+      if (hasImages) {
+        try {
+          const formData = new FormData();
+          formData.append('vehicles', JSON.stringify(vehiclesDataForJson));
+          formData.append('customerId', selectedCustomer.customerId);
+          
+          vehicles.forEach((vehicle) => {
+            if (vehicle.image) {
+              formData.append('images', vehicle.image);
+            }
+          });
+          
+          console.log('Submitting vehicles data with images:');
+          console.log('Customer ID:', selectedCustomer.customerId);
+          console.log('Vehicles:', vehiclesDataForJson);
+          console.log('Images count:', vehicles.filter(v => v.image).length);
+          console.log(`Adding vehicles via: ${BASE_URLS[0]}/api/customers/add-vehicles`);
+          
+          // Add a timeout to the fetch request
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+          
+          const response = await fetch(`${BASE_URLS[0]}/api/customers/add-vehicles`, {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal,
+          });
+          
+          clearTimeout(timeoutId);
+          
+          // Get response text first to see what we're getting
+          const responseText = await response.text();
+          console.log('Response status:', response.status);
+          console.log('Response text:', responseText);
+          
+          // Always check if vehicles were added, regardless of response status
+          const vehiclesAdded = await checkIfVehiclesAdded(selectedCustomer);
+          
+          if (vehiclesAdded) {
+            // The vehicles were added successfully despite the error response
+            console.log('Vehicles were added successfully despite the error response');
+            
+            // Update the state with the new customer data
+            await refreshCustomerData(selectedCustomer, setCustomers, setSelectedCustomer);
+            
+            // Show success message and close modal
+            setSuccess('Vehicles added successfully!');
+            setTimeout(() => {
+              setIsAddVehicleModalOpen(false);
+              setVehicles([
+                {
+                  make: '',
+                  model: '',
+                  year: '',
+                  licensePlate: '',
+                  color: '',
+                  current_mileage: '',
+                  vin: '',
+                  image: null,
+                  imagePreview: null,
+                },
+              ]);
+            }, 1500); // Close modal after showing success message
+            return;
+          }
+          
+          if (!response.ok) {
+            let errorMessage = 'Failed to add vehicles';
+            try {
+              // Try to parse as JSON
+              const errorData = JSON.parse(responseText);
+              errorMessage = errorData.error || errorData.message || errorMessage;
+            } catch (e) {
+              // If not JSON, use the text directly
+              errorMessage = responseText || response.statusText || errorMessage;
+            }
+            throw new Error(errorMessage);
+          }
+          
+          // Process successful response
+          let result: AddVehicleResponse = {};
+          try {
+            result = JSON.parse(responseText);
+          } catch (e) {
+            console.warn('Failed to parse JSON response:', e);
+          }
+          
+          console.log(`Successfully added vehicles`, result);
+          
+          // Update the state with the new vehicles
+          await updateVehiclesState(result, selectedCustomer, vehicles, setCustomers, setSelectedCustomer);
+          
+          // Show success message and close modal
+          setSuccess('Vehicles added successfully!');
+          setTimeout(() => {
+            setIsAddVehicleModalOpen(false);
+            setVehicles([
+              {
+                make: '',
+                model: '',
+                year: '',
+                licensePlate: '',
+                color: '',
+                current_mileage: '',
+                vin: '',
+                image: null,
+                imagePreview: null,
+              },
+            ]);
+          }, 1500); // Close modal after showing success message
+          return; // Success, exit the function
+        } catch (imageError) {
+          console.error('Error with image upload:', imageError);
+          
+          // Check if it's a network error
+          if (imageError instanceof TypeError && imageError.message.includes('Failed to fetch')) {
+            console.log('Network error detected, trying to submit without images');
+            setError('Network error: Unable to upload images. Submitting vehicle information without images.');
+            // Continue to submit without images
+          } else if (imageError.name === 'AbortError') {
+            console.log('Request timed out, trying to submit without images');
+            setError('Request timed out: Unable to upload images. Submitting vehicle information without images.');
+            // Continue to submit without images
+          } else {
+            // Check if the error is related to server configuration
+            const isServerError = imageError instanceof Error && (
+              imageError.message.includes('IMAGE_BASE_URL is not defined') ||
+              imageError.message.includes('ReferenceError') ||
+              imageError.message.includes('Internal Server Error') ||
+              imageError.message.includes('500')
+            );
+            
+            if (isServerError) {
+              console.log('Server error detected, trying to submit without images');
+              setError('Server error: Unable to upload images. Submitting vehicle information without images.');
+              // Continue to submit without images
+            } else {
+              // If it's a different error, rethrow it
+              throw imageError;
+            }
+          }
         }
-      });
-
-      const response = await fetch(`${BASE_URL}/api/customers/add-vehicles`, {
+      }
+      
+      // Submit without images (either because there are no images or because the image upload failed)
+      console.log('Submitting vehicles data without images:');
+      console.log('Customer ID:', selectedCustomer.customerId);
+      console.log('Vehicles:', vehiclesDataForJson);
+      console.log(`Adding vehicles via: ${BASE_URLS[0]}/api/customers/add-vehicles`);
+      
+      const response = await fetch(`${BASE_URLS[0]}/api/customers/add-vehicles`, {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          vehicles: vehiclesDataForJson,
+          customerId: selectedCustomer.customerId,
+        }),
       });
-
+      
+      // Get response text first to see what we're getting
+      const responseText = await response.text();
+      console.log('Response status:', response.status);
+      console.log('Response text:', responseText);
+      
+      // Always check if vehicles were added, regardless of response status
+      const vehiclesAdded = await checkIfVehiclesAdded(selectedCustomer);
+      
+      if (vehiclesAdded) {
+        // The vehicles were added successfully despite the error response
+        console.log('Vehicles were added successfully despite the error response');
+        
+        // Update the state with the new customer data
+        await refreshCustomerData(selectedCustomer, setCustomers, setSelectedCustomer);
+        
+        // Show success message and close modal
+        setSuccess('Vehicles added successfully!');
+        setTimeout(() => {
+          setIsAddVehicleModalOpen(false);
+          setVehicles([
+            {
+              make: '',
+              model: '',
+              year: '',
+              licensePlate: '',
+              color: '',
+              current_mileage: '',
+              vin: '',
+              image: null,
+              imagePreview: null,
+            },
+          ]);
+        }, 1500); // Close modal after showing success message
+        return;
+      }
+      
       if (!response.ok) {
         let errorMessage = 'Failed to add vehicles';
         try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+          
+          // If it's a database error, provide more specific guidance
+          if (errorMessage.includes('database')) {
+            errorMessage = 'Database error: The server could not save the vehicle information. This might be due to a temporary issue or a problem with the vehicle data. Please try again or contact support if the issue persists.';
+          }
         } catch (e) {
-          errorMessage = response.statusText || errorMessage;
+          errorMessage = responseText || response.statusText || errorMessage;
         }
         throw new Error(errorMessage);
       }
-
+      
       const result = await response.json();
-
-      const newVehiclesFromServer: Vehicle[] = [];
-      if (result.newVehicles && Array.isArray(result.newVehicles)) {
-        result.newVehicles.forEach((v: any) => {
-          newVehiclesFromServer.push({
-            id: v.id,
-            make: v.make,
-            model: v.model,
-            year: v.year || 0,
-            licensePlate: v.licensePlate || '',
-            vin: v.vin || '',
-            color: v.color || '',
-            current_mileage: v.current_mileage || 0,
-            imageUrl: v.imageUrl || null,
-          });
-        });
-      } else {
-        const imageUrls = result.imageUrls || [];
-        vehicles.forEach((formVehicle, index) => {
-          const imagePath = imageUrls[index] || null;
-          newVehiclesFromServer.push({
-            id: `temp-${Date.now()}-${index}`,
-            make: formVehicle.make,
-            model: formVehicle.model,
-            year: parseInt(formVehicle.year) || 0,
-            licensePlate: formVehicle.licensePlate,
-            vin: formVehicle.vin,
-            color: formVehicle.color,
-            current_mileage: parseInt(formVehicle.current_mileage) || 0,
-            imageUrl: imagePath ? buildImageUrl(imagePath) : formVehicle.imagePreview,
-          });
-        });
+      
+      // Process the response
+      await updateVehiclesState(result, selectedCustomer, vehicles, setCustomers, setSelectedCustomer);
+      
+      // Show success message and close modal
+      setSuccess('Vehicles added successfully!');
+      setTimeout(() => {
+        setIsAddVehicleModalOpen(false);
+        setVehicles([
+          {
+            make: '',
+            model: '',
+            year: '',
+            licensePlate: '',
+            color: '',
+            current_mileage: '',
+            vin: '',
+            image: null,
+            imagePreview: null,
+          },
+        ]);
+      }, 1500); // Close modal after showing success message
+      
+      // Show a warning if we tried to upload images but couldn't
+      if (hasImages) {
+        setSuccess('Vehicles added successfully, but images could not be uploaded due to a network error.');
       }
-
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.customerId === selectedCustomer.customerId
-            ? {
-                ...c,
-                vehicles: [...c.vehicles, ...newVehiclesFromServer],
-              }
-            : c
-        )
-      );
-
-      setSelectedCustomer((prev) =>
-        prev && prev.customerId === selectedCustomer.customerId
-          ? {
-              ...prev,
-              vehicles: [...prev.vehicles, ...newVehiclesFromServer],
-            }
-          : prev
-      );
-
-      setIsAddVehicleModalOpen(false);
-      setVehicles([
-        {
-          make: '',
-          model: '',
-          year: '',
-          licensePlate: '',
-          color: '',
-          current_mileage: '',
-          vin: '',
-          image: null,
-          imagePreview: null,
-        },
-      ]);
     } catch (error) {
       console.error('Error adding vehicles:', error);
       setError(error instanceof Error ? error.message : 'Failed to add vehicles');
@@ -441,23 +1153,80 @@ const CustomerManagement = () => {
       setIsSubmitting(false);
     }
   };
-
+  
+  // Function to get status badge styling
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending</Badge>;
+      case 'active':
+        return <Badge className="bg-green-100 text-green-800 border-green-200">Active</Badge>;
+      case 'blocked':
+        return <Badge className="bg-red-100 text-red-800 border-red-200">Blocked</Badge>;
+      case 'deactivated':
+        return <Badge className="bg-gray-100 text-gray-800 border-gray-200">Deactivated</Badge>;
+      default:
+        return <Badge>{status}</Badge>;
+    }
+  };
+  
+  // Function to get status icon
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Clock className="w-5 h-5 text-yellow-500" />;
+      case 'active':
+        return <CheckCircle className="w-5 h-5 text-green-500" />;
+      case 'blocked':
+        return <Shield className="w-5 h-5 text-red-500" />;
+      case 'deactivated':
+        return <UserX className="w-5 h-5 text-gray-500" />;
+      default:
+        return <CheckCircle className="w-5 h-5 text-gray-500" />;
+    }
+  };
+  
+  // Add a timeout to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (isLoading) {
+        setIsLoading(false);
+        setError('Request timed out. Please check your connection and try again.');
+      }
+    }, 15000); // 15 seconds timeout
+    
+    return () => clearTimeout(timeout);
+  }, [isLoading]);
+  
   if (isLoading) {
     return (
       <div className="p-6 flex justify-center items-center min-h-screen">
-        <div className="text-xl font-medium text-gray-700">Loading customers...</div>
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="text-xl font-medium text-gray-700">Loading customers...</div>
+          <p className="text-gray-500 mt-2">This may take a few moments</p>
+        </div>
       </div>
     );
   }
-
+  
   if (error && !isAddVehicleModalOpen) {
     return (
       <div className="p-6 flex justify-center items-center min-h-screen">
-        <div className="text-xl font-medium text-red-600">{error}</div>
+        <div className="text-center max-w-md">
+          <div className="text-2xl text-red-600 mb-4">⚠️ Error</div>
+          <div className="text-xl font-medium text-red-600 mb-4">{error}</div>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Reload Page
+          </button>
+        </div>
       </div>
     );
   }
-
+  
   return (
     <div className="p-6 space-y-6 bg-gray-50 min-h-screen text-black">
       {/* Header */}
@@ -480,7 +1249,7 @@ const CustomerManagement = () => {
           </button>
         </div>
       </div>
-
+      
       {/* Search & Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center space-x-4">
@@ -509,12 +1278,14 @@ const CustomerManagement = () => {
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="all">All Statuses</option>
+            <option value="pending">Pending</option>
             <option value="active">Active</option>
-            <option value="archived">Archived</option>
+            <option value="blocked">Blocked</option>
+            <option value="deactivated">Deactivated</option>
           </select>
         </div>
       </div>
-
+      
       {/* Customer List */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full">
@@ -534,14 +1305,7 @@ const CustomerManagement = () => {
               <tr key={customer.customerId} className="hover:bg-gray-50">
                 <td className="px-6 py-4">
                   <div className="flex items-center">
-                    <img
-                      src={customer.customerImage || 'https://via.placeholder.com/40?text=Customer'}
-                      alt={customer.name}
-                      className="w-10 h-10 rounded-full object-cover mr-3 border"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/40?text=👤';
-                      }}
-                    />
+                   
                     <div>
                       <div className="font-medium text-gray-900">{customer.name}</div>
                       <div className="text-sm text-gray-500">ID: {customer.readableCustomerId}</div>
@@ -577,26 +1341,43 @@ const CustomerManagement = () => {
                   {new Date(customer.registrationDate).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4">
-                  <Badge variant={customer.isArchived ? 'outline' : 'default'}>
-                    {customer.isArchived ? 'Archived' : 'Active'}
-                  </Badge>
+                  {getStatusBadge(customer.status || 'pending')}
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex space-x-2">
                     <button
                       onClick={() => handleViewCustomer(customer)}
                       className="text-blue-600 hover:text-blue-900 p-1 hover:bg-blue-50 rounded"
+                      title="View Customer"
                     >
                       <Eye className="w-4 h-4" />
                     </button>
-                    <button className="text-green-600 hover:text-green-900 p-1 hover:bg-green-50 rounded">
+                    <button 
+                      className="text-green-600 hover:text-green-900 p-1 hover:bg-green-50 rounded"
+                      title="Edit Customer"
+                    >
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleArchiveCustomer(customer.customerId)}
-                      className="text-orange-600 hover:text-orange-900 p-1 hover:bg-orange-50 rounded"
+                      onClick={() => handleToggleCustomerStatus(customer)}
+                      className={`px-3 py-1 rounded-md text-sm font-medium flex items-center ${
+                        customer.status === 'active' 
+                          ? 'bg-gray-100 text-gray-800 hover:bg-gray-200' 
+                          : 'bg-green-100 text-green-800 hover:bg-green-200'
+                      }`}
+                      title={customer.status === 'active' ? 'Deactivate Customer' : 'Activate Customer'}
                     >
-                      <Archive className="w-4 h-4" />
+                      {customer.status === 'active' ? (
+                        <>
+                          <UserX className="w-4 h-4 mr-1" />
+                          Deactivate
+                        </>
+                      ) : (
+                        <>
+                          <UserCheck className="w-4 h-4 mr-1" />
+                          Activate
+                        </>
+                      )}
                     </button>
                   </div>
                 </td>
@@ -605,7 +1386,7 @@ const CustomerManagement = () => {
           </tbody>
         </table>
       </div>
-
+      
       {/* View Customer Modal */}
       <Modal
         isOpen={isViewModalOpen}
@@ -618,16 +1399,18 @@ const CustomerManagement = () => {
             {/* Profile */}
             <div className="flex flex-col md:flex-row gap-6 p-5 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl border border-blue-200">
               <div className="relative">
-                <img
-                  src={selectedCustomer.customerImage || 'https://via.placeholder.com/128?text=Customer'}
+                <SafeImage
+                  srcs={selectedCustomer.customerImages}
                   alt="Profile"
                   className="h-32 w-32 object-cover rounded-full border-4 border-white shadow-lg"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/128?text=👤';
-                  }}
+                  size="large"
                 />
-                <div className="absolute -bottom-2 -right-2 bg-green-500 rounded-full p-2 ring-4 ring-white">
-                  <CheckCircle className="w-5 h-5 text-white" />
+                <div className={`absolute -bottom-2 -right-2 rounded-full p-2 ring-4 ring-white ${
+                  selectedCustomer.status === 'active' ? 'bg-green-500' : 
+                  selectedCustomer.status === 'pending' ? 'bg-yellow-500' :
+                  selectedCustomer.status === 'blocked' ? 'bg-red-500' : 'bg-gray-500'
+                }`}>
+                  {getStatusIcon(selectedCustomer.status || 'pending')}
                 </div>
               </div>
               <div className="text-center md:text-left">
@@ -642,13 +1425,11 @@ const CustomerManagement = () => {
                   <Badge variant={selectedCustomer.customerType === 'company' ? 'default' : 'outline'}>
                     {selectedCustomer.customerType === 'company' ? '🏢 Company' : '👤 Individual'}
                   </Badge>
-                  <Badge variant={selectedCustomer.isArchived ? 'outline' : 'default'}>
-                    {selectedCustomer.isArchived ? 'Archived' : 'Active'}
-                  </Badge>
+                  {getStatusBadge(selectedCustomer.status || 'pending')}
                 </div>
               </div>
             </div>
-
+            
             {/* Contact & Account Info */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
@@ -674,6 +1455,7 @@ const CustomerManagement = () => {
                   )}
                 </div>
               </div>
+              
               <div className="space-y-4">
                 <h4 className="text-lg font-medium text-gray-900">Account Information</h4>
                 <div className="space-y-3">
@@ -681,10 +1463,9 @@ const CustomerManagement = () => {
                     <span className="text-sm text-gray-500">Customer ID:</span>
                     <span className="ml-2 font-mono">{selectedCustomer.readableCustomerId}</span>
                   </div>
-                  
-                  {/* Loyalty Points Section */}
+                  {/* Simplified Loyalty Points - Just a number */}
                   <div className="flex items-center">
-                    <div className="bg-gradient-to-r from-amber-100 to-yellow-100 rounded-lg p-3 flex items-center border border-amber-200">
+                    <div className="bg-amber-100 rounded-lg p-3 flex items-center border border-amber-200">
                       <Award className="w-6 h-6 text-amber-600 mr-2" />
                       <div>
                         <span className="text-sm text-gray-500">Loyalty Points:</span>
@@ -695,53 +1476,6 @@ const CustomerManagement = () => {
                       </div>
                     </div>
                   </div>
-                  
-                  {/* Loyalty Tier */}
-                  {selectedCustomer.loyaltyPoints && (
-                    <div className="mt-2">
-                      <span className="text-sm text-gray-500">Loyalty Tier:</span>
-                      <div className="mt-1">
-                        {selectedCustomer.loyaltyPoints >= 1000 ? (
-                          <Badge className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white">
-                            Platinum Member
-                          </Badge>
-                        ) : selectedCustomer.loyaltyPoints >= 500 ? (
-                          <Badge className="bg-gradient-to-r from-gray-600 to-gray-800 text-white">
-                            Gold Member
-                          </Badge>
-                        ) : selectedCustomer.loyaltyPoints >= 200 ? (
-                          <Badge className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
-                            Silver Member
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-gradient-to-r from-blue-400 to-blue-600 text-white">
-                            Bronze Member
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Progress Bar */}
-                  {selectedCustomer.loyaltyPoints && (
-                    <div className="mt-4">
-                      <div className="flex justify-between text-sm text-gray-500 mb-1">
-                        <span>Progress to next tier</span>
-                        <span>
-                          {selectedCustomer.loyaltyPoints >= 1000 
-                            ? "Max tier reached!" 
-                            : `${selectedCustomer.loyaltyPoints % 200}/200 points`}
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2.5">
-                        <div 
-                          className="bg-gradient-to-r from-amber-400 to-yellow-500 h-2.5 rounded-full" 
-                          style={{ width: `${Math.min(100, (selectedCustomer.loyaltyPoints % 200) / 2)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  )}
-                  
                   {selectedCustomer.companyName && (
                     <div>
                       <span className="text-sm text-gray-500">Company:</span>
@@ -757,14 +1491,14 @@ const CustomerManagement = () => {
                 </div>
               </div>
             </div>
-
+            
             {selectedCustomer.notes && (
               <div>
                 <h4 className="text-lg font-medium text-gray-900 mb-2">Notes</h4>
                 <p className="bg-gray-50 p-3 rounded-lg italic">{selectedCustomer.notes}</p>
               </div>
             )}
-
+            
             {/* Vehicles */}
             <div>
               <h4 className="text-lg font-medium text-gray-900 mb-4">Vehicles</h4>
@@ -778,6 +1512,7 @@ const CustomerManagement = () => {
                   Add Vehicle
                 </button>
               </div>
+              
               {selectedCustomer.vehicles.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {selectedCustomer.vehicles.map((v) => (
@@ -796,24 +1531,15 @@ const CustomerManagement = () => {
                         </div>
                         <div>
                           <span className="text-gray-500">Current Mileage:</span>
-                          <span className="ml-2">{v.current_mileage.toLocaleString()} km</span>
+                          <span className="ml-2">{(v.current_mileage || 0).toLocaleString()} km</span>
                         </div>
                       </div>
                       <div className="mt-4">
-                        {v.imageUrl ? (
-                          <img
-                            src={v.imageUrl}
-                            alt={v.make}
-                            className="h-40 w-full object-cover rounded-lg border"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x200?text=Vehicle+Image';
-                            }}
-                          />
-                        ) : (
-                          <div className="h-40 bg-gray-200 rounded-lg flex items-center justify-center border-dashed border-2 border-gray-400">
-                            <span className="text-gray-500">No Image</span>
-                          </div>
-                        )}
+                        <SafeVehicleImage
+                          srcs={v.vehicleImages}
+                          alt={v.make}
+                          className="h-40 w-full object-cover rounded-lg border"
+                        />
                       </div>
                     </div>
                   ))}
@@ -825,19 +1551,32 @@ const CustomerManagement = () => {
           </div>
         )}
       </Modal>
-
+      
       {/* Add Vehicle Modal */}
       <Modal
         isOpen={isAddVehicleModalOpen}
         onClose={() => {
           setIsAddVehicleModalOpen(false);
           setError(null);
+          setSuccess(null);
         }}
         title={`Add Vehicle - ${selectedCustomer?.name}`}
         size="xl"
       >
         <div className="space-y-6">
-          {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg">{error}</div>}
+          {/* Success Message */}
+          {success && (
+            <div className="bg-green-50 text-green-600 p-3 rounded-lg flex items-center">
+              <CheckCircle className="w-5 h-5 mr-2" />
+              {success}
+            </div>
+          )}
+          
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg whitespace-pre-line">{error}</div>
+          )}
+          
           <div className="bg-blue-50 rounded-lg p-6">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -854,6 +1593,7 @@ const CustomerManagement = () => {
                 Add Vehicle
               </button>
             </div>
+            
             {vehicles.map((vehicle, index) => (
               <div key={index} className="bg-white rounded-lg p-4 mb-4 border">
                 <div className="flex items-center justify-between mb-3">
@@ -869,6 +1609,7 @@ const CustomerManagement = () => {
                     </button>
                   )}
                 </div>
+                
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Make *</label>
@@ -893,6 +1634,7 @@ const CustomerManagement = () => {
                       </select>
                     )}
                   </div>
+                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Model *</label>
                     {loadingModels ? (
@@ -916,6 +1658,7 @@ const CustomerManagement = () => {
                       </select>
                     )}
                   </div>
+                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
                     <input
@@ -928,6 +1671,7 @@ const CustomerManagement = () => {
                       disabled={isSubmitting}
                     />
                   </div>
+                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">License Plate</label>
                     <input
@@ -939,6 +1683,7 @@ const CustomerManagement = () => {
                       disabled={isSubmitting}
                     />
                   </div>
+                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
                     <input
@@ -950,6 +1695,7 @@ const CustomerManagement = () => {
                       disabled={isSubmitting}
                     />
                   </div>
+                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Current Mileage</label>
                     <input
@@ -961,6 +1707,7 @@ const CustomerManagement = () => {
                       disabled={isSubmitting}
                     />
                   </div>
+                  
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">VIN</label>
                     <input
@@ -973,6 +1720,7 @@ const CustomerManagement = () => {
                       disabled={isSubmitting}
                     />
                   </div>
+                  
                   <div className="md:col-span-3">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Image</label>
                     <div className="flex items-center space-x-4">
@@ -1014,17 +1762,29 @@ const CustomerManagement = () => {
               </div>
             ))}
           </div>
+          
           <div className="flex justify-end space-x-3">
             <button
               onClick={() => {
                 setIsAddVehicleModalOpen(false);
                 setError(null);
+                setSuccess(null);
               }}
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               disabled={isSubmitting}
             >
               Cancel
             </button>
+            {error && (
+              <button
+                onClick={handleSubmitVehicles}
+                className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 flex items-center"
+                disabled={isSubmitting}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Retry
+              </button>
+            )}
             <button
               onClick={handleSubmitVehicles}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
@@ -1045,7 +1805,7 @@ const CustomerManagement = () => {
           </div>
         </div>
       </Modal>
-
+      
       {/* Add Customer Modal */}
       <AddCustomerModal 
         isOpen={isAddModalOpen} 

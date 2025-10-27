@@ -181,10 +181,28 @@ function Insurance() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [isFetchingProforma, setIsFetchingProforma] = useState(false);
   
+  // Function to fetch total revenue from API
+  const fetchTotalRevenue = async (): Promise<number> => {
+    try {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/insurance/total-revenue');
+      const data = await response.json();
+      
+      if (data.success) {
+        return data.totalRevenue;
+      } else {
+        console.error('Failed to fetch total revenue:', data.message);
+        return 0;
+      }
+    } catch (error) {
+      console.error('Error fetching total revenue:', error);
+      return 0;
+    }
+  };
+  
   // Function to refresh the converted proformas count
   const refreshConvertedCount = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/insurance/converted-proformas/count');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/insurance/converted-proformas/count');
       const data = await response.json();
       
       if (data.success) {
@@ -208,12 +226,15 @@ function Insurance() {
       
       try {
         // Fetch the list of accepted proformas
-        const listResponse = await fetch('http://localhost:5001/api/insurance/proformas/accepted');
+        const listResponse = await fetch('https://ipasystem.bymsystem.com/api/insurance/proformas/accepted');
         const listData = await listResponse.json();
         
         // Fetch the count of converted proformas
-        const countResponse = await fetch('http://localhost:5001/api/insurance/converted-proformas/count');
+        const countResponse = await fetch('https://ipasystem.bymsystem.com/api/insurance/converted-proformas/count');
         const countData = await countResponse.json();
+        
+        // Fetch total revenue from the new endpoint
+        const totalRevenue = await fetchTotalRevenue();
         
         if (listData.success && countData.success) {
           // Transform API data to match Proforma interface
@@ -236,7 +257,7 @@ function Insurance() {
             conversionRate: 0,
             pendingProformas: 0, // Only accepted proformas are fetched
             acceptedProformas: countData.convertedCount, // Use the count from the API
-            totalRevenue: revenue,
+            totalRevenue: totalRevenue, // Use the value from the new API
             averageValue: avgValue,
             customerSatisfaction: 92 // Default value
           });
@@ -317,7 +338,7 @@ function Insurance() {
     
     try {
       // Fetch the full proforma details with items using proforma_number
-      const response = await fetch(`http://localhost:5001/api/insurance/proformas/${proforma.proforma_number}`);
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/insurance/proformas/${proforma.proforma_number}`);
       const data = await response.json();
       
       if (data.success) {
@@ -616,10 +637,15 @@ function Insurance() {
         
         // Update analytics
         const newConverted = convertedProformas.size + 1;
+        
+        // Refresh the total revenue from the API
+        const updatedTotalRevenue = await fetchTotalRevenue();
+        
         setAnalytics(prev => ({
           ...prev,
           convertedToTickets: newConverted,
-          conversionRate: Math.round((newConverted / proformas.length) * 100)
+          conversionRate: Math.round((newConverted / proformas.length) * 100),
+          totalRevenue: updatedTotalRevenue // Update with fresh data from API
         }));
         
         // Refresh the accepted proformas count from the API
@@ -911,7 +937,7 @@ function Insurance() {
         customerImagePreview={customerImagePreview}
         setCustomerImagePreview={setCustomerImagePreview}
      //   carMakes={carMakes}
-       // loadingModels={loadingModels}
+      //  loadingModels={loadingModels}
         isSubmitting={isSubmitting}
         error={error}
         setError={setError}
@@ -929,10 +955,10 @@ function Insurance() {
         removeImage={removeImage}
         addVehicle={addVehicle}
         removeVehicle={removeVehicle}
-     //   getModelsForMake={getModelsForMake}
-     //   handleGenerateTicket={handleGenerateTicket}
+      ///  getModelsForMake={getModelsForMake}
+      //  handleGenerateTicket={handleGenerateTicket}
         formatCurrency={formatCurrency}
-     //   isLoadingProforma={isFetchingProforma}
+      //  isLoadingProforma={isFetchingProforma}
       />
     </div>
   );

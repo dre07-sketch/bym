@@ -114,7 +114,7 @@ const OrderManagementSystem = () => {
   // Fetch active orders
   const fetchActiveOrders = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/inventory/ordered-parts');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/ordered-parts');
       if (!response.ok) throw new Error('Failed to fetch active orders');
       const data: Order[] = await response.json();
       const normalized = normalizeOrders(data);
@@ -136,7 +136,7 @@ const OrderManagementSystem = () => {
   // Fetch history orders
   const fetchHistoryOrders = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/inventory/order-history');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/order-history');
       if (!response.ok) throw new Error('Failed to fetch history orders');
       const data: Order[] = await response.json();
       const normalized = normalizeOrders(data);
@@ -152,7 +152,7 @@ const OrderManagementSystem = () => {
   // Fetch parts
   const fetchParts = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/active-progress/parts');
+      const response = await fetch('https://ipasystem.bymsystem.com/api/active-progress/parts');
       if (!response.ok) throw new Error('Failed to fetch parts');
       const data: Part[] = await response.json();
       setParts(data);
@@ -166,7 +166,7 @@ const OrderManagementSystem = () => {
   const fetchOutsourcedParts = async (ticketNumbers: string[]) => {
     setLoadingOutsourced(true);
     try {
-      const response = await fetch('http://localhost:5001/api/inventory/outsource-parts-get', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/outsource-parts-get', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticketNumbers }),
@@ -195,7 +195,7 @@ const OrderManagementSystem = () => {
   const fetchOrderOutsourcedParts = async (ticketNumber: string) => {
     setLoadingOrderOutsourced(true);
     try {
-      const response = await fetch('http://localhost:5001/api/inventory/outsource-parts-get', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/inventory/outsource-parts-get', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticketNumbers: [ticketNumber] }),
@@ -346,7 +346,7 @@ const OrderManagementSystem = () => {
     if (!selectedOrder) return;
     
     try {
-      const response = await fetch(`http://localhost:5001/api/inventory/ordered-parts/${partId}/status`, {
+      const response = await fetch(`https://ipasystem.bymsystem.com/api/inventory/ordered-parts/${partId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -440,7 +440,7 @@ const OrderManagementSystem = () => {
         };
       });
 
-      const response = await fetch('http://localhost:5001/api/active-progress/ordered-parts', {
+      const response = await fetch('https://ipasystem.bymsystem.com/api/active-progress/ordered-parts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -457,7 +457,7 @@ const OrderManagementSystem = () => {
       showNotification('Parts ordered successfully');
 
       // Refresh the order
-      const orderResponse = await fetch(`http://localhost:5001/api/service-tickets/${selectedOrder.ticket_id}`);
+      const orderResponse = await fetch(`https://ipasystem.bymsystem.com/api/service-tickets/${selectedOrder.ticket_id}`);
       if (orderResponse.ok) {
         const updatedOrder: Order = await orderResponse.json();
         setSelectedOrder(updatedOrder);
@@ -499,7 +499,7 @@ const OrderManagementSystem = () => {
     try {
       // Send each part individually to match the API
       const requests = outsourcedParts.map(part => 
-        fetch('http://localhost:5001/api/active-progress/outsource', {
+        fetch('https://ipasystem.bymsystem.com/api/active-progress/outsource', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -536,7 +536,7 @@ const OrderManagementSystem = () => {
       showNotification('All outsourced parts submitted successfully');
 
       // Refresh the order
-      const orderResponse = await fetch(`http://localhost:5001/api/service-tickets/${selectedOrder.ticket_id}`);
+      const orderResponse = await fetch(`https://ipasystem.bymsystem.com/api/service-tickets/${selectedOrder.ticket_id}`);
       if (orderResponse.ok) {
         const updatedOrder: Order = await orderResponse.json();
         setSelectedOrder(updatedOrder);

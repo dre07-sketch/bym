@@ -5,7 +5,7 @@ const multer = require('multer');
 const bcrypt = require('bcrypt');
 
 
-const BASE_URL = 'http://localhost:5001';
+const BASE_URL = 'https://ipasystem.bymsystem.com';
 const IMAGE_BASE_URL = `${BASE_URL}`;
 const encode = (path) => encodeURIComponent(path).replace(/%2F/g, '/');
 
@@ -201,6 +201,7 @@ router.get('/fetch', (req, res) => {
       ic.registration_date,
       ic.total_services,
       ic.loyalty_points,
+      ic.status,
       ic.image AS customer_image,
       v.id AS vehicle_id,
       v.make,
@@ -229,6 +230,7 @@ router.get('/fetch', (req, res) => {
       cc.registration_date,
       cc.total_services,
       cc.loyalty_points,
+      cc.status,
       cc.image AS customer_image,
       v.id AS vehicle_id,
       v.make,
@@ -255,10 +257,29 @@ router.get('/fetch', (req, res) => {
 
     for (const row of results) {
       const {
-        customer_id, customerType, name, companyName, email, phone,
-        emergency_contact, address, notes, registration_date, total_services,
-        loyalty_points, customer_image, vehicle_id, make, model, year,
-        license_plate, vin, color, current_mileage, vehicle_image
+        customer_id,
+        customerType,
+        name,
+        companyName,
+        email,
+        phone,
+        emergency_contact,
+        address,
+        notes,
+        registration_date,
+        total_services,
+        loyalty_points,
+        customer_image,
+        status,
+        vehicle_id,
+        make,
+        model,
+        year,
+        license_plate,
+        vin,
+        color,
+        current_mileage,
+        vehicle_image,
       } = row;
 
       if (!grouped[customer_id]) {
@@ -275,8 +296,9 @@ router.get('/fetch', (req, res) => {
           registrationDate: registration_date,
           totalServices: total_services,
           loyaltyPoints: loyalty_points,
+          status, // ✅ include status
           customerImage: customer_image ? `${IMAGE_BASE_URL}/${encode(customer_image)}` : null,
-          vehicles: []
+          vehicles: [],
         };
       }
 
@@ -289,8 +311,8 @@ router.get('/fetch', (req, res) => {
           licensePlate: license_plate,
           vin,
           color,
-          current_mileage,
-          imageUrl: vehicle_image ? `${IMAGE_BASE_URL}/${encode(vehicle_image)}` : null
+          currentMileage: current_mileage,
+          imageUrl: vehicle_image ? `${IMAGE_BASE_URL}/${encode(vehicle_image)}` : null,
         });
       }
     }
@@ -298,6 +320,7 @@ router.get('/fetch', (req, res) => {
     res.json(Object.values(grouped));
   });
 });
+
 
 
 // =============================
@@ -413,5 +436,71 @@ router.get('/car-models', (req, res) => {
     res.json(grouped);
   });
 });
+
+
+
+// POST /api/customers/update-status
+router.post('/update-status', (req, res) => {
+  const { customerId, customerType, status } = req.body;
+
+  if (!customerId || !customerType || !status) {
+    return res.status(400).json({
+      success: false,
+      message: 'customerId, customerType, and status are required',
+    });
+  }
+
+  // Validate allowed statuses
+  const allowedStatuses = ['pending', 'active', 'blocked', 'deactivated'];
+  if (!allowedStatuses.includes(status.toLowerCase())) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid status. Allowed values: ${allowedStatuses.join(', ')}`,
+    });
+  }
+
+  // Determine table
+  const tableName =
+    customerType === 'individual'
+      ? 'individual_customers'
+      : customerType === 'company'
+      ? 'company_customers'
+      : null;
+
+  if (!tableName) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid customerType. Must be "individual" or "company".',
+    });
+  }
+
+  const query = `UPDATE ${tableName} SET status = ? WHERE customer_id = ?`;
+
+  db.query(query, [status, customerId], (err, result) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error while updating status',
+      });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `No customer found with ID ${customerId} in ${tableName}`,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `Customer ${customerId} status updated to "${status}" successfully.`,
+    });
+  });
+});
+
+
+
+
 
 module.exports = router;
