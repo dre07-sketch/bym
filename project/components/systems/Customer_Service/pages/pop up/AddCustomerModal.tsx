@@ -18,7 +18,6 @@ interface Vehicle {
   imagePreview: string | null;
 }
 
-// Type for car model data
 interface CarModel {
   model: string;
   serviceInterval: number;
@@ -26,11 +25,11 @@ interface CarModel {
 
 const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) => {
   const [customerData, setCustomerData] = useState({
-    customerType: 'individual',
+    customerType: 'individual' as 'individual' | 'company',
     name: '',
     email: '',
     phone: '',
-    password: '', // Added password field
+    password: '',
     address: '',
     emergencyContact: '',
     notes: '',
@@ -53,11 +52,9 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
     },
   ]);
 
-  // Customer image state
   const [customerImage, setCustomerImage] = useState<File | null>(null);
   const [customerImagePreview, setCustomerImagePreview] = useState<string | null>(null);
 
-  // Car models data
   const [carModelsByMake, setCarModelsByMake] = useState<Record<string, CarModel[]>>({});
   const [carMakes, setCarMakes] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(true);
@@ -67,7 +64,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
   const [isSuccess, setIsSuccess] = useState(false);
   const [createdCustomerId, setCreatedCustomerId] = useState('');
 
-  // Fetch car models on mount
+  // ✅ FIXED: No trailing spaces in URL
   useEffect(() => {
     const fetchCarModels = async () => {
       try {
@@ -89,7 +86,6 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
     }
   }, [isOpen]);
 
-  // Helper to get models for a given make
   const getModelsForMake = (make: string): CarModel[] => {
     return carModelsByMake[make] || [];
   };
@@ -108,7 +104,6 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
     );
   };
 
-  // Customer image upload
   const handleCustomerImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -130,7 +125,6 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
     setCustomerImagePreview(null);
   };
 
-  // Vehicle image upload
   const handleImageUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -199,7 +193,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
       name: '',
       email: '',
       phone: '',
-      password: '', // Reset password field
+      password: '',
       address: '',
       emergencyContact: '',
       notes: '',
@@ -226,8 +220,6 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
     setError('');
     setIsSuccess(false);
     setCreatedCustomerId('');
-    setCarModelsByMake({});
-    setCarMakes([]);
   };
 
   const handleClose = () => {
@@ -242,26 +234,23 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
     setIsSuccess(false);
 
     try {
-      // Validation
       if (!customerData.name.trim()) throw new Error('Name is required');
       if (!customerData.email.trim()) throw new Error('Email is required');
       if (!customerData.phone.trim()) throw new Error('Phone number is required');
-      if (!customerData.password.trim()) throw new Error('Password is required'); // Added password validation
+      if (!customerData.password.trim()) throw new Error('Password is required');
       if (customerData.customerType === 'company' && !customerData.companyName.trim())
         throw new Error('Company name is required for business customers');
       if (vehicles.length === 0) throw new Error('At least one vehicle is required');
       if (vehicles.some((v) => !v.make.trim() || !v.model.trim()))
         throw new Error('Make and Model are required for all vehicles');
 
-      // Prepare FormData
       const formData = new FormData();
 
-      // Add customer data
       formData.append('customerType', customerData.customerType);
       formData.append('name', customerData.name);
       formData.append('email', customerData.email);
       formData.append('phone', customerData.phone);
-      formData.append('password', customerData.password); // Added password to form data
+      formData.append('password', customerData.password);
       if (customerData.address) formData.append('address', customerData.address);
       if (customerData.emergencyContact)
         formData.append('emergencyContact', customerData.emergencyContact);
@@ -270,7 +259,6 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
       formData.append('registrationDate', customerData.registrationDate);
       formData.append('totalServices', customerData.totalServices.toString());
 
-      // Append images: customer first, then vehicles
       if (customerImage) {
         formData.append('images', customerImage);
       }
@@ -281,7 +269,6 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
         }
       });
 
-      // Add vehicles data as JSON string
       const vehiclesData = vehicles.map((vehicle) => ({
         make: vehicle.make,
         model: vehicle.model,
@@ -293,27 +280,33 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
       }));
       formData.append('vehicles', JSON.stringify(vehiclesData));
 
-      // Submit
+      // ✅ CRITICAL: NO TRAILING SPACES
       const response = await fetch('https://ipasystem.bymsystem.com/api/customers', {
         method: 'POST',
         body: formData,
       });
 
       const data = await response.json();
+
+      // 🔍 Optional: debug log
+      // console.log('API response:', data);
+
       if (!response.ok) {
         throw new Error(data.message || 'Failed to register customer');
       }
 
+      // ✅ Handle success — use fallback if customer_id missing
       setIsSuccess(true);
-      setCreatedCustomerId(data.customer_id);
+      setCreatedCustomerId(data.customer_id || 'N/A');
 
-      // Reset and close after 3 seconds
       setTimeout(() => {
         resetForm();
         onClose();
       }, 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      // Improved error message
+      const message = err instanceof Error ? err.message : 'Registration failed. Please try again.';
+      setError(message);
       console.error('Registration error:', err);
     } finally {
       setIsSubmitting(false);
@@ -325,10 +318,8 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        {/* Backdrop */}
         <div className="fixed inset-0 transition-opacity bg-gray-900 bg-opacity-50" onClick={onClose}></div>
 
-        {/* Modal */}
         <div className="inline-block w-full max-w-4xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
@@ -424,7 +415,6 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
                   </div>
                 </div>
 
-                {/* Form Fields */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -519,7 +509,6 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
                     />
                   </div>
 
-                  {/* Password Field */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
                       <Lock className="w-4 h-4 mr-1" />
@@ -619,7 +608,6 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-black">
-                        {/* Make Dropdown */}
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Make *</label>
                           <select
@@ -638,7 +626,6 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
                           </select>
                         </div>
 
-                        {/* Model Dropdown */}
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Model *</label>
                           <select
@@ -696,7 +683,7 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">current mileage</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Current Mileage</label>
                           <input
                             type="number"
                             value={vehicle.current_mileage || ''}
@@ -771,7 +758,6 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({ isOpen, onClose }) 
                 )}
               </div>
 
-              {/* Submit Buttons */}
               <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"

@@ -802,21 +802,7 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                 </div>
 
                 {/* Notifications */}
-                <div className="relative">
-                  <Button 
-                    onClick={() => setIsNotificationOpen(!isNotificationOpen)}
-                    variant="ghost" 
-                    size="icon" 
-                    className="rounded-xl text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-300 transform hover:scale-105 relative"
-                  >
-                    <Bell className="w-5 h-5 text-red-400" />
-                    {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-xs px-1 min-w-5 h-5 flex items-center justify-center animate-pulse">
-                        {unreadCount}
-                      </span>
-                    )}
-                  </Button>
-                </div>
+                
 
                 {/* User Menu */}
                 <div className="relative">

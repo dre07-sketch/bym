@@ -287,8 +287,9 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose }) => {
     
     if (formData.customerType === 'company') {
       // For companies, search by company name and contact person name
+      // Fixed: Added null checks before calling toLowerCase()
       return (
-        customer.name.toLowerCase().includes(searchTerm) ||
+        (customer.name && customer.name.toLowerCase().includes(searchTerm)) ||
         (customer.personal_name && customer.personal_name.toLowerCase().includes(searchTerm))
       );
     } else {

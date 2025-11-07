@@ -1001,12 +1001,12 @@ const Performa: React.FC = () => {
                     
                     <div className="px-4 py-3 bg-slate-50 flex justify-end space-x-2 border-t border-slate-100">
                       <div className="relative">
-                        <button 
+                        {/* <button 
                           onClick={() => setOpenStatusDropdown(openStatusDropdown === p.id ? null : p.id)}
                           className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all duration-300 group shadow-sm"
                         >
                           <MoreVertical className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
-                        </button>
+                        </button> */}
                         
                         {openStatusDropdown === p.id && (
                           <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-slate-200 z-10 overflow-hidden">
@@ -1046,13 +1046,13 @@ const Performa: React.FC = () => {
                         <Eye className="w-5 h-5 group-hover:scale-110 transition-transform" />
                       </button>
                       
-                      <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 transition-all duration-300 group shadow-sm">
+                      {/* <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 transition-all duration-300 group shadow-sm">
                         <Edit className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                      </button>
+                      </button> */}
                       
-                      <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 transition-all duration-300 group shadow-sm">
+                      {/* <button className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 transition-all duration-300 group shadow-sm">
                         <Trash2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                      </button>
+                      </button> */}
                     </div>
                   </div>
                 );

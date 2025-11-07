@@ -6,6 +6,7 @@ import {
 import Modal from '../../../../ui/Modal';
 import { Badge } from '../../../../ui/badge';
 import AddCustomerModal from '../pop up/AddCustomerModal';
+import EditCustomerModal from '../pop up/EditCustomerModal';
 
 // === Constants ===
 const BASE_URLS = [
@@ -482,6 +483,29 @@ const CustomerManagement = () => {
   const [carMakes, setCarMakes] = useState<string[]>([]);
   const [carModelsByMake, setCarModelsByMake] = useState<Record<string, { model: string; serviceInterval: number }[]>>({});
   const [loadingModels, setLoadingModels] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+
+// Add this handler function
+const handleEditCustomer = (customer: Customer) => {
+  setEditingCustomer(customer);
+  setIsEditModalOpen(true);
+};
+
+// Add this function to handle saving the edited customer
+const handleSaveCustomer = (updatedCustomer: Customer) => {
+  setCustomers(prevCustomers =>
+    prevCustomers.map(customer =>
+      customer.customerId === updatedCustomer.customerId ? updatedCustomer : customer
+    )
+  );
+  
+  // If the customer being viewed is the one being edited, update that too
+  if (selectedCustomer && selectedCustomer.customerId === updatedCustomer.customerId) {
+    setSelectedCustomer(updatedCustomer);
+  }
+};
+
   
   // Helper function to check if vehicles were added
   const checkIfVehiclesAdded = async (selectedCustomer: Customer): Promise<boolean> => {
@@ -1352,12 +1376,15 @@ const CustomerManagement = () => {
                     >
                       <Eye className="w-4 h-4" />
                     </button>
-                    <button 
-                      className="text-green-600 hover:text-green-900 p-1 hover:bg-green-50 rounded"
-                      title="Edit Customer"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
+                    <button
+                    onClick={() => handleEditCustomer(customer)}
+                    className="text-blue-600 hover:text-blue-900 p-1 hover:bg-blue-50 rounded"
+                    title="Edit Customer"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+
+
                     <button
                       onClick={() => handleToggleCustomerStatus(customer)}
                       className={`px-3 py-1 rounded-md text-sm font-medium flex items-center ${
@@ -1811,6 +1838,13 @@ const CustomerManagement = () => {
         isOpen={isAddModalOpen} 
         onClose={() => setIsAddModalOpen(false)} 
       />
+
+      <EditCustomerModal
+  isOpen={isEditModalOpen}
+  onClose={() => setIsEditModalOpen(false)}
+  customer={editingCustomer}
+  onSave={handleSaveCustomer}
+/>
     </div>
   );
 };

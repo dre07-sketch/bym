@@ -36,7 +36,7 @@ const CreateAccount = () => {
   'Stock Manager',    // → maps to "stock-manager"
   'tool-manager',    // → maps to "tool-manager"
   'Inspection',       // → maps to "inspector"
-        // → maps to "finance"
+  'Mechanic',     // → maps to "finance"
   'Reception',        // → maps to "customer-service"
   'Communication',    // → maps to "communication"
   'Marketing',        // → maps to "marketing"

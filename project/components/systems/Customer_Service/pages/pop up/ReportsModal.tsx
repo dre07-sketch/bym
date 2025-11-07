@@ -16,13 +16,18 @@ interface RevenueDataItem {
   performance: number;
 }
 
+interface RevenueResponse {
+  totalRevenue: number;
+  data: RevenueDataItem[];
+}
+
 const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
   const [selectedReport, setSelectedReport] = useState('overview');
   const [dateRange, setDateRange] = useState('last30days');
   const [loading, setLoading] = useState(false);
   const [overviewData, setOverviewData] = useState<any>(null);
   const [ticketAnalytics, setTicketAnalytics] = useState<any>(null);
-  const [revenueData, setRevenueData] = useState<RevenueDataItem[]>([]);
+  const [revenueData, setRevenueData] = useState<RevenueResponse | null>(null);
   const [customerAnalytics, setCustomerAnalytics] = useState<any>(null);
 
   const reportTypes = [
@@ -32,28 +37,51 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
     { id: 'customer', name: 'Customer Analytics', icon: Users },
   ];
 
-  // Status colors for ticket distribution - updated with comprehensive mapping
+  // Status colors for ticket distribution
   const colorMap: Record<string, string> = {
-    'pending': '#6b7280',               // Gray
-    'assigned': '#8b5cf6',              // Purple
-    'in progress': '#f59e0b',           // Amber
-    'ready for inspection': '#06b6d4',  // Cyan
-    'inspection': '#3b82f6',            // Blue
-    'successful inspection': '#10b981', // Emerald
-    'inspection failed': '#dda15e',     // Red
-    'awaiting bill': '#f97316',         // Orange
-    'awaiting survey': '#14b8a6',       // Teal
-    'awaiting salvage form': '#eab308', // Yellow
-    'payment requested': '#d946ef',     // Pink-Purple
-    'request payment': '#ec4899',       // Pink
-    'completed': '#22c55e',             // Green
-    'other': '#9333ea'                  // Fallback
+    'pending': '#6b7280',
+    'assigned': '#8b5cf6',
+    'in progress': '#f59e0b',
+    'ready for inspection': '#06b6d4',
+    'inspection': '#3b82f6',
+    'successful inspection': '#10b981',
+    'inspection failed': '#dda15e',
+    'awaiting bill': '#f97316',
+    'awaiting survey': '#14b8a6',
+    'awaiting salvage form': '#eab308',
+    'payment requested': '#d946ef',
+    'request payment': '#ec4899',
+    'completed': '#22c55e',
+    'other': '#9333ea'
   };
 
   // Helper function to get status color
   const getStatusColor = (status: string) => {
     const normalized = status.toLowerCase();
     return colorMap[normalized] || colorMap.other;
+  };
+
+  // Format currency with ETB prefix and proper decimal places
+  const formatCurrency = (value: number | string | undefined | null) => {
+    if (value === undefined || value === null) return 'ETB 0.00';
+    
+    // Convert to number if it's a string
+    let numValue: number;
+    if (typeof value === 'string') {
+      // Remove any non-numeric characters except the decimal point
+      const cleanedValue = value.replace(/[^\d.-]/g, '');
+      numValue = parseFloat(cleanedValue);
+    } else {
+      numValue = value;
+    }
+    
+    // Check if it's a valid number
+    if (isNaN(numValue)) {
+      console.error('Invalid currency value:', value);
+      return 'ETB 0.00';
+    }
+    
+    return `ETB ${numValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   // Fetch report data based on selected report type
@@ -78,7 +106,8 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
           case 'revenue':
             // Pass dateRange to the API for dynamic data
             response = await fetch(`https://ipasystem.bymsystem.com/api/ticket-stats/reports/revenue?dateRange=${dateRange}`);
-            const revenue = await response.json();
+            const revenue: RevenueResponse = await response.json();
+            console.log('Revenue data received:', revenue); // Debug log
             setRevenueData(revenue);
             break;
           case 'customer':
@@ -95,7 +124,7 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
     };
 
     fetchData();
-  }, [selectedReport, isOpen, dateRange]); // Added dateRange to dependency array
+  }, [selectedReport, isOpen, dateRange]);
 
   const handleExport = (reportType: string) => {
     window.location.href = `/api/reports/export/${reportType}`;
@@ -111,15 +140,9 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
 
   // Enhanced revenue data processing
   const getEnhancedRevenueData = (): RevenueDataItem[] => {
-    if (!revenueData || revenueData.length === 0) return [];
+    if (!revenueData || !revenueData.data || revenueData.data.length === 0) return [];
     
-    // Process revenue data based on date range
-    return revenueData.map((item: any) => ({
-      ...item,
-      target: item.revenue ? Math.round(item.revenue * 1.1) : 0, // 10% growth target
-      variance: item.revenue ? Math.round(item.revenue * 0.1) : 0, // 10% variance
-      performance: item.revenue && item.target ? (item.revenue / item.target) * 100 : 0
-    }));
+    return revenueData.data;
   };
 
   const enhancedRevenueData = getEnhancedRevenueData();
@@ -229,7 +252,9 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="text-sm text-green-600">Revenue</p>
-                              <p className="text-2xl font-bold text-green-900">ETB {overviewData.revenue?.toLocaleString()}</p>
+                              <p className="text-2xl font-bold text-green-900">
+                                {formatCurrency(overviewData.revenue)}
+                              </p>
                             </div>
                             <DollarSign className="w-8 h-8 text-green-600" />
                           </div>
@@ -307,7 +332,7 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
                         <div className="bg-green-50 rounded-lg p-4">
                           <p className="text-sm text-green-600">Total Revenue</p>
                           <p className="text-2xl font-bold text-green-900">
-                            ETB {enhancedRevenueData.reduce((sum: number, item: RevenueDataItem) => sum + (item.revenue || 0), 0).toLocaleString()}
+                            {formatCurrency(revenueData.totalRevenue)}
                           </p>
                         </div>
                         <div className="bg-blue-50 rounded-lg p-4">
@@ -347,7 +372,7 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
                             <Tooltip 
                               formatter={(value, name) => {
                                 if (name === 'revenue' || name === 'target') {
-                                  return [`$${value}`, name === 'revenue' ? 'Actual Revenue' : 'Target'];
+                                  return [formatCurrency(Number(value)), name === 'revenue' ? 'Actual Revenue' : 'Target'];
                                 }
                                 return [value, name];
                               }}
@@ -375,8 +400,12 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose }) => {
                               {enhancedRevenueData.map((item: RevenueDataItem, index: number) => (
                                 <tr key={index}>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.month}</td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.revenue?.toLocaleString()}</td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.target?.toLocaleString()}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {formatCurrency(item.revenue)}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {formatCurrency(item.target)}
+                                  </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex items-center">
                                       <div className="h-2 w-32 bg-gray-200 rounded-full overflow-hidden">
