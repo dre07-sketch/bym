@@ -1,15 +1,111 @@
 import { useState, useEffect } from 'react';
 
-interface ProformaItem {
+// Update the interfaces to match the new API response
+interface DisassembledPart {
   id: number;
-  proforma_id: number;
-  description: string;
-  size: string;
-  quantity: number;
-  unit_price: number | string;
-  amount: number | string;
+  ticket_number: string;
+  part_name: string;
+  part_condition: string; // Changed from 'condition'
+  status: string;
+  notes: string | null;
+  logged_at: string;
+  reassembly_verified: string | null;
+}
+
+interface ProgressLog {
+  id: number;
+  ticket_number: string;
+  log_date: string; // Changed from 'date'
+  log_time: string; // Changed from 'time'
+  status: string;
+  description: string; // Changed from 'notes'
+  created_at: string;
+}
+
+interface Inspection {
+  id: number;
+  ticket_number: string;
+  main_issue_resolved: string;
+  reassembly_verified: string;
+  general_condition: string;
+  notes: string;
+  inspection_date: string;
+  inspection_status: string;
   created_at: string;
   updated_at: string;
+  check_oil_leaks: string | null;
+  check_engine_air_filter_oil_coolant_level: string | null;
+  check_brake_fluid_levels: string | null;
+  check_gluten_fluid_levels: string | null;
+  check_battery_timing_belt: string | null;
+  check_tire: string | null;
+  check_tire_pressure_rotation: string | null;
+  check_lights_wiper_horn: string | null;
+  check_door_locks_central_locks: string | null;
+  check_customer_work_order_reception_book: string | null;
+}
+
+interface OutsourceMechanic {
+  id: number;
+  ticket_number: string;
+  mechanic_name: string;
+  phone: string; // New field
+  payment: number | string; // New field
+  payment_method: string; // New field
+  work_done: string; // New field
+  notes: string | null;
+  created_at: string;
+}
+
+interface OutsourceStock {
+  auto_id: number; // New field
+  id: number;
+  ticket_number: string;
+  name: string;
+  category: string; // New field
+  sku: string; // New field
+  price: number | string;
+  quantity: number;
+  source_shop: string; // New field
+  status: string;
+  requested_at: string;
+  received_at: string | null; // New field
+  notes: string | null;
+  updated_at: string;
+}
+
+interface OrderedPart {
+  id: number;
+  ticket_number: string;
+  item_id: number; // New field
+  name: string;
+  category: string; // New field
+  sku: string; // New field
+  price: number | string;
+  quantity: number;
+  status: string;
+  ordered_at: string;
+}
+
+interface Tool {
+  id: number;
+  tool_id: number; // New field
+  tool_name: string; // New field
+  ticket_number: string;
+  assigned_quantity: number; // New field
+  assigned_by: string; // New field
+  status: string;
+  assigned_at: string;
+  returned_at: string | null; // New field
+  updated_at: string;
+}
+
+interface MechanicAssignment {
+  id: number;
+  ticket_number: string;
+  mechanic_id: number; // New field
+  mechanic_name: string;
+  assigned_at: string;
 }
 
 interface Bill {
@@ -38,67 +134,16 @@ interface Bill {
   proforma_items?: ProformaItem[];
 }
 
-interface DisassembledPart {
+interface ProformaItem {
   id: number;
-  ticket_number: string;
-  part_name: string;
-  condition: string;
-  status: string;
-  notes: string | null;
-  logged_at: string;
-  reassembly_verified: string | null;
-}
-
-interface OutsourceMechanic {
-  id: number;
-  ticket_number: string;
-  mechanic_name: string;
-  company_name: string;
-  task: string;
-  cost: number | string;
-  status: string;
-  created_at: string;
-}
-
-interface OrderedPart {
-  id: number;
-  ticket_number: string;
-  part_name: string;
+  proforma_id: number;
+  description: string;
+  size: string;
   quantity: number;
-  cost: number | string;
-  supplier: string;
-  ordered_at: string;
-}
-
-interface Inspection {
-  id: number;
-  ticket_number: string;
-  main_issue_resolved: string;
-  reassembly_verified: string;
-  general_condition: string;
-  notes: string;
-  inspection_date: string;
-  inspection_status: string;
+  unit_price: number | string;
+  amount: number | string;
   created_at: string;
   updated_at: string;
-  check_oil_leaks: string | null;
-  check_engine_air_filter_oil_coolant_level: string | null;
-  check_brake_fluid_levels: string | null;
-  check_gluten_fluid_levels: string | null;
-  check_battery_timing_belt: string | null;
-  check_tire: string | null;
-  check_tire_pressure_rotation: string | null;
-  check_lights_wiper_horn: string | null;
-  check_door_locks_central_locks: string | null;
-  check_customer_work_order_reception_book: string | null;
-}
-
-interface ProgressLog {
-  id: number;
-  ticket_number: string;
-  action: string;
-  notes: string;
-  created_at: string;
 }
 
 interface Insurance {
@@ -110,7 +155,7 @@ interface Insurance {
   owner_name: string;
   owner_phone: string;
   owner_email: string;
-  description: string;
+  insurance_description: string; // Changed from 'description'
   created_at: string;
   updated_at: string;
 }
@@ -131,17 +176,20 @@ interface Ticket {
   created_at: string;
   updated_at: string;
   disassembled_parts: DisassembledPart[];
-  outsource_mechanics: OutsourceMechanic[];
-  ordered_parts: OrderedPart[];
-  outsource_stock: any[];
-  inspections: Inspection[];
   progress_logs: ProgressLog[];
+  inspections: Inspection[];
+  outsource_mechanics: OutsourceMechanic[];
+  outsource_stock: OutsourceStock[];
+  ordered_parts: OrderedPart[];
+  tools: Tool[];
+  mechanic_assignments: MechanicAssignment[];
   bills: Bill[];
   insurance: Insurance | null;
 }
 
 const CompletedCars = () => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [filteredTickets, setFilteredTickets] = useState<Ticket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
@@ -149,6 +197,10 @@ const CompletedCars = () => {
   const [billLoading, setBillLoading] = useState(false);
   const [billDetails, setBillDetails] = useState<{bill: Bill, items: ProformaItem[]} | null>(null);
   const [billFetchedForTicket, setBillFetchedForTicket] = useState<string | null>(null);
+  
+  // Filter states
+  const [nameFilter, setNameFilter] = useState('');
+  const [ticketFilter, setTicketFilter] = useState('');
 
   // Fetch completed tickets
   useEffect(() => {
@@ -160,7 +212,24 @@ const CompletedCars = () => {
           throw new Error('Failed to fetch completed tickets');
         }
         const data = await response.json();
-        setTickets(data);
+        
+        // Ensure all arrays are initialized
+        const processedData = data.map(ticket => ({
+          ...ticket,
+          disassembled_parts: ticket.disassembled_parts || [],
+          progress_logs: ticket.progress_logs || [],
+          inspections: ticket.inspections || [],
+          outsource_mechanics: ticket.outsource_mechanics || [],
+          outsource_stock: ticket.outsource_stock || [],
+          ordered_parts: ticket.ordered_parts || [],
+          tools: ticket.tools || [],
+          mechanic_assignments: ticket.mechanic_assignments || [],
+          bills: ticket.bills || [],
+          insurance: ticket.insurance || null
+        }));
+        
+        setTickets(processedData);
+        setFilteredTickets(processedData); // Initialize filtered tickets with all tickets
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
       } finally {
@@ -170,6 +239,27 @@ const CompletedCars = () => {
 
     fetchCompletedTickets();
   }, []);
+
+  // Apply filters when tickets or filter values change
+  useEffect(() => {
+    let result = tickets;
+    
+    if (nameFilter) {
+      const lowerNameFilter = nameFilter.toLowerCase();
+      result = result.filter(ticket => 
+        ticket.customer_name.toLowerCase().includes(lowerNameFilter)
+      );
+    }
+    
+    if (ticketFilter) {
+      const lowerTicketFilter = ticketFilter.toLowerCase();
+      result = result.filter(ticket => 
+        ticket.ticket_number.toLowerCase().includes(lowerTicketFilter)
+      );
+    }
+    
+    setFilteredTickets(result);
+  }, [tickets, nameFilter, ticketFilter]);
 
   // Reset bill details and active tab when selected ticket changes
   useEffect(() => {
@@ -213,11 +303,11 @@ const CompletedCars = () => {
   // Calculate total cost for a ticket
   const calculateTotalCost = (ticket: Ticket): number => {
     const partsCost = ticket.ordered_parts.reduce((sum, part) => {
-      const cost = typeof part.cost === 'string' ? parseFloat(part.cost) : part.cost;
+      const cost = typeof part.price === 'string' ? parseFloat(part.price) : part.price;
       return sum + (cost * part.quantity);
     }, 0);
     const mechanicsCost = ticket.outsource_mechanics.reduce((sum, mechanic) => {
-      const cost = typeof mechanic.cost === 'string' ? parseFloat(mechanic.cost) : mechanic.cost;
+      const cost = typeof mechanic.payment === 'string' ? parseFloat(mechanic.payment) : mechanic.payment;
       return sum + cost;
     }, 0);
     return partsCost + mechanicsCost;
@@ -309,6 +399,54 @@ const CompletedCars = () => {
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-800 mb-6">Completed Cars</h1>
         
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow p-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="nameFilter" className="block text-sm font-medium text-gray-700 mb-1">
+                Filter by Customer Name
+              </label>
+              <input
+                type="text"
+                id="nameFilter"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Enter customer name..."
+                value={nameFilter}
+                onChange={(e) => setNameFilter(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="ticketFilter" className="block text-sm font-medium text-gray-700 mb-1">
+                Filter by Ticket Number
+              </label>
+              <input
+                type="text"
+                id="ticketFilter"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Enter ticket number..."
+                value={ticketFilter}
+                onChange={(e) => setTicketFilter(e.target.value)}
+              />
+            </div>
+          </div>
+          {(nameFilter || ticketFilter) && (
+            <div className="mt-3 flex justify-between items-center">
+              <span className="text-sm text-gray-600">
+                Showing {filteredTickets.length} of {tickets.length} tickets
+              </span>
+              <button
+                onClick={() => {
+                  setNameFilter('');
+                  setTicketFilter('');
+                }}
+                className="text-sm text-indigo-600 hover:text-indigo-800"
+              >
+                Clear Filters
+              </button>
+            </div>
+          )}
+        </div>
+        
         {/* Table of completed tickets */}
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
@@ -323,39 +461,49 @@ const CompletedCars = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {tickets.map((ticket) => (
-                <tr key={ticket.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{ticket.ticket_number}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{ticket.vehicle_info}</div>
-                    <div className="text-sm text-gray-500">{ticket.license_plate}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{ticket.customer_name}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {/* Use the final_total from the first bill if available */}
-                    {ticket.bills.length > 0 
-                      ? formatCurrency(ticket.bills[0].final_total)
-                      : formatCurrency(calculateTotalCost(ticket))}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                      {ticket.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => setSelectedTicket(ticket)}
-                      className="text-indigo-600 hover:text-indigo-900"
-                    >
-                      View
-                    </button>
+              {filteredTickets.length > 0 ? (
+                filteredTickets.map((ticket) => (
+                  <tr key={ticket.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{ticket.ticket_number}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{ticket.vehicle_info}</div>
+                      <div className="text-sm text-gray-500">{ticket.license_plate}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{ticket.customer_name}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {/* Use the final_total from the first bill if available */}
+                      {ticket.bills && ticket.bills.length > 0 
+                        ? formatCurrency(ticket.bills[0].final_total)
+                        : formatCurrency(calculateTotalCost(ticket))}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                        {ticket.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => setSelectedTicket(ticket)}
+                        className="text-indigo-600 hover:text-indigo-900"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                    {tickets.length === 0 
+                      ? "No completed tickets found." 
+                      : "No tickets match your filters. Try adjusting your search criteria."}
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -383,7 +531,7 @@ const CompletedCars = () => {
                 {/* Tabs */}
                 <div className="mt-6 border-b border-gray-200">
                   <nav className="-mb-px flex space-x-8">
-                    {['overview', 'disassembled', 'parts', 'mechanics', 'bills', 'inspections', 'logs', ...(selectedTicket.type === 'insurance' ? ['insurance'] : [])].map((tab) => (
+                    {['overview', 'disassembled', 'parts', 'mechanics', 'tools', 'outsourceStock', 'bills', 'inspections', 'logs', ...(selectedTicket.type === 'insurance' ? ['insurance'] : [])].map((tab) => (
                       <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
@@ -391,7 +539,7 @@ const CompletedCars = () => {
                           ? 'border-indigo-500 text-indigo-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
                       >
-                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        {tab === 'outsourceStock' ? 'Outsource Stock' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                       </button>
                     ))}
                   </nav>
@@ -439,7 +587,7 @@ const CompletedCars = () => {
                   {activeTab === 'disassembled' && (
                     <div>
                       <h3 className="text-lg font-medium text-gray-900 mb-4">Disassembled Parts</h3>
-                      {selectedTicket.disassembled_parts.length > 0 ? (
+                      {selectedTicket.disassembled_parts && selectedTicket.disassembled_parts.length > 0 ? (
                         <div className="bg-white shadow overflow-hidden sm:rounded-lg">
                           <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
@@ -455,7 +603,7 @@ const CompletedCars = () => {
                               {selectedTicket.disassembled_parts.map((part) => (
                                 <tr key={part.id}>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{part.part_name}</td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.condition}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.part_condition}</td>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                       part.status === 'returned' 
@@ -487,25 +635,25 @@ const CompletedCars = () => {
                   {activeTab === 'parts' && (
                     <div>
                       <h3 className="text-lg font-medium text-gray-900 mb-4">Ordered Parts</h3>
-                      {selectedTicket.ordered_parts.length > 0 ? (
+                      {selectedTicket.ordered_parts && selectedTicket.ordered_parts.length > 0 ? (
                         <div className="bg-white shadow overflow-hidden sm:rounded-lg">
                           <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                               <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part Name</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ordered Date</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PART NAME</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QUANTITY</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">COST</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SUPPLIER</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ORDERED DATE</th>
                               </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                               {selectedTicket.ordered_parts.map((part) => (
                                 <tr key={part.id}>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{part.part_name}</td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.quantity}</td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(part.cost)}</td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.supplier}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{part.name || 'N/A'}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatQuantity(part.quantity)}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(part.price)}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.category || 'N/A'}</td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(part.ordered_at)}</td>
                                 </tr>
                               ))}
@@ -523,30 +671,26 @@ const CompletedCars = () => {
                   {activeTab === 'mechanics' && (
                     <div>
                       <h3 className="text-lg font-medium text-gray-900 mb-4">Outsource Mechanics</h3>
-                      {selectedTicket.outsource_mechanics.length > 0 ? (
+                      {selectedTicket.outsource_mechanics && selectedTicket.outsource_mechanics.length > 0 ? (
                         <div className="bg-white shadow overflow-hidden sm:rounded-lg">
                           <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                               <tr>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mechanic</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Work Done</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Method</th>
                               </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                               {selectedTicket.outsource_mechanics.map((mechanic) => (
                                 <tr key={mechanic.id}>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{mechanic.mechanic_name}</td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{mechanic.company_name}</td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{mechanic.task}</td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(mechanic.cost)}</td>
-                                  <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                      {mechanic.status}
-                                    </span>
-                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{mechanic.phone}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{mechanic.work_done}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(mechanic.payment)}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{mechanic.payment_method}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -555,6 +699,104 @@ const CompletedCars = () => {
                       ) : (
                         <div className="bg-gray-50 p-8 text-center rounded-lg">
                           <p className="text-gray-500">No outsource mechanics assigned.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === 'tools' && (
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-4">Tools</h3>
+                      {selectedTicket.tools && selectedTicket.tools.length > 0 ? (
+                        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tool Name</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Quantity</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned By</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned At</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Returned At</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {selectedTicket.tools.map((tool) => (
+                                <tr key={tool.id}>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{tool.tool_name}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tool.assigned_quantity}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tool.assigned_by}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                      tool.status === 'returned' 
+                                        ? 'bg-green-100 text-green-800' 
+                                        : 'bg-yellow-100 text-yellow-800'
+                                    }`}>
+                                      {tool.status}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(tool.assigned_at)}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tool.returned_at ? formatDate(tool.returned_at) : 'N/A'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="bg-gray-50 p-8 text-center rounded-lg">
+                          <p className="text-gray-500">No tools assigned.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === 'outsourceStock' && (
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-4">Outsource Stock</h3>
+                      {selectedTicket.outsource_stock && selectedTicket.outsource_stock.length > 0 ? (
+                        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source Shop</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requested At</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Received At</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {selectedTicket.outsource_stock.map((stock) => (
+                                <tr key={stock.auto_id}>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{stock.name}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stock.category}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stock.sku}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(stock.price)}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stock.quantity}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stock.source_shop}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                      stock.status === 'received' 
+                                        ? 'bg-green-100 text-green-800' 
+                                        : 'bg-yellow-100 text-yellow-800'
+                                    }`}>
+                                      {stock.status}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(stock.requested_at)}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stock.received_at ? formatDate(stock.received_at) : 'N/A'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="bg-gray-50 p-8 text-center rounded-lg">
+                          <p className="text-gray-500">No outsource stock records.</p>
                         </div>
                       )}
                     </div>
@@ -693,7 +935,7 @@ const CompletedCars = () => {
                   {activeTab === 'inspections' && (
                     <div>
                       <h3 className="text-lg font-medium text-gray-900 mb-4">Inspection Checklist</h3>
-                      {selectedTicket.inspections.length > 0 ? (
+                      {selectedTicket.inspections && selectedTicket.inspections.length > 0 ? (
                         <div>
                           {selectedTicket.inspections.map((inspection) => (
                             <div key={inspection.id} className="mb-8">
@@ -748,15 +990,15 @@ const CompletedCars = () => {
                   {activeTab === 'logs' && (
                     <div>
                       <h3 className="text-lg font-medium text-gray-900 mb-4">Progress Logs</h3>
-                      {selectedTicket.progress_logs.length > 0 ? (
+                      {selectedTicket.progress_logs && selectedTicket.progress_logs.length > 0 ? (
                         <div className="bg-white shadow overflow-hidden sm:rounded-lg">
                           <ul className="divide-y divide-gray-200">
                             {selectedTicket.progress_logs.map((log) => (
                               <li key={log.id} className="px-6 py-4">
                                 <div className="flex items-center">
                                   <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-indigo-600 truncate">{log.action}</p>
-                                    <p className="mt-1 text-sm text-gray-500">{log.notes}</p>
+                                    <p className="text-sm font-medium text-indigo-600 truncate">{log.status}</p>
+                                    <p className="mt-1 text-sm text-gray-500">{log.description}</p>
                                   </div>
                                   <div className="ml-4 flex-shrink-0">
                                     <p className="text-sm text-gray-500">{formatDate(log.created_at)}</p>
@@ -901,7 +1143,7 @@ const CompletedCars = () => {
                               <h4 className="text-lg font-semibold text-gray-900">Accident Description</h4>
                             </div>
                             <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-100">
-                              <p className="text-gray-700">{selectedTicket.insurance.description}</p>
+                              <p className="text-gray-700">{selectedTicket.insurance.insurance_description}</p>
                             </div>
                           </div>
                         </div>

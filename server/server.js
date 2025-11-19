@@ -37,6 +37,7 @@ const loginRoutes = require('./routes/auth/login'); // Importing login routesW
 const resetPasswordRoutes = require('./routes/auth/reset-password'); // Importing reset password routes\
 const notificationRoutes = require('./routes/notification/notifications'); // Importing notification routes
 const nextmilageRoutes = require('./routes/reception/nextmilage'); // Importing next mileage routes
+const feedbackRoutes = require('./routes/reception/feedback'); // Importing feedback routes
 const { initSocket } = require('./utils/socket');
 require('./utils/notify-listener'); // load event listeners
 
@@ -149,6 +150,9 @@ app.use('/api/notifications', notificationRoutes);
 
 //----------------next mileage----------------
 app.use('/api/next-mileage', nextmilageRoutes);
+
+//----------------feedback----------------
+app.use('/api/feedback', feedbackRoutes);
 
 
 
